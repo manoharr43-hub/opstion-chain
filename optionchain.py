@@ -1,24 +1,29 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import requests
 import plotly.express as px
+from datetime import datetime
 
-st.set_page_config(page_title="🔥 Option Chain Ultimate", layout="wide")
-st.title("📊 Option Chain Ultimate Scanner")
+st.set_page_config(page_title="🔥 Option Chain Expiry Pro", layout="wide")
+st.title("📊 Option Chain Expiry Smart Scanner")
 
 # =============================
-# STOCK SELECT
+# SIDEBAR
 # =============================
-st.sidebar.title("📊 Select Market")
+st.sidebar.title("📊 Market Settings")
 
 indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"]
-stocks = [
-    "RELIANCE", "INFY", "TCS", "HDFCBANK", "ICICIBANK",
-    "SBIN", "LT", "ITC", "WIPRO", "AXISBANK"
-]
+symbol = st.sidebar.selectbox("Select Index", indices)
 
-symbol = st.sidebar.selectbox("Select", indices + stocks)
+expiry_type = st.sidebar.selectbox("Select Expiry", ["Weekly", "Monthly"])
+
+# =============================
+# DATE LOGIC
+# =============================
+today = datetime.today()
+weekday = today.strftime("%A")
+
+is_expiry_day = (weekday == "Thursday")
 
 # =============================
 # DEMO DATA
@@ -78,26 +83,34 @@ if st.button("🚀 Run Scanner"):
     pcr = round(total_put / total_call, 2)
 
     # =============================
-    # BREAKOUT LOGIC
+    # EXPIRY LOGIC
     # =============================
-    breakout = "NO"
+    expiry_signal = ""
 
-    if total_put_chg > 20000:
-        breakout = "🟢 UPSIDE BREAKOUT"
-
-    elif total_call_chg > 20000:
-        breakout = "🔴 DOWNSIDE BREAKOUT"
+    if is_expiry_day:
+        if total_call_chg > total_put_chg:
+            expiry_signal = "🔴 EXPIRY SELL PRESSURE"
+        else:
+            expiry_signal = "🟢 EXPIRY BUY SUPPORT"
+    else:
+        expiry_signal = "Normal Day"
 
     # =============================
     # FINAL SIGNAL
     # =============================
     final_signal = "WAIT"
 
-    if pcr > 1.2 and total_put_chg > total_call_chg:
-        final_signal = "🟢 STRONG BUY"
+    if expiry_type == "Weekly":
+        if pcr > 1.2 and total_put_chg > total_call_chg:
+            final_signal = "🟢 WEEKLY BUY"
+        elif pcr < 0.8 and total_call_chg > total_put_chg:
+            final_signal = "🔴 WEEKLY SELL"
 
-    elif pcr < 0.8 and total_call_chg > total_put_chg:
-        final_signal = "🔴 STRONG SELL"
+    elif expiry_type == "Monthly":
+        if pcr > 1:
+            final_signal = "🟢 MONTHLY TREND UP"
+        elif pcr < 1:
+            final_signal = "🔴 MONTHLY TREND DOWN"
 
     # =============================
     # ACTIVE STRIKE
@@ -120,11 +133,11 @@ if st.button("🚀 Run Scanner"):
     # =============================
     # DISPLAY
     # =============================
-    st.subheader("📢 Market Direction")
+    st.subheader("📢 Final Signal")
     st.success(final_signal)
 
-    st.subheader("🔥 Breakout Signal")
-    st.info(breakout)
+    st.subheader("📅 Expiry Signal")
+    st.info(expiry_signal)
 
     st.subheader("🎯 Active Strikes")
     st.write(f"🔴 Resistance: {int(active_call['Strike'])}")
