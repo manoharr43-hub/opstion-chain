@@ -7,3 +7,4 @@ numpy
 plotly
 pdfplumber
 scikit-learn
+pip install nsepython
