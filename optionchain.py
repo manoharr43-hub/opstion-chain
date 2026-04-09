@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
-import requests
 import plotly.express as px
-import time
+from nsepython import option_chain
 
 st.set_page_config(page_title="Nifty Option Chain", layout="wide")
 st.title("📊 NSE Nifty Option Chain Analysis")
@@ -11,33 +10,9 @@ st.title("📊 NSE Nifty Option Chain Analysis")
 # FUNCTION
 # =============================
 @st.cache_data(ttl=60)
-def get_option_chain():
+def get_data():
     try:
-        session = requests.Session()
-
-        headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Referer": "https://www.nseindia.com/option-chain",
-            "Connection": "keep-alive"
-        }
-
-        # Step 1: Get cookies
-        session.get("https://www.nseindia.com", headers=headers, timeout=10)
-        time.sleep(2)
-
-        # Step 2: Fetch API
-        url = "https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY"
-        response = session.get(url, headers=headers, timeout=15)
-
-        if response.status_code != 200:
-            return None
-
-        data = response.json()
-
-        if "records" not in data or "data" not in data["records"]:
-            return None
+        data = option_chain("NIFTY")
 
         rows = []
 
@@ -57,7 +32,8 @@ def get_option_chain():
         df = pd.DataFrame(rows)
         return df
 
-    except Exception:
+    except Exception as e:
+        st.error(f"Error: {e}")
         return None
 
 
@@ -66,38 +42,28 @@ def get_option_chain():
 # =============================
 if st.sidebar.button("Fetch Data"):
 
-    with st.spinner("Fetching NSE Data..."):
-        df = get_option_chain()
+    df = get_data()
 
     if df is not None and not df.empty:
 
-        # Support & Resistance
         max_call = df.loc[df["Call_OI"].idxmax()]
         max_put = df.loc[df["Put_OI"].idxmax()]
 
-        col1, col2 = st.columns(2)
-        col1.metric("🔴 Resistance (Max Call OI)", int(max_call["Strike"]))
-        col2.metric("🟢 Support (Max Put OI)", int(max_put["Strike"]))
+        c1, c2 = st.columns(2)
+        c1.metric("🔴 Resistance", int(max_call["Strike"]))
+        c2.metric("🟢 Support", int(max_put["Strike"]))
 
-        # Chart
         st.subheader("Call vs Put OI")
 
         df_chart = df.sort_values("Strike").tail(30)
 
-        fig = px.bar(
-            df_chart,
-            x="Strike",
-            y=["Call_OI", "Put_OI"],
-            barmode="group"
-        )
-
+        fig = px.bar(df_chart, x="Strike", y=["Call_OI", "Put_OI"], barmode="group")
         st.plotly_chart(fig, use_container_width=True)
 
-        # Table
         st.dataframe(df)
 
     else:
-        st.error("❌ NSE Data Blocked / Not Available. Try again later.")
+        st.error("Data load avvaledu")
 
 else:
-    st.info("👉 Click 'Fetch Data' button from sidebar")
+    st.info("Click Fetch Data")
