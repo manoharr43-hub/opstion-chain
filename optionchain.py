@@ -6,21 +6,22 @@ import plotly.express as px
 st.set_page_config(page_title="Nifty Option Chain", layout="wide")
 st.title("📊 NSE Nifty Option Chain Analysis")
 
+# =============================
+# FUNCTION
+# =============================
+@st.cache_data(ttl=60)
 def get_data():
     try:
         url = "https://api.allorigins.win/raw?url=https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY"
-        headers = {"User-Agent": "Mozilla/5.0"}
-
-        response = requests.get(url, headers=headers, timeout=10)
+        
+        response = requests.get(url, timeout=15)
 
         if response.status_code != 200:
-            st.error("API error")
             return None
 
         data = response.json()
 
-        if "records" not in data:
-            st.error("No records in data")
+        if "records" not in data or "data" not in data["records"]:
             return None
 
         rows = []
@@ -35,38 +36,46 @@ def get_data():
         df = pd.DataFrame(rows)
         return df
 
-    except Exception as e:
-        st.error(f"Error: {e}")
+    except:
         return None
 
 
+# =============================
 # UI
+# =============================
 if st.button("Fetch Data"):
 
-    df = get_data()
+    with st.spinner("Fetching data..."):
+        df = get_data()
 
     if df is not None and not df.empty:
 
-        try:
-            max_call = df.loc[df["Call_OI"].idxmax()]
-            max_put = df.loc[df["Put_OI"].idxmax()]
+        # Support & Resistance
+        max_call = df.loc[df["Call_OI"].idxmax()]
+        max_put = df.loc[df["Put_OI"].idxmax()]
 
-            col1, col2 = st.columns(2)
-            col1.metric("🔴 Resistance", int(max_call["Strike"]))
-            col2.metric("🟢 Support", int(max_put["Strike"]))
+        col1, col2 = st.columns(2)
+        col1.metric("🔴 Resistance (Max Call OI)", int(max_call["Strike"]))
+        col2.metric("🟢 Support (Max Put OI)", int(max_put["Strike"]))
 
-            df_chart = df.sort_values("Strike").tail(30)
+        # Chart
+        st.subheader("Call vs Put OI")
+        df_chart = df.sort_values("Strike").tail(30)
 
-            fig = px.bar(df_chart, x="Strike", y=["Call_OI", "Put_OI"], barmode="group")
-            st.plotly_chart(fig, use_container_width=True)
+        fig = px.bar(
+            df_chart,
+            x="Strike",
+            y=["Call_OI", "Put_OI"],
+            barmode="group"
+        )
 
-            st.dataframe(df)
+        st.plotly_chart(fig, use_container_width=True)
 
-        except Exception as e:
-            st.error(f"Display error: {e}")
+        # Table
+        st.dataframe(df)
 
     else:
-        st.warning("No data available")
+        st.error("❌ Data not available. Try again later.")
 
 else:
-    st.info("Click Fetch Data")
+    st.info("👉 Click 'Fetch Data'")
