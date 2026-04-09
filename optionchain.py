@@ -10,39 +10,82 @@ st.title("📊 Option Chain Pro Analysis")
 # =============================
 # STOCK SELECT
 # =============================
-stocks = ["NIFTY", "BANKNIFTY", "RELIANCE", "INFY"]
-symbol = st.sidebar.selectbox("Select Stock", stocks)
+st.sidebar.title("📊 Select Market")
+
+indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"]
+
+stocks = [
+    "RELIANCE", "INFY", "TCS", "HDFCBANK", "ICICIBANK",
+    "SBIN", "LT", "ITC", "WIPRO", "AXISBANK",
+    "KOTAKBANK", "HCLTECH", "BAJFINANCE", "MARUTI",
+    "ADANIENT", "TATASTEEL", "POWERGRID"
+]
+
+symbol = st.sidebar.selectbox("Choose Index / Stock", indices + stocks)
 
 # =============================
-# DEMO DATA GENERATOR
+# REAL DATA FETCH
 # =============================
-def generate_data():
+def fetch_real_data():
+    try:
+        url = f"https://api.allorigins.win/raw?url=https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+        res = requests.get(url, timeout=10)
+
+        if res.status_code != 200:
+            return None
+
+        data = res.json()
+
+        if "records" not in data:
+            return None
+
+        rows = []
+        for item in data["records"]["data"]:
+            rows.append({
+                "Strike": item.get("strikePrice", 0),
+                "Call_OI": item.get("CE", {}).get("openInterest", 0),
+                "Put_OI": item.get("PE", {}).get("openInterest", 0),
+                "Call_Change": item.get("CE", {}).get("changeinOpenInterest", 0),
+                "Put_Change": item.get("PE", {}).get("changeinOpenInterest", 0)
+            })
+
+        return pd.DataFrame(rows)
+
+    except:
+        return None
+
+
+# =============================
+# DEMO DATA (FALLBACK)
+# =============================
+def generate_demo():
     strikes = np.arange(22000, 23000, 50)
 
     data = []
     for strike in strikes:
-        call_oi = np.random.randint(10000, 100000)
-        put_oi = np.random.randint(10000, 100000)
-
-        call_change = np.random.randint(-5000, 5000)
-        put_change = np.random.randint(-5000, 5000)
-
         data.append({
             "Strike": strike,
-            "Call_OI": call_oi,
-            "Put_OI": put_oi,
-            "Call_Change": call_change,
-            "Put_Change": put_change
+            "Call_OI": np.random.randint(10000, 100000),
+            "Put_OI": np.random.randint(10000, 100000),
+            "Call_Change": np.random.randint(-5000, 5000),
+            "Put_Change": np.random.randint(-5000, 5000)
         })
 
     return pd.DataFrame(data)
 
+
 # =============================
 # MAIN
 # =============================
-if st.button("Run Analysis"):
+if st.button("🚀 Run Analysis"):
 
-    df = generate_data()
+    with st.spinner("Fetching data..."):
+        df = fetch_real_data()
+
+    # fallback
+    if df is None or df.empty:
+        st.warning("⚠ Live data not available → Showing Demo Data")
+        df = generate_demo()
 
     # =============================
     # TOTAL OI
@@ -59,12 +102,12 @@ if st.button("Run Analysis"):
     pcr = round(total_put / total_call, 2)
 
     # =============================
-    # SIGNAL
+    # SIGNAL LOGIC
     # =============================
     if total_call_change > total_put_change:
-        signal = "🔻 DOWN TREND (CALL WRITING)"
+        direction = "🔻 DOWN TREND"
     else:
-        signal = "🔺 UP TREND (PUT WRITING)"
+        direction = "🔺 UP TREND"
 
     # =============================
     # ACTIVE STRIKE
@@ -73,10 +116,9 @@ if st.button("Run Analysis"):
     active_put = df.loc[df["Put_OI"].idxmax()]
 
     # =============================
-    # UI DISPLAY
+    # UI METRICS
     # =============================
     c1, c2, c3 = st.columns(3)
-
     c1.metric("Total Call OI", total_call)
     c2.metric("Total Put OI", total_put)
     c3.metric("PCR", pcr)
@@ -85,26 +127,36 @@ if st.button("Run Analysis"):
     c4.metric("Call OI Change", total_call_change)
     c5.metric("Put OI Change", total_put_change)
 
+    # =============================
+    # SIGNAL DISPLAY
+    # =============================
     st.subheader("📢 Market Direction")
-    st.success(signal)
-
-    st.subheader("🎯 Active Strikes")
-    st.write(f"🔴 Call Side Strong: {int(active_call['Strike'])}")
-    st.write(f"🟢 Put Side Strong: {int(active_put['Strike'])}")
+    st.success(direction)
 
     # =============================
-    # ENTRY LOGIC
+    # ENTRY SIGNAL
     # =============================
+    st.subheader("🚀 Entry Signal")
+
     if pcr > 1 and total_put_change > 0:
-        st.success("🟢 BUY SIGNAL (UPSIDE)")
+        st.success("🟢 BUY (Market Up)")
     elif pcr < 1 and total_call_change > 0:
-        st.error("🔴 SELL SIGNAL (DOWNSIDE)")
+        st.error("🔴 SELL (Market Down)")
     else:
-        st.warning("⚠ NO CLEAR SIGNAL")
+        st.warning("⚠ No Clear Signal")
+
+    # =============================
+    # ACTIVE STRIKE
+    # =============================
+    st.subheader("🎯 Active Strikes")
+    st.write(f"🔴 Call Strong Strike: {int(active_call['Strike'])}")
+    st.write(f"🟢 Put Strong Strike: {int(active_put['Strike'])}")
 
     # =============================
     # CHART
     # =============================
+    st.subheader("📊 OI Chart")
+
     fig = px.bar(
         df,
         x="Strike",
@@ -114,7 +166,10 @@ if st.button("Run Analysis"):
 
     st.plotly_chart(fig, use_container_width=True)
 
+    # =============================
+    # DATA TABLE
+    # =============================
     st.dataframe(df)
 
 else:
-    st.info("👉 Click Run Analysis")
+    st.info("👉 Click 'Run Analysis'")
