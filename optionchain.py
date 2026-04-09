@@ -60,7 +60,13 @@ if st.sidebar.button('Fetch Latest Data'):
         with col2:
             st.metric("Support (Highest Put OI)", int(max_put_oi['Strike']))
 
-        # 3. Chart Visualization
+        #         headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://www.nseindia.com/option-chain"
+        }
+. Chart Visualization
         st.subheader("Call OI vs Put OI Chart")
         # Top 20 strikes ni matrame chart lo chupinchadaniki
         df_chart = df.sort_values('Strike').tail(20) 
