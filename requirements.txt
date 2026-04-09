@@ -1,6 +1,9 @@
-streamlit
-requests
+yfinance
 pandas
+streamlit
+streamlit-autorefresh
+requests
 numpy
 plotly
-streamlit run app.py
+pdfplumber
+scikit-learn
