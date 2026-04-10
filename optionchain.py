@@ -6,40 +6,52 @@ from streamlit_autorefresh import st_autorefresh
 # =========================
 # CONFIG
 # =========================
-st.set_page_config(page_title="AI STOCK SCANNER", layout="wide")
-st.title("🔥 AI STOCK SCANNER (100% STABLE VERSION)")
+st.set_page_config(page_title="FINAL AI TRADING SCANNER", layout="wide")
+st.title("🔥 FINAL AI STOCK SCANNER (STABLE + NO ERROR)")
 
 st_autorefresh(interval=120000, key="refresh")
 
 # =========================
-# FETCH DATA (YAHOO FINANCE)
+# FETCH DATA
 # =========================
-def fetch_data(symbol):
+def get_data(symbol):
     try:
-        df = yf.download(symbol + ".NS", period="5d", interval="15m")
+        ticker = symbol + ".NS"
+
+        df = yf.download(
+            ticker,
+            period="5d",
+            interval="15m",
+            progress=False,
+            threads=False
+        )
+
+        if df is None or df.empty:
+            return None
+
         return df
-    except Exception as e:
-        st.error(f"Fetch Error: {e}")
+
+    except Exception:
         return None
 
 
 # =========================
-# AI SIGNAL ENGINE
+# AI ENGINE
 # =========================
-def ai_signals(df):
-    if df is None or df.empty:
-        return df
-
+def ai_engine(df):
     df = df.copy()
 
     df["EMA_5"] = df["Close"].ewm(span=5).mean()
     df["EMA_20"] = df["Close"].ewm(span=20).mean()
+    df["EMA_50"] = df["Close"].ewm(span=50).mean()
 
     def signal(row):
-        if row["EMA_5"] > row["EMA_20"]:
-            return "🚀 BUY (UPTREND)"
+        if row["EMA_5"] > row["EMA_20"] > row["EMA_50"]:
+            return "🚀 STRONG BUY"
+        elif row["EMA_5"] < row["EMA_20"] < row["EMA_50"]:
+            return "📉 STRONG SELL"
         else:
-            return "📉 SELL (DOWNTREND)"
+            return "⚖️ SIDEWAYS"
 
     df["SIGNAL"] = df.apply(signal, axis=1)
 
@@ -51,43 +63,42 @@ def ai_signals(df):
 # =========================
 symbol = st.sidebar.selectbox(
     "Select Stock",
-    ["RELIANCE", "TCS", "INFY", "SBIN", "HDFCBANK", "NIFTY"]
+    ["RELIANCE", "TCS", "INFY", "SBIN", "HDFCBANK", "ICICIBANK", "NIFTY"]
 )
 
-if st.button("🔥 GET AI SIGNALS"):
+if st.button("🔥 GET LIVE AI SIGNALS"):
 
-    with st.spinner("Analyzing Market..."):
+    st.info("Fetching market data...")
 
-        df = fetch_data(symbol)
+    df = get_data(symbol)
 
-        if df is not None and not df.empty:
+    if df is None:
+        st.error("❌ No data available. Try again after 1 minute.")
+    else:
+        df = ai_engine(df)
 
-            df = ai_signals(df)
+        last = df.iloc[-1]
 
-            # =========================
-            # METRICS
-            # =========================
-            last = df.iloc[-1]
+        # =========================
+        # METRICS
+        # =========================
+        col1, col2, col3 = st.columns(3)
 
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Close Price", round(last["Close"], 2))
-            col2.metric("EMA 5", round(last["EMA_5"], 2))
-            col3.metric("EMA 20", round(last["EMA_20"], 2))
+        col1.metric("Close Price", round(last["Close"], 2))
+        col2.metric("EMA 20", round(last["EMA_20"], 2))
+        col3.metric("EMA 50", round(last["EMA_50"], 2))
 
-            # =========================
-            # SIGNAL
-            # =========================
-            st.subheader("🔥 LIVE SIGNAL")
-            st.success(last["SIGNAL"])
+        # =========================
+        # SIGNAL
+        # =========================
+        st.subheader("🔥 LIVE AI SIGNAL")
+        st.success(last["SIGNAL"])
 
-            # =========================
-            # CHART DATA
-            # =========================
-            st.subheader("📊 PRICE DATA")
-            st.dataframe(df.tail(50))
-
-        else:
-            st.error("❌ Data not available")
+        # =========================
+        # CHART DATA
+        # =========================
+        st.subheader("📊 MARKET DATA")
+        st.dataframe(df.tail(50))
 
 st.markdown("---")
 st.caption("⚠️ Educational purpose only. Not financial advice.")
