@@ -1,96 +1,21 @@
-# ==============================
-# BIG PLAYER AI ADD-ON MODULE
-# (OLD CODE SAFE - NO EDIT)
-# ==============================
-
+import streamlit as st
 import pandas as pd
 import numpy as np
 
-# ---------- ATM FIND ----------
-def atm_zone(df, ltp):
-    return min(df["Strike"], key=lambda x: abs(x - ltp))
+# SAFE FALLBACK (addon missing ayina app break avvadhu)
+try:
+    from big_player_ai_addon import generate_report_ai
+except:
+    def generate_report_ai(df, ltp):
+        df = df.copy()
 
+        ce = df.get("CE_OI", pd.Series([0]*len(df))).sum()
+        pe = df.get("PE_OI", pd.Series([0]*len(df))).sum()
 
-# ---------- TREND ENGINE ----------
-def trend_ai(df):
-    ce = df["CE_OI"].sum()
-    pe = df["PE_OI"].sum()
-
-    if ce > pe * 1.1:
-        return "🟢 BULLISH TREND"
-    elif pe > ce * 1.1:
-        return "🔴 BEARISH TREND"
-    else:
-        return "🟡 SIDEWAYS MARKET"
-
-
-# ---------- PCR CALC ----------
-def pcr_ai(df):
-    return round(df["PE_OI"].sum() / df["CE_OI"].sum(), 2)
-
-
-# ---------- PRESSURE ENGINE ----------
-def pressure_ai(df):
-    ce = df["CE_OI"].sum()
-    pe = df["PE_OI"].sum()
-
-    if ce > pe:
-        return "📈 CE PRESSURE (CALL SIDE STRONG)"
-    elif pe > ce:
-        return "📉 PE PRESSURE (PUT SIDE STRONG)"
-    return "⚖️ BALANCED MARKET"
-
-
-# ---------- VOLUME ADD ----------
-def add_volume_ai(df):
-    df = df.copy()
-    df["VOLUME"] = np.random.randint(3000, 20000, len(df))
-    return df
-
-
-# ---------- BIG PLAYER ZONE ----------
-def big_player_ai(df):
-    df = df.copy()
-
-    df["OI_STRENGTH"] = df["CE_OI"] + df["PE_OI"]
-    df["SPIKE_SCORE"] = df["OI_STRENGTH"] * df["VOLUME"]
-
-    return df.sort_values("SPIKE_SCORE", ascending=False).head(5)
-
-
-# ---------- FINAL REPORT ENGINE ----------
-def generate_report_ai(df, ltp):
-    df = add_volume_ai(df)
-
-    report = {
-        "ATM": atm_zone(df, ltp),
-        "TREND": trend_ai(df),
-        "PCR": pcr_ai(df),
-        "PRESSURE": pressure_ai(df),
-        "BIG_ZONE": big_player_ai(df)
-    }
-
-    return report
-    
-import streamlit as st
-from big_player_ai_addon import generate_report_ai
-
-index = st.sidebar.selectbox("Select Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
-
-ltp = get_ltp(index)
-df = option_chain(index)
-df = add_volume(df)
-
-if df.empty:
-    st.error("No Data Found")
-    st.stop()
-
-report = generate_report_ai(df, ltp)
-
-st.metric("ATM", report["ATM"])
-st.write("Trend:", report["TREND"])
-st.write("PCR:", report["PCR"])
-st.write("Pressure:", report["PRESSURE"])
-
-st.subheader("🔥 Big Player Zone")
-st.dataframe(report["BIG_ZONE"])
+        return {
+            "ATM": ltp,
+            "TREND": "🟡 DEMO MODE (Addon Missing)",
+            "PCR": round(pe / ce, 2) if ce != 0 else 0,
+            "PRESSURE": "⚠ BASIC MODE",
+            "BIG_ZONE": df.head(5)
+        }
