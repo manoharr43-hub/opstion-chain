@@ -4,3 +4,7 @@ numpy
 plotly
 requests
 scikit-learn
+streamlit
+yfinance
+pandas
+numpy
