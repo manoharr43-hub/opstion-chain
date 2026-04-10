@@ -5,10 +5,10 @@ import numpy as np
 # =========================
 # PAGE CONFIG
 # =========================
-st.set_page_config(page_title="🔥 NEW NSE PRO SCANNER V2", layout="wide")
+st.set_page_config(page_title="🔥 ATM ZONE BIG MOVE SCANNER", layout="wide")
 
 # =========================
-# LIVE SIM PRICES
+# LTP SIMULATION
 # =========================
 def get_ltp(index):
     return {
@@ -18,7 +18,7 @@ def get_ltp(index):
     }.get(index, 0)
 
 # =========================
-# OPTION CHAIN GENERATOR
+# OPTION CHAIN
 # =========================
 def option_chain(index):
     if index == "NIFTY":
@@ -28,22 +28,35 @@ def option_chain(index):
     else:
         base, step = 20200, 50
 
-    strikes = [base + i * step for i in range(-2, 3)]
+    strikes = [base + i * step for i in range(-3, 4)]
 
     return pd.DataFrame({
         "Strike": strikes,
-        "CE_OI": np.random.randint(1000, 3500, 5),
-        "PE_OI": np.random.randint(1000, 3500, 5),
+        "CE_OI": np.random.randint(1000, 4000, len(strikes)),
+        "PE_OI": np.random.randint(1000, 4000, len(strikes)),
     })
 
 # =========================
-# ATM CALC
+# ATM FINDER
 # =========================
-def find_atm(df, ltp):
+def get_atm(df, ltp):
     return min(df["Strike"], key=lambda x: abs(x - ltp))
 
 # =========================
-# TREND ENGINE
+# BIG MOVE DETECTOR
+# =========================
+def big_move_zone(df, atm):
+    df["TOTAL_OI"] = df["CE_OI"] + df["PE_OI"]
+
+    # ATM + nearby strikes
+    df["DIST"] = abs(df["Strike"] - atm)
+
+    zone = df.sort_values(["DIST", "TOTAL_OI"], ascending=[True, False])
+
+    return zone.head(3)
+
+# =========================
+# TREND
 # =========================
 def trend(df):
     ce = df["CE_OI"].sum()
@@ -70,7 +83,7 @@ def vix():
 # =========================
 # SIDEBAR
 # =========================
-st.sidebar.title("📊 NEW CONTROL PANEL")
+st.sidebar.title("📊 ATM ZONE PANEL")
 
 index = st.sidebar.selectbox(
     "Select Index",
@@ -78,7 +91,7 @@ index = st.sidebar.selectbox(
 )
 
 expiry = st.sidebar.radio(
-    "Select Expiry",
+    "Expiry",
     ["Weekly", "Monthly"]
 )
 
@@ -88,8 +101,10 @@ expiry = st.sidebar.radio(
 ltp = get_ltp(index)
 df = option_chain(index)
 
-atm = find_atm(df, ltp)
+atm = get_atm(df, ltp)
 df["TOTAL_OI"] = df["CE_OI"] + df["PE_OI"]
+
+zone = big_move_zone(df, atm)
 
 trend_value = trend(df)
 pcr_value = pcr(df)
@@ -98,8 +113,8 @@ vix_value = vix()
 # =========================
 # HEADER
 # =========================
-st.title("🔥 NEW NSE PRO SCANNER V2 (SEPARATE APP)")
-st.caption("No Old Code Impact | Clean New Version")
+st.title("🔥 ATM ZONE BIG MOVE SCANNER (NEW VERSION)")
+st.caption("Detects Big Movement Near ATM Strike | Fully Separate App")
 
 # =========================
 # SIDEBAR INFO
@@ -119,24 +134,23 @@ st.sidebar.info(f"Expiry: {expiry}")
 c1, c2, c3, c4 = st.columns(4)
 
 c1.metric("Index", index)
-c2.metric("LTP", ltp)
-c3.metric("ATM", atm)
-c4.metric("PCR", pcr_value)
+c2.metric("ATM Strike", atm)
+c3.metric("PCR", pcr_value)
+c4.metric("VIX", vix_value)
 
 # =========================
-# TABLE
+# FULL OPTION CHAIN
 # =========================
 st.subheader("📊 Option Chain Data")
 
 st.dataframe(df, use_container_width=True)
 
 # =========================
-# ATM ZONE
+# ATM BIG MOVE ZONE
 # =========================
-st.subheader("🚀 ATM Zone")
+st.subheader("🚀 ATM BIG MOVE ZONE (TOP STRIKES)")
 
-atm_df = df[df["Strike"] == atm]
-st.dataframe(atm_df, use_container_width=True)
+st.dataframe(zone, use_container_width=True)
 
 # =========================
 # REPORT
@@ -157,8 +171,8 @@ st.write(f"""
 # SIGNAL
 # =========================
 if pcr_value > 1:
-    st.success("🟢 PUT Dominance (Bearish Bias)")
+    st.success("🟢 PUT Pressure Strong (Bearish Bias)")
 else:
-    st.warning("🔴 CALL Dominance (Bullish Bias)")
+    st.warning("🔴 CALL Pressure Strong (Bullish Bias)")
 
-st.success("✅ NEW SEPARATE VERSION RUNNING SUCCESSFULLY")
+st.success("✅ ATM ZONE BIG MOVE SCANNER READY (NO OLD CODE IMPACT)")
