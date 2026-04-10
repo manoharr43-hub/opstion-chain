@@ -129,9 +129,134 @@ if analyze_trigger:
         * **ఎంట్రీ (Entry):** {ltp} దగ్గర
         * **స్టాప్‌లాస్ (Stoploss):** {ltp-40 if "CALL" in signal else ltp+40}
         * **టార్గెట్ (Target):** {ltp+80 if "CALL" in signal else ltp-80}
+        
         """)
 
     else:
         st.error("NSE నుండి డేటా రావడం లేదు. దయచేసి 30 సెకన్లు ఆగి మళ్ళీ ప్రయత్నించండి. (NSE Server Limit)")
 else:
     st.info("👈 ఎడమవైపు 'RUN AI ANALYSIS' క్లిక్ చేసి విశ్లేషణ ప్రారంభించండి.")
+import streamlit as st
+import pandas as pd
+import requests
+import time
+from streamlit_autorefresh import st_autorefresh
+
+# =========================
+# 1. PAGE SETUP
+# =========================
+st.set_page_config(page_title="NSE AI PRO LIVE", layout="wide")
+
+st.markdown("""
+    <style>
+    .main { background-color: #0e1117; }
+    .stMetric { background-color: #1e2130; padding: 15px; border-radius: 10px; border: 1px solid #4e5d6c; }
+    [data-testid="stMetricValue"] { color: #00ffcc; font-size: 28px; }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.title("🚀 ULTRA PRO AI OPTION CHAIN DASHBOARD")
+
+# ఆటో రీఫ్రెష్ (60 సెకన్లు)
+st_autorefresh(interval=60000, key="nse_auto_update")
+
+# =========================
+# 2. POWERFUL FETCH ENGINE (నిజమైన లైవ్ డేటా కోసం)
+# =========================
+def get_data_from_nse(symbol):
+    base_url = "https://www.nseindia.com"
+    api_url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Referer": "https://www.nseindia.com/option-chain"
+    }
+
+    try:
+        session = requests.Session()
+        # సెషన్ కోసం హోమ్ పేజీ విజిట్
+        session.get(base_url, headers=headers, timeout=10)
+        # డేటా కోసం రిక్వెస్ట్
+        response = session.get(api_url, headers=headers, timeout=15)
+        
+        if response.status_code == 200:
+            return response.json()
+        return None
+    except Exception:
+        return None
+
+# =========================
+# 3. SIDEBAR
+# =========================
+st.sidebar.header("📊 AI CONTROL PANEL")
+index = st.sidebar.selectbox("📌 Select INDEX", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
+btn = st.sidebar.button("⚡ RUN AI ANALYSIS")
+
+# =========================
+# 4. MAIN DASHBOARD logic
+# =========================
+if btn:
+    with st.spinner(f"{index} లైవ్ డేటా సేకరిస్తున్నాను..."):
+        # ఒకసారి రాకపోతే మళ్ళీ ప్రయత్నించడానికి 2 సెకన్ల గ్యాప్ ఇస్తుంది
+        data = get_data_from_nse(index)
+        if not data:
+            time.sleep(2)
+            data = get_data_from_nse(index)
+
+    if data and 'records' in data:
+        ltp = data['records']['underlyingValue']
+        st.success(f"✅ {index} ప్రస్తుత ధర (LTP): {ltp}")
+
+        # డేటా క్లీనింగ్
+        raw = data['records']['data']
+        rows = []
+        for item in raw:
+            strike = item.get('strikePrice')
+            ce = item.get('CE', {})
+            pe = item.get('PE', {})
+            rows.append({
+                "Strike": strike,
+                "CALL OI": ce.get('openInterest', 0),
+                "CALL CHG": ce.get('changeinOpenInterest', 0),
+                "PUT OI": pe.get('openInterest', 0),
+                "PUT CHG": pe.get('changeinOpenInterest', 0),
+            })
+
+        df = pd.DataFrame(rows)
+        df['NET FLOW'] = df['PUT CHG'] - df['CALL CHG']
+
+        # PCR లెక్కలు
+        t_ce = df['CALL OI'].sum()
+        t_pe = df['PUT OI'].sum()
+        pcr = round(t_pe / t_ce, 2) if t_ce > 0 else 0
+
+        # మెట్రిక్స్
+        c1, c2, c3 = st.columns(3)
+        c1.metric("PCR Value", pcr)
+        c2.metric("Total Call OI", f"{t_ce:,}")
+        c3.metric("Total Put OI", f"{t_pe:,}")
+
+        # --- 5 COLUMN TABLE (Fixed width) ---
+        st.subheader("📊 ఆప్షన్ ఫ్లో (LIVE 5 COLUMN TABLE)")
+        near_df = df[(df['Strike'] >= ltp-400) & (df['Strike'] <= ltp+400)]
+        st.dataframe(near_df[['Strike', 'CALL OI', 'CALL CHG', 'PUT OI', 'PUT CHG', 'NET FLOW']], width='stretch')
+
+        # --- AI TRADE PLAN (TELUGU) ---
+        st.subheader("🎯 AI ట్రేడ్ ప్లాన్ (AI TRADE PLAN)")
+        
+        signal = "🟢 CALL BUY" if pcr > 1.1 else "🔴 PUT BUY" if pcr < 0.9 else "🟡 NO TRADE"
+        
+        st.info(f"""
+        🚩 **సిగ్నల్:** {signal}
+        🚀 **ఎంట్రీ:** {ltp} దగ్గర
+        🛡️ **స్టాప్‌లాస్:** {ltp-40 if "CALL" in signal else ltp+40}
+        📈 **టార్గెట్:** {ltp+80 if "CALL" in signal else ltp-80}
+        
+        💡 **గమనిక:** PCR {pcr} ఉంది, డేటా ఆధారంగా ఈ ప్లాన్ చేయబడింది.
+        """)
+    else:
+        st.error("🚨 NSE సర్వర్ బిజీగా ఉంది. దయచేసి 30 సెకన్లు ఆగి మళ్ళీ 'Fetch' బటన్ నొక్కండి.")
+else:
+    st.info("👈 ఎడమవైపు ఉన్న బటన్ క్లిక్ చేసి లైవ్ అనాలిసిస్ చూడండి.")
