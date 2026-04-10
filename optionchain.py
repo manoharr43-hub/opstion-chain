@@ -5,175 +5,136 @@ import numpy as np
 # =========================
 # PAGE CONFIG
 # =========================
-st.set_page_config(page_title="🔥 ULTRA NSE AI TRADING", layout="wide")
+st.set_page_config(page_title="🔥 NSE MULTI INDEX SCANNER", layout="wide")
 
 # =========================
-# DATA (INDEX BASED)
+# INDEX DATA
 # =========================
 def load_data(index):
     if index == "NIFTY":
         return pd.DataFrame({
             "Strike": [22000, 22100, 22200, 22300, 22400],
-            "CE OI": [1200, 1500, 1100, 900, 1300],
+            "CE OI": [1200, 1800, 1100, 900, 1300],
             "PE OI": [1000, 1300, 1400, 1600, 1700],
         })
-    else:
+
+    elif index == "BANKNIFTY":
         return pd.DataFrame({
             "Strike": [46000, 46100, 46200, 46300, 46400],
-            "CE OI": [2000, 1800, 2200, 2100, 2500],
+            "CE OI": [2000, 2800, 2200, 2100, 2500],
             "PE OI": [1700, 1900, 1600, 2000, 2300],
         })
 
-# =========================
-# EXPIRY
-# =========================
-def get_expiries():
-    return ["Weekly", "Monthly"]
+    elif index == "MIDCPNIFTY":
+        return pd.DataFrame({
+            "Strike": [12000, 12100, 12200, 12300, 12400],
+            "CE OI": [900, 1100, 1500, 1200, 1400],
+            "PE OI": [800, 1000, 1200, 1600, 1800],
+        })
 
-# =========================
-# PCR + VIX
-# =========================
-def get_pcr(index):
-    return 1.15 if index == "NIFTY" else 0.95
-
-def get_vix():
-    return 13.8
-
-# =========================
-# TREND SYSTEM
-# =========================
-def get_trend(df):
-    ce = df["CE OI"].sum()
-    pe = df["PE OI"].sum()
-
-    if ce > pe * 1.1:
-        return "🟢 BULLISH"
-    elif pe > ce * 1.1:
-        return "🔴 BEARISH"
     else:
-        return "🟡 SIDEWAYS"
+        return pd.DataFrame()
 
 # =========================
-# AI SIGNAL ENGINE
+# MOVEMENT CALCULATION
 # =========================
-def smart_signal(ce, pe, pcr, vix):
-    ratio = ce / (pe + 1)
+def get_movement(df):
+    df["Total OI"] = df["CE OI"] + df["PE OI"]
+    return df
 
-    if ratio > 1.2 and pcr > 1 and vix < 15:
-        return "🟢 STRONG BUY (BULLISH BREAKOUT)"
-    elif ratio < 0.8 and pcr < 1 and vix < 15:
-        return "🔴 STRONG SELL (BEARISH BREAKDOWN)"
-    elif vix > 18:
-        return "⚠️ HIGH VOLATILITY - NO TRADE"
-    else:
-        return "🟡 SIDEWAYS - WAIT"
+def strongest_strike(df):
+    max_row = df.loc[df["Total OI"].idxmax()]
+    return max_row["Strike"], max_row["Total OI"]
+
+def index_strength(df):
+    return df["Total OI"].sum()
 
 # =========================
 # HEADER
 # =========================
-st.title("🔥 ULTRA NSE AI TRADING DASHBOARD")
-st.caption("Next Level Smart Money + AI Signal + Trend Engine")
+st.title("🔥 ULTRA NSE MULTI INDEX MOVEMENT SCANNER")
 
 # =========================
-# SIDEBAR
+# LEFT SIDE PANEL
 # =========================
-st.sidebar.markdown("## 📊 CONTROL PANEL")
+st.sidebar.markdown("## 📊 INDEX SELECTION")
 
-index = st.sidebar.selectbox("Select Index", ["NIFTY", "MID NIFTY"])
-expiry = st.sidebar.selectbox("Select Expiry", get_expiries())
+indices = ["NIFTY", "BANKNIFTY", "MIDCPNIFTY"]
+
+selected_index = st.sidebar.selectbox("Select Index", indices)
 
 # =========================
 # LOAD DATA
 # =========================
-df = load_data(index)
+df = load_data(selected_index)
 
-df["AMI"] = (df["CE OI"] + df["PE OI"]) / 2
+if df.empty:
+    st.error("No data available")
+    st.stop()
 
-# =========================
-# CALCULATIONS
-# =========================
-ce_total = df["CE OI"].sum()
-pe_total = df["PE OI"].sum()
-
-pcr = get_pcr(index)
-vix = get_vix()
-
-trend = get_trend(df)
-signal = smart_signal(ce_total, pe_total, pcr, vix)
+df = get_movement(df)
 
 # =========================
-# HEADER METRICS
+# STRONG MOVEMENT LOGIC
+# =========================
+strong_strike, strong_value = strongest_strike(df)
+total_strength = index_strength(df)
+
+# =========================
+# SIDE PANEL REPORT
+# =========================
+st.sidebar.markdown("---")
+st.sidebar.subheader("📌 Market Strength")
+
+st.sidebar.success(f"Index: {selected_index}")
+st.sidebar.info(f"Total Strength: {total_strength}")
+st.sidebar.warning(f"Strong Strike: {strong_strike}")
+
+# =========================
+# MAIN DASHBOARD
 # =========================
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.metric("Index", index)
+    st.metric("Index", selected_index)
 
 with col2:
-    st.metric("Trend", trend)
+    st.metric("Strong Strike", strong_strike)
 
 with col3:
-    st.metric("Signal", "AI ACTIVE")
+    st.metric("Strength", total_strength)
 
 # =========================
-# SIDE STATUS PANEL
+# TABLE
 # =========================
-st.sidebar.markdown("---")
-st.sidebar.success(f"Index: {index}")
-st.sidebar.info(f"Trend: {trend}")
-st.sidebar.warning(f"Expiry: {expiry}")
-
-# =========================
-# MAIN DATA
-# =========================
-st.subheader("📊 Option Chain Data")
+st.subheader("📊 Option Chain Movement Data")
 
 st.dataframe(df, use_container_width=True)
 
 # =========================
-# AMI CHART
+# STRIKE MOVEMENT ANALYSIS
 # =========================
-st.subheader("📈 AMI Movement")
+st.subheader("🚀 Highest Strike Movement")
 
-st.line_chart(df["AMI"])
-
-# =========================
-# MARKET REPORT
-# =========================
-st.subheader("📊 Market Intelligence Report")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.metric("CE Total", ce_total)
-
-with col2:
-    st.metric("PE Total", pe_total)
-
-with col3:
-    st.metric("PCR", pcr)
-
-st.metric("India VIX", vix)
+st.success(f"🔥 Strongest Strike: {strong_strike} | Value: {strong_value}")
 
 # =========================
-# AI SIGNAL PANEL
+# MULTI INDEX COMPARISON (BONUS)
 # =========================
-st.markdown("---")
-st.subheader("🚀 AI Trade Signal Engine")
+st.subheader("📊 Index Comparison")
 
-st.success(signal)
+compare_data = pd.DataFrame({
+    "Index": ["NIFTY", "BANKNIFTY", "MIDCPNIFTY"],
+    "Strength": [
+        index_strength(load_data("NIFTY")),
+        index_strength(load_data("BANKNIFTY")),
+        index_strength(load_data("MIDCPNIFTY")),
+    ]
+})
+
+st.bar_chart(compare_data.set_index("Index"))
 
 # =========================
-# ALERT SYSTEM
+# FINAL STATUS
 # =========================
-if "STRONG BUY" in signal:
-    st.balloons()
-
-if "STRONG SELL" in signal:
-    st.error("⚠️ SELL PRESSURE DETECTED")
-
-# =========================
-# FOOTER
-# =========================
-st.markdown("---")
-st.caption("🔥 ULTRA VERSION | AI SIGNAL + PCR + VIX + TREND | NO ERROR SYSTEM")
+st.success("🔥 MULTI INDEX + STRIKE MOVEMENT SYSTEM ACTIVE")
