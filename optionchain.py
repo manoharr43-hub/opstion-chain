@@ -7,10 +7,10 @@ import time
 # =========================
 # PAGE CONFIG
 # =========================
-st.set_page_config(page_title="🔥 NSE LIVE CE vs PE AI SCANNER", layout="wide")
+st.set_page_config(page_title="🔥 NSE AI STOCK + OPTION CHAIN", layout="wide")
 
 # =========================
-# SESSION (IMPORTANT FOR NSE)
+# SESSION (NSE SAFE)
 # =========================
 headers = {
     "User-Agent": "Mozilla/5.0",
@@ -23,13 +23,34 @@ session = requests.Session()
 session.headers.update(headers)
 
 # =========================
-# NSE OPTION CHAIN FETCH (SAFE)
+# INDEX LIST (EXPANDED)
+# =========================
+INDEX_LIST = [
+    "NIFTY",
+    "BANKNIFTY",
+    "FINNIFTY",
+    "MIDCPNIFTY",
+    "NIFTYNXT50"
+]
+
+# =========================
+# STOCK SEARCH (USER INPUT)
+# =========================
+st.sidebar.title("📊 CONTROL PANEL")
+
+index = st.sidebar.selectbox("Select Index", INDEX_LIST)
+
+stock = st.sidebar.text_input("🔎 Search ANY Stock (NSE Symbol)", "RELIANCE")
+
+expiry = st.sidebar.radio("Select Expiry", ["Weekly", "Monthly"])
+
+# =========================
+# NSE OPTION CHAIN FETCH
 # =========================
 def fetch_option_chain(symbol="NIFTY"):
     try:
         url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
 
-        # warm-up (must)
         session.get("https://www.nseindia.com", timeout=5)
         time.sleep(1)
 
@@ -38,17 +59,12 @@ def fetch_option_chain(symbol="NIFTY"):
         if res.text.strip() == "":
             return None
 
-        try:
-            data = res.json()
-        except:
-            return None
-
+        data = res.json()
         records = data["records"]["data"]
 
         rows = []
         for i in records:
             strike = i.get("strikePrice")
-
             ce = i.get("CE", {})
             pe = i.get("PE", {})
 
@@ -60,71 +76,43 @@ def fetch_option_chain(symbol="NIFTY"):
                 pe.get("totalTradedVolume", 0),
             ])
 
-        df = pd.DataFrame(rows, columns=["Strike", "CE_OI", "PE_OI", "CE_VOL", "PE_VOL"])
-        return df
+        return pd.DataFrame(rows, columns=["Strike", "CE_OI", "PE_OI", "CE_VOL", "PE_VOL"])
 
     except:
         return None
 
 # =========================
-# ATM FINDER
+# STOCK SIMPLE MOMENTUM ENGINE
 # =========================
-def get_atm(df, ltp):
-    return min(df["Strike"], key=lambda x: abs(x - ltp))
+def stock_analysis(symbol):
+    try:
+        url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}.NS"
+        data = requests.get(url).json()
+
+        result = data["quoteResponse"]["result"][0]
+
+        price = result.get("regularMarketPrice", 0)
+        change = result.get("regularMarketChangePercent", 0)
+
+        if change > 1:
+            signal = "🟢 STRONG CALL SIDE (BULLISH)"
+        elif change < -1:
+            signal = "🔴 STRONG PUT SIDE (BEARISH)"
+        else:
+            signal = "🟡 SIDEWAYS"
+
+        return price, change, signal
+
+    except:
+        return None, None, "⚠ DATA NOT FOUND"
 
 # =========================
-# ZONE ANALYSIS
+# OPTION CHAIN LOAD
 # =========================
-def zone_analysis(df, atm):
-    df = df.copy()
+df = fetch_option_chain(index)
 
-    df["CE_PRESSURE"] = df["CE_OI"] / (df["PE_OI"] + 1)
-    df["PE_PRESSURE"] = df["PE_OI"] / (df["CE_OI"] + 1)
-    df["DIST"] = abs(df["Strike"] - atm)
-
-    ce_zone = df.sort_values(["CE_PRESSURE", "DIST"], ascending=[False, True]).head(5)
-    pe_zone = df.sort_values(["PE_PRESSURE", "DIST"], ascending=[False, True]).head(5)
-
-    return ce_zone, pe_zone
-
-# =========================
-# TREND
-# =========================
-def trend(df):
-    ce = df["CE_OI"].sum()
-    pe = df["PE_OI"].sum()
-
-    if ce > pe * 1.1:
-        return "🟢 BULLISH"
-    elif pe > ce * 1.1:
-        return "🔴 BEARISH"
-    return "🟡 SIDEWAYS"
-
-# =========================
-# PCR
-# =========================
-def pcr(df):
-    return df["PE_OI"].sum() / (df["CE_OI"].sum() + 1)
-
-# =========================
-# UI
-# =========================
-st.title("🔥 NSE LIVE OPTION CHAIN + CE/PE AI ZONES")
-st.caption("Real NSE Data + Smart Money Pressure Detection")
-
-symbol = st.sidebar.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
-
-# =========================
-# FETCH DATA
-# =========================
-df = fetch_option_chain(symbol)
-
-# =========================
-# FALLBACK (IMPORTANT)
-# =========================
 if df is None or df.empty:
-    st.warning("⚠ NSE blocked → Running fallback mode")
-
+    st.warning("⚠ NSE BLOCKED → fallback mode")
     df = pd.DataFrame({
         "Strike": np.arange(24000, 24150, 50),
         "CE_OI": np.random.randint(2000, 8000, 3),
@@ -134,47 +122,81 @@ if df is None or df.empty:
     })
 
 # =========================
-# LTP (SAFE)
+# STOCK DATA
+# =========================
+price, change, stock_signal = stock_analysis(stock)
+
+# =========================
+# ATM + ANALYSIS
 # =========================
 ltp = df["Strike"].mean()
-atm = get_atm(df, ltp)
+atm = min(df["Strike"], key=lambda x: abs(x - ltp))
 
-ce_zone, pe_zone = zone_analysis(df, atm)
-
-trend_value = trend(df)
-pcr_value = pcr(df)
+df["CE_PRESSURE"] = df["CE_OI"] / (df["PE_OI"] + 1)
+df["PE_PRESSURE"] = df["PE_OI"] / (df["CE_OI"] + 1)
 
 # =========================
-# DASHBOARD
+# TREND
 # =========================
-st.metric("INDEX", symbol)
-st.metric("ATM", atm)
-st.metric("PCR", round(pcr_value, 2))
-st.metric("TREND", trend_value)
+ce_total = df["CE_OI"].sum()
+pe_total = df["PE_OI"].sum()
+
+if ce_total > pe_total * 1.1:
+    trend = "🟢 MARKET BULLISH"
+elif pe_total > ce_total * 1.1:
+    trend = "🔴 MARKET BEARISH"
+else:
+    trend = "🟡 SIDEWAYS"
 
 # =========================
-# TABLE
+# UI HEADER
+# =========================
+st.title("🔥 NSE AI OPTION CHAIN + STOCK MOVEMENT SCANNER")
+
+# =========================
+# LEFT SIDE PANEL OUTPUT
+# =========================
+c1, c2, c3 = st.columns(3)
+
+c1.metric("INDEX", index)
+c2.metric("ATM", atm)
+c3.metric("TREND", trend)
+
+# =========================
+# STOCK OUTPUT
+# =========================
+st.subheader("📌 STOCK ANALYSIS")
+
+st.metric("Stock", stock)
+st.metric("Price", price)
+st.metric("Change %", change)
+st.success(stock_signal)
+
+# =========================
+# OPTION CHAIN TABLE
 # =========================
 st.subheader("📊 OPTION CHAIN DATA")
 st.dataframe(df, use_container_width=True)
 
 # =========================
-# ZONES
+# CE / PE ZONES
 # =========================
 st.subheader("🚀 CE STRONG ZONE")
-st.dataframe(ce_zone, use_container_width=True)
+st.dataframe(df.sort_values("CE_PRESSURE", ascending=False).head(5))
 
 st.subheader("📉 PE STRONG ZONE")
-st.dataframe(pe_zone, use_container_width=True)
+st.dataframe(df.sort_values("PE_PRESSURE", ascending=False).head(5))
 
 # =========================
-# SIGNAL ENGINE
+# FINAL SIGNAL ENGINE
 # =========================
-st.subheader("🧠 MARKET SIGNAL")
+st.subheader("🧠 FINAL AI SIGNAL")
 
-if ce_zone["CE_PRESSURE"].mean() > pe_zone["PE_PRESSURE"].mean():
-    st.success("🟢 CALL SIDE STRONG (BUY BIAS)")
+if "CALL" in stock_signal and ce_total > pe_total:
+    st.success("🟢 STRONG CALL SIDE CONFIRMED")
+elif "PUT" in stock_signal and pe_total > ce_total:
+    st.error("🔴 STRONG PUT SIDE CONFIRMED")
 else:
-    st.warning("🔴 PUT SIDE STRONG (SELL BIAS)")
+    st.warning("🟡 MIXED SIGNAL - WAIT")
 
-st.success("✅ OLD CODE SAFE + REAL NSE + Fallback SYSTEM ACTIVE")
+st.success("✅ UPGRADED SYSTEM READY (INDEX + STOCK + OPTION CHAIN)")
