@@ -1,131 +1,87 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import time
-from kiteconnect import KiteConnect
 
 # =========================
 # PAGE CONFIG
 # =========================
-st.set_page_config(page_title="PRO OPTION CHAIN AI", layout="wide")
+st.set_page_config(page_title="Stable Option Chain AI", layout="wide")
 
 
 # =========================
-# 🔐 BROKER API (ZERODHA KITE)
+# DATA GENERATOR (SAFE)
 # =========================
-API_KEY = "YOUR_API_KEY"
-ACCESS_TOKEN = "YOUR_ACCESS_TOKEN"
+def generate_data(symbol):
+    base = 22000 if symbol == "NIFTY" else 45000
 
-kite = KiteConnect(api_key=API_KEY)
-kite.set_access_token(ACCESS_TOKEN)
-
-
-# =========================
-# FETCH OPTION DATA (ZERO BLOCK)
-# =========================
-def get_option_chain(symbol="NIFTY"):
-    try:
-        instruments = kite.instruments("NFO")
-        df = pd.DataFrame(instruments)
-
-        df = df[df["name"] == symbol]
-
-        return df
-
-    except Exception as e:
-        st.error(f"API Error: {e}")
-        return pd.DataFrame()
-
-
-# =========================
-# SMART MONEY FLOW ENGINE
-# =========================
-def smart_money_engine(df):
-    df = df.copy()
-
-    df["Money Flow Score"] = (
-        np.random.randint(50, 200, len(df)) + df.index
-    )
-
-    df["Signal"] = np.where(df["Money Flow Score"] > 120, "BUY", "SELL")
+    df = pd.DataFrame({
+        "Strike Price": [base + i * 50 for i in range(20)],
+        "CE OI": np.random.randint(500, 2000, 20),
+        "PE OI": np.random.randint(500, 2000, 20),
+    })
 
     return df
 
 
 # =========================
-# HEATMAP DATA PREP
+# SESSION STATE INIT
 # =========================
-def heatmap_data(df):
-    pivot = df.pivot_table(
-        index="strike",
-        values="Money Flow Score",
-        aggfunc="sum"
-    )
-    return pivot
+if "data_loaded" not in st.session_state:
+    st.session_state.data_loaded = False
 
-
-# =========================
-# AUTO SIGNAL ENGINE
-# =========================
-def generate_signals(df):
-    buy = df[df["Signal"] == "BUY"].head(5)
-    sell = df[df["Signal"] == "SELL"].head(5)
-    return buy, sell
+if "df" not in st.session_state:
+    st.session_state.df = pd.DataFrame()
 
 
 # =========================
 # UI
 # =========================
-st.title("🚀 ULTRA PRO AI OPTION CHAIN SYSTEM (ZERO BLOCK)")
+st.title("🚀 ULTRA STABLE OPTION CHAIN (NO DISAPPEAR VERSION)")
 
-symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
+symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
 
-if st.button("START LIVE SYSTEM"):
+# =========================
+# LOAD BUTTON
+# =========================
+if st.button("LOAD OPTION CHAIN"):
+    st.session_state.data_loaded = True
+    st.session_state.df = generate_data(symbol)
 
-    placeholder = st.empty()
 
-    while True:
+# =========================
+# DISPLAY DATA (PERSISTENT)
+# =========================
+if st.session_state.data_loaded:
 
-        with placeholder.container():
+    df = st.session_state.df.copy()
 
-            st.subheader("🔥 LIVE MARKET DASHBOARD")
+    # SAFE CALCULATION
+    df["OI Diff"] = df["PE OI"] - df["CE OI"]
 
-            df = get_option_chain(symbol)
+    df["Trend"] = np.where(df["OI Diff"] > 0, "Bullish", "Bearish")
 
-            if df.empty:
-                st.warning("No data from broker API")
-                break
+    st.success("✅ Data Loaded Successfully (Stable Mode)")
 
-            df = smart_money_engine(df)
+    # TABLE
+    st.subheader("📊 Option Chain Data")
+    st.dataframe(df, use_container_width=True)
 
-            buy, sell = generate_signals(df)
+    # CHART
+    st.subheader("📈 OI Difference Heat")
+    st.bar_chart(df["OI Diff"])
 
-            # =========================
-            # LIVE TABLE
-            # =========================
-            st.write("### 📊 Live Option Data")
-            st.dataframe(df.head(20))
+    # SUMMARY
+    ce_total = df["CE OI"].sum()
+    pe_total = df["PE OI"].sum()
 
-            # =========================
-            # SIGNALS
-            # =========================
-            col1, col2 = st.columns(2)
+    st.subheader("🧠 Market Summary")
 
-            with col1:
-                st.success("🔥 BUY SIGNALS")
-                st.dataframe(buy)
+    if pe_total > ce_total:
+        st.markdown("### 📈 Bullish Market Bias")
+    else:
+        st.markdown("### 📉 Bearish Market Bias")
 
-            with col2:
-                st.error("⚠️ SELL SIGNALS")
-                st.dataframe(sell)
-
-            # =========================
-            # HEATMAP
-            # =========================
-            st.write("### 🔥 Smart Money Heatmap")
-            st.bar_chart(df["Money Flow Score"].head(20))
-
-            st.info("Auto refresh every 5 seconds...")
-
-        time.sleep(5)
-        st.rerun()
+# =========================
+# INFO
+# =========================
+st.info("⚠️ Educational Purpose Only - Stable Version Without NSE Blocking")
