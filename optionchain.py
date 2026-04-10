@@ -1,109 +1,142 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import yfinance as yf
+import requests
+from streamlit_autorefresh import st_autorefresh
 
-st.set_page_config(page_title="🔥 NSE AI Smart Trader (NEW)", layout="wide")
+# =============================
+# PAGE CONFIG
+# =============================
+st.set_page_config(page_title="🔥 ULTRA NSE OPTION CHAIN AI", layout="wide")
 
-# =========================
-# DATA LOADER
-# =========================
-def load_data(symbol="^NSEI"):
-    df = yf.download(symbol, period="5d", interval="5m")
-    df = df.dropna().copy()
+st_autorefresh(interval=20000, key="refresh")
+
+st.title("🔥 ULTRA NSE OPTION CHAIN AI DASHBOARD")
+
+# =============================
+# INPUT
+# =============================
+symbol = st.text_input("Enter Symbol (e.g. NIFTY / BANKNIFTY)", "NIFTY")
+expiry = st.text_input("Expiry (e.g. 25JAN)", "25JAN")
+
+# =============================
+# MOCK / API FUNCTION (Replace with real NSE API)
+# =============================
+def get_option_chain(symbol):
+    # Replace with real NSE endpoint if you have cookie/session
+    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept-Language": "en"
+    }
+    
+    session = requests.Session()
+    session.headers.update(headers)
+    
+    try:
+        data = session.get(url, timeout=10).json()
+        return data
+    except:
+        return None
+
+# =============================
+# DATA PROCESSING
+# =============================
+def process_data(data):
+    records = data['records']['data']
+    
+    rows = []
+    for r in records:
+        if 'CE' in r or 'PE' in r:
+            rows.append({
+                "strike": r.get("strikePrice"),
+                "ce_oi": r.get("CE", {}).get("openInterest", 0),
+                "ce_change": r.get("CE", {}).get("changeinOpenInterest", 0),
+                "pe_oi": r.get("PE", {}).get("openInterest", 0),
+                "pe_change": r.get("PE", {}).get("changeinOpenInterest", 0),
+                "ce_ltp": r.get("CE", {}).get("lastPrice", 0),
+                "pe_ltp": r.get("PE", {}).get("lastPrice", 0),
+            })
+    
+    df = pd.DataFrame(rows)
     return df
 
-# =========================
-# SMART MONEY ENGINE
-# =========================
-def smart_money_engine(df):
-    df = df.copy()
+# =============================
+# AI SIGNAL ENGINE
+# =============================
+def signal_engine(df):
+    df["oi_diff"] = df["ce_change"] - df["pe_change"]
+    
+    def signal(row):
+        if row["ce_change"] > row["pe_change"] * 1.5:
+            return "🔥 CE BUY"
+        elif row["pe_change"] > row["ce_change"] * 1.5:
+            return "🔥 PE BUY"
+        else:
+            return "NO TRADE"
+    
+    df["signal"] = df.apply(signal, axis=1)
+    
+    return df
 
-    df["change"] = df["Close"] - df["Open"]
-
-    bullish_vol = df.loc[df["change"] > 0, "Volume"].sum()
-    bearish_vol = df.loc[df["change"] < 0, "Volume"].sum()
-
-    total_change = df["change"].sum()
-
-    trend = "🟢 BULLISH" if total_change > 0 else "🔴 BEARISH"
-
-    return bullish_vol, bearish_vol, trend
-
-# =========================
-# SIGNAL ENGINE (SAFE FIX)
-# =========================
-def generate_signal(df):
-    close = float(df["Close"].iloc[-1])
-    open_ = float(df["Open"].iloc[-1])
-
-    if close > open_:
-        return "BUY"
+# =============================
+# TREND ENGINE (SIMPLE MOCK)
+# =============================
+def trend_engine(df):
+    ce_total = df["ce_oi"].sum()
+    pe_total = df["pe_oi"].sum()
+    
+    if ce_total > pe_total:
+        return "📈 BULLISH TREND (CE dominance)"
     else:
-        return "SELL"
+        return "📉 BEARISH TREND (PE dominance)"
 
-# =========================
-# BIG MOVERS
-# =========================
-def big_movers(df, threshold=0.25):
-    df = df.copy()
-    df["pct"] = df["Close"].pct_change() * 100
+# =============================
+# MAIN
+# =============================
+if st.button("RUN ANALYSIS"):
 
-    return df[abs(df["pct"]) > threshold]
+    data = get_option_chain(symbol)
 
-# =========================
-# UI
-# =========================
-st.title("🔥 NSE AI Smart Trader (CLEAN VERSION)")
+    if data is None:
+        st.error("API error or NSE blocking request. Try again.")
+    else:
+        df = process_data(data)
+        df = signal_engine(df)
 
-symbol = st.text_input("Enter Symbol", "^NSEI")
+        trend = trend_engine(df)
 
-df = load_data(symbol)
+        st.subheader("🧠 MARKET TREND")
+        st.success(trend)
 
-st.subheader("📊 Market Data")
-st.dataframe(df.tail(20))
+        st.subheader("📊 OPTION CHAIN DATA")
+        st.dataframe(df)
 
-# =========================
-# SMART MONEY
-# =========================
-bull, bear, trend = smart_money_engine(df)
+        # =============================
+        # TOP OPPORTUNITIES
+        # =============================
+        st.subheader("🚀 TOP TRADING SIGNALS")
 
-st.subheader("🧠 Smart Money Flow")
-st.write("Bullish Volume:", bull)
-st.write("Bearish Volume:", bear)
-st.success(f"Trend: {trend}")
+        buy_ce = df[df["signal"] == "🔥 CE BUY"].head(5)
+        buy_pe = df[df["signal"] == "🔥 PE BUY"].head(5)
 
-# =========================
-# SIGNAL
-# =========================
-signal = generate_signal(df)
+        col1, col2 = st.columns(2)
 
-st.subheader("⚡ Trading Signal")
+        with col1:
+            st.markdown("### 🔵 CE Signals")
+            st.dataframe(buy_ce)
 
-if signal == "BUY":
-    st.success("📈 BUY SIGNAL")
-else:
-    st.error("📉 SELL SIGNAL")
+        with col2:
+            st.markdown("### 🔴 PE Signals")
+            st.dataframe(buy_pe)
 
-# =========================
-# BIG MOVERS
-# =========================
-st.subheader("⚡ Big Movers")
+        # =============================
+        # BIG MOVERS
+        # =============================
+        st.subheader("💥 BIG MOVERS (OI Change)")
+        df_sorted = df.sort_values("oi_diff", ascending=False)
+        st.dataframe(df_sorted.head(10))
 
-moves = big_movers(df)
-
-if not moves.empty:
-    st.dataframe(moves.tail(20))
-else:
-    st.warning("No big moves detected")
-
-# =========================
-# SUMMARY PANEL
-# =========================
-st.subheader("📌 Summary")
-
-st.info(f"""
-Symbol: {symbol}
-Trend: {trend}
-Signal: {signal}
-""")
+        st.subheader("⚡ BIG PE PRESSURE")
+        st.dataframe(df_sorted.tail(10))
