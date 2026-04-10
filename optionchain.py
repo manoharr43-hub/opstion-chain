@@ -8,17 +8,17 @@ import numpy as np
 st.set_page_config(page_title="🔥 BIG PLAYER AI SCANNER", layout="wide")
 
 # =========================
-# LTP SIM
+# INDEX LTP
 # =========================
 def get_ltp(index):
     return {
         "NIFTY": 24015,
         "BANKNIFTY": 48250,
         "FINNIFTY": 20250
-    }.get(index, 0)
+    }.get(index, 24000)
 
 # =========================
-# OPTION CHAIN GENERATOR
+# OPTION CHAIN (SIM DATA)
 # =========================
 def option_chain(index):
     if index == "NIFTY":
@@ -28,45 +28,29 @@ def option_chain(index):
     else:
         base, step = 20200, 50
 
-    strikes = [base + i * step for i in range(-3, 4)]
+    strikes = [base + i * step for i in range(-4, 5)]
 
-    return pd.DataFrame({
+    df = pd.DataFrame({
         "Strike": strikes,
-        "CE_OI": np.random.randint(1000, 5000, len(strikes)),
-        "PE_OI": np.random.randint(1000, 5000, len(strikes)),
+        "CE_OI": np.random.randint(1000, 6000, len(strikes)),
+        "PE_OI": np.random.randint(1000, 6000, len(strikes)),
     })
 
+    return df
+
 # =========================
-# ATM DETECTION
+# ATM FIND
 # =========================
-def get_atm(df, ltp):
+def find_atm(df, ltp):
     return min(df["Strike"], key=lambda x: abs(x - ltp))
 
 # =========================
-# BIG PLAYER AI ENGINE
+# VOLUME ADD
 # =========================
-def big_player_ai(df):
+def add_volume(df):
     df = df.copy()
-
-    # simulate volume (AI observation)
-    df["VOLUME"] = np.random.randint(2000, 12000, len(df))
-
-    # OI strength
-    df["OI_STRENGTH"] = df["CE_OI"] + df["PE_OI"]
-
-    # CE / PE imbalance
-    df["CE_PE_RATIO"] = df["CE_OI"] / (df["PE_OI"] + 1)
-
-    # PE / CE imbalance
-    df["PE_CE_RATIO"] = df["PE_OI"] / (df["CE_OI"] + 1)
-
-    # SPIKE SCORE (BIG PLAYER ACTIVITY)
-    df["SPIKE_SCORE"] = df["VOLUME"] * df["OI_STRENGTH"]
-
-    # TOP BIG PLAYER ZONE
-    top = df.sort_values("SPIKE_SCORE", ascending=False).head(3)
-
-    return top
+    df["VOLUME"] = np.random.randint(2000, 15000, len(df))
+    return df
 
 # =========================
 # TREND ENGINE
@@ -79,7 +63,8 @@ def trend(df):
         return "🟢 BULLISH"
     elif pe > ce * 1.1:
         return "🔴 BEARISH"
-    return "🟡 SIDEWAYS"
+    else:
+        return "🟡 SIDEWAYS"
 
 # =========================
 # PCR
@@ -88,59 +73,51 @@ def pcr(df):
     return round(df["PE_OI"].sum() / df["CE_OI"].sum(), 2)
 
 # =========================
-# VIX (SIM)
+# PRESSURE ENGINE
 # =========================
-def vix():
-    return round(np.random.uniform(11, 18), 2)
+def pressure(df):
+    ce = df["CE_OI"].sum()
+    pe = df["PE_OI"].sum()
+
+    if ce > pe:
+        return "📈 CE PRESSURE (CALL BUYERS ACTIVE)"
+    elif pe > ce:
+        return "📉 PE PRESSURE (PUT BUYERS ACTIVE)"
+    return "⚖️ BALANCED"
 
 # =========================
-# SIDEBAR
+# BIG PLAYER ENGINE
 # =========================
-st.sidebar.title("📊 BIG PLAYER AI PANEL")
+def big_player(df):
+    df = df.copy()
 
-index = st.sidebar.selectbox(
-    "Select Index",
-    ["NIFTY", "BANKNIFTY", "FINNIFTY"]
-)
+    df["OI_STRENGTH"] = df["CE_OI"] + df["PE_OI"]
+    df["SPIKE_SCORE"] = df["OI_STRENGTH"] * df["VOLUME"]
 
-expiry = st.sidebar.radio(
-    "Select Expiry",
-    ["Weekly", "Monthly"]
-)
+    return df.sort_values("SPIKE_SCORE", ascending=False).head(3)
 
 # =========================
-# DATA
+# UI
 # =========================
+st.title("🔥 NEXT LEVEL BIG PLAYER AI SCANNER")
+
+# Sidebar
+st.sidebar.title("📊 Controls")
+
+index = st.sidebar.selectbox("Select Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
+expiry = st.sidebar.radio("Expiry Type", ["Weekly", "Monthly"])
+
+# Data
 ltp = get_ltp(index)
 df = option_chain(index)
+df = add_volume(df)
 
-atm = get_atm(df, ltp)
-
-df["TOTAL_OI"] = df["CE_OI"] + df["PE_OI"]
-
-big_zone = big_player_ai(df)
+atm = find_atm(df, ltp)
 
 trend_value = trend(df)
 pcr_value = pcr(df)
-vix_value = vix()
-
-# =========================
-# HEADER
-# =========================
-st.title("🔥 NEXT LEVEL BIG PLAYER AI SCANNER")
-st.caption("Smart Money Detection | Spike Score Engine | Fully Separate System")
-
-# =========================
-# SIDEBAR INFO
-# =========================
-st.sidebar.markdown("---")
-st.sidebar.success(f"Index: {index}")
-st.sidebar.info(f"LTP: {ltp}")
-st.sidebar.warning(f"ATM: {atm}")
-st.sidebar.error(f"PCR: {pcr_value}")
-st.sidebar.info(f"VIX: {vix_value}")
-st.sidebar.success(f"Trend: {trend_value}")
-st.sidebar.info(f"Expiry: {expiry}")
+pressure_value = pressure(df)
+big_zone = big_player(df)
 
 # =========================
 # METRICS
@@ -149,32 +126,4 @@ c1, c2, c3, c4 = st.columns(4)
 
 c1.metric("Index", index)
 c2.metric("ATM", atm)
-c3.metric("PCR", pcr_value)
-c4.metric("VIX", vix_value)
-
-# =========================
-# OPTION CHAIN
-# =========================
-st.subheader("📊 Option Chain Data")
-
-st.dataframe(df, use_container_width=True)
-
-# =========================
-# BIG PLAYER ZONE
-# =========================
-st.subheader("🔥 BIG PLAYER ENTRY ZONE (AI DETECTED)")
-
-st.dataframe(big_zone, use_container_width=True)
-
-# =========================
-# REPORT
-# =========================
-st.subheader("📌 Market Report")
-
-st.write(f"""
-✔ Index: {index}  
-✔ Expiry: {expiry}  
-✔ ATM: {atm}  
-✔ PCR: {pcr_value}  
-✔ VIX: {vix_value}  
-✔ Trend
+c
