@@ -6,28 +6,23 @@ import yfinance as yf
 # =========================
 # PAGE CONFIG
 # =========================
-st.set_page_config(page_title="🔥 CE vs PE + STOCK AI SCANNER", layout="wide")
+st.set_page_config(page_title="🔥 CE vs PE + AI TRADING BOT", layout="wide")
 
 # =========================
-# SAFE INDEX LTP
+# INDEX LTP
 # =========================
 def get_ltp(index):
-    data = {
+    return {
         "NIFTY": 24015,
         "BANKNIFTY": 48250,
         "FINNIFTY": 20250
-    }
-    return data.get(index, 24000)
+    }.get(index, 24000)
 
 # =========================
-# OPTION CHAIN (SAFE)
+# OPTION CHAIN
 # =========================
 def option_chain(ltp):
-    try:
-        ltp = float(ltp)
-    except:
-        ltp = 24000
-
+    ltp = float(ltp)
     base = round(ltp / 50) * 50
     strikes = [base + i * 50 for i in range(-3, 4)]
 
@@ -38,22 +33,16 @@ def option_chain(ltp):
     })
 
 # =========================
-# ATM
-# =========================
-def get_atm(df, ltp):
-    return min(df["Strike"], key=lambda x: abs(x - ltp))
-
-# =========================
-# CE PE ZONE
+# CE PE ZONES
 # =========================
 def ce_pe_zone(df):
     df["CE_PRESSURE"] = df["CE_OI"] / (df["PE_OI"] + 1)
     df["PE_PRESSURE"] = df["PE_OI"] / (df["CE_OI"] + 1)
 
-    ce_zone = df.sort_values("CE_PRESSURE", ascending=False).head(3)
-    pe_zone = df.sort_values("PE_PRESSURE", ascending=False).head(3)
-
-    return ce_zone, pe_zone
+    return (
+        df.sort_values("CE_PRESSURE", ascending=False).head(3),
+        df.sort_values("PE_PRESSURE", ascending=False).head(3)
+    )
 
 # =========================
 # TREND
@@ -69,97 +58,79 @@ def trend(df):
     return "🟡 SIDEWAYS"
 
 # =========================
-# PCR
+# STOCK PRICE
 # =========================
-def pcr(df):
-    return round(df["PE_OI"].sum() / df["CE_OI"].sum(), 2)
-
-# =========================
-# STOCK ANALYSIS (FINAL FIX)
-# =========================
-def stock_analysis(symbol):
+def get_price(symbol):
     try:
-        symbol = symbol.upper().strip()
-
         if not symbol.endswith(".NS"):
             symbol += ".NS"
 
-        ticker = yf.Ticker(symbol)
+        data = yf.Ticker(symbol).history(period="1d", interval="1m")
 
-        data = ticker.history(period="1d", interval="1m")
+        if data.empty:
+            return None
 
-        if data is None or data.empty:
-            return None, None, "⚠ NO DATA / MARKET CLOSED"
+        return float(data["Close"].iloc[-1])
 
-        price = float(data["Close"].iloc[-1])
-        open_price = float(data["Open"].iloc[0])
-
-        change = ((price - open_price) / open_price) * 100
-
-        if change > 1:
-            signal = "🟢 CALL SIDE STRONG"
-        elif change < -1:
-            signal = "🔴 PUT SIDE STRONG"
-        else:
-            signal = "🟡 SIDEWAYS"
-
-        return price, round(change, 2), signal
-
-    except Exception as e:
-        return None, None, f"⚠ ERROR: {str(e)}"
+    except:
+        return None
 
 # =========================
+# AI TRADING ENGINE
+# =========================
+def ai_engine(price, strike):
+    diff = price - strike
+    perc = (diff / strike) * 100
+
+    # ENTRY
+    if abs(perc) < 0.5:
+        entry = "🟡 NO TRADE (WAIT)"
+    elif perc > 0.5:
+        entry = "🟢 CALL ENTRY"
+    else:
+        entry = "🔴 PUT ENTRY"
+
+    # EXIT
+    if abs(perc) > 2:
+        exit_signal = "⚠ EXIT (TARGET HIT)"
+    else:
+        exit_signal = "🟡 HOLD"
+
+    # STOPLOSS
+    stoploss = round(strike * (0.98 if perc > 0 else 1.02), 2)
+
+    return entry, exit_signal, stoploss
+
+# =========================
+# UI
+# =========================
+st.title("🔥 CE vs PE + AI TRADING BOT (SAFE VERSION)")
+
 # SIDEBAR
-# =========================
-st.sidebar.title("📊 CONTROL PANEL")
+index = st.sidebar.selectbox("Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
+stock = st.sidebar.text_input("Stock Search (RELIANCE, TCS, INFY)")
+strike = st.sidebar.number_input("Strike Price", value=24000)
 
-index = st.sidebar.selectbox("Select Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
-stock = st.sidebar.text_input("🔎 Search Stock (RELIANCE, TCS, INFY)")
-expiry = st.sidebar.radio("Expiry", ["Weekly", "Monthly"])
-
-# =========================
 # DATA
-# =========================
 ltp = get_ltp(index)
 df = option_chain(ltp)
-atm = get_atm(df, ltp)
 
 ce_zone, pe_zone = ce_pe_zone(df)
-
 trend_value = trend(df)
-pcr_value = pcr(df)
-
-# =========================
-# HEADER
-# =========================
-st.title("🔥 CE vs PE + STOCK AI SCANNER")
-st.caption("Stable Version - No Loading Issue + No API Crash")
-
-# =========================
-# METRICS
-# =========================
-c1, c2, c3 = st.columns(3)
-
-c1.metric("Index", index)
-c2.metric("ATM", atm)
-c3.metric("PCR", pcr_value)
 
 # =========================
 # OPTION CHAIN
 # =========================
 st.subheader("📊 Option Chain")
-st.dataframe(df, use_container_width=True)
+st.dataframe(df)
 
 # =========================
-# CE ZONE
+# CE PE ZONES
 # =========================
-st.subheader("🚀 CE BIG ZONE")
+st.subheader("🚀 CE ZONE")
 st.dataframe(ce_zone)
 
-# =========================
-# PE ZONE
-# =========================
-st.subheader("📉 PE BIG ZONE")
+st.subheader("📉 PE ZONE")
 st.dataframe(pe_zone)
 
 # =========================
@@ -167,34 +138,43 @@ st.dataframe(pe_zone)
 # =========================
 st.subheader("📌 STOCK ANALYSIS")
 
-if stock:
-    with st.spinner("🔄 Loading Stock Data..."):
-        price, change, signal = stock_analysis(stock)
+price = None
+entry = exit_signal = stoploss = None
 
-    if price is None:
-        st.error(signal)
+if stock:
+    with st.spinner("Loading Stock..."):
+        price = get_price(stock)
+
+    if price:
+        entry, exit_signal, stoploss = ai_engine(price, strike)
+
+        st.metric("Live Price", price)
+        st.success(entry)
+        st.warning(exit_signal)
+        st.error(f"STOPLOSS: {stoploss}")
     else:
-        st.metric("Price", price)
-        st.metric("Change %", change)
-        st.success(signal)
+        st.error("Stock Data Not Found")
 
 # =========================
 # REPORT
 # =========================
-st.subheader("📌 MARKET REPORT")
+st.subheader("📊 FINAL REPORT")
 
 st.write(f"""
 ✔ Index: {index}  
-✔ ATM: {atm}  
-✔ PCR: {pcr_value}  
+✔ LTP: {ltp}  
 ✔ Trend: {trend_value}  
-✔ Expiry: {expiry}  
+✔ Stock: {stock}  
+✔ Strike: {strike}  
+✔ Entry: {entry}  
+✔ Exit: {exit_signal}  
+✔ Stoploss: {stoploss}  
 """)
 
 # =========================
 # FINAL SIGNAL
 # =========================
-if ce_zone["CE_PRESSURE"].mean() > pe_zone["PE_PRESSURE"].mean():
+if df["CE_PRESSURE"].mean() > df["PE_PRESSURE"].mean():
     st.success("🟢 CALL SIDE STRONG MARKET")
 else:
     st.warning("🔴 PUT SIDE STRONG MARKET")
