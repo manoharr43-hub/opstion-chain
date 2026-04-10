@@ -3,112 +3,148 @@ import pandas as pd
 import requests
 import time
 
-# --- Page Configuration ---
+# =========================
+# PAGE CONFIG
+# =========================
 st.set_page_config(page_title="Ultra Pro AI Option Chain", layout="wide")
 
-# --- Enhanced NSE API Fetching Logic ---
-# ఈ సెక్షన్ డేటాని NSE నుండి సురక్షితంగా తెస్తుంది
+
+# =========================
+# SAFE NSE DATA FETCH
+# =========================
 def get_nse_data(symbol="NIFTY"):
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://www.nseindia.com/option-chain'
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.nseindia.com/option-chain"
     }
-    
-    base_url = "https://www.nseindia.com"
-    api_url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
-    
+
     session = requests.Session()
+
     try:
-        # మొదట మెయిన్ సైట్ ని విజిట్ చేసి కుకీస్ ని సెట్ చేయాలి
-        session.get(base_url, headers=headers, timeout=10)
-        # ఇప్పుడు అసలు డేటా కోసం రిక్వెస్ట్ పంపాలి
-        response = session.get(api_url, headers=headers, timeout=10)
-        
-        if response.status_code == 200:
-            return response.json()
-        else:
-            return None
+        # warm-up call (important for cookies)
+        session.get("https://www.nseindia.com", headers=headers, timeout=10)
+
+        url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+
+        response = session.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        return response.json()
+
     except Exception as e:
-        st.error(f"Error fetching data: {e}")
+        st.error(f"❌ NSE Fetch Error: {e}")
         return None
 
-# --- Process Data for 5-Column Option Flow ---
+
+# =========================
+# SAFE DATA PROCESSING
+# =========================
 def process_option_flow(data):
     try:
-        records = data['filtered']['data']
+        if not data:
+            return pd.DataFrame()
+
+        records = data.get("filtered", {}).get("data", [])
+        if not records:
+            return pd.DataFrame()
+
         flow_list = []
-        
+
         for entry in records:
-            strike_price = entry['strikePrice']
-            if 'CE' in entry and 'PE' in entry:
-                ce_oi = entry['CE']['changeinOpenInterest']
-                pe_oi = entry['PE']['changeinOpenInterest']
-                
-                # OI Difference మరియు Sentiment లెక్కించడం
-                oi_diff = pe_oi - ce_oi
-                sentiment = "Bullish" if oi_diff > 0 else "Bearish"
-                
-                flow_list.append({
-                    "Strike Price": strike_price,
-                    "CE Change in OI": ce_oi,
-                    "PE Change in OI": pe_oi,
-                    "OI Difference": oi_diff,
-                    "Market Sentiment": sentiment
-                })
+            strike = entry.get("strikePrice", 0)
+
+            ce = entry.get("CE", {})
+            pe = entry.get("PE", {})
+
+            ce_oi = ce.get("changeinOpenInterest", 0)
+            pe_oi = pe.get("changeinOpenInterest", 0)
+
+            oi_diff = pe_oi - ce_oi
+
+            sentiment = "Bullish" if oi_diff > 0 else "Bearish"
+
+            flow_list.append({
+                "Strike Price": strike,
+                "CE Change OI": ce_oi,
+                "PE Change OI": pe_oi,
+                "OI Difference": oi_diff,
+                "Market Sentiment": sentiment
+            })
+
         return pd.DataFrame(flow_list)
-    except Exception:
+
+    except Exception as e:
+        st.error(f"Processing Error: {e}")
         return pd.DataFrame()
 
-# --- Telugu AI Analysis Generator ---
-def generate_telugu_analysis(df):
-    if df.empty:
-        return "విశ్లేషణకు తగినంత డేటా లేదు."
-        
-    total_ce_oi = df["CE Change in OI"].sum()
-    total_pe_oi = df["PE Change in OI"].sum()
-    
-    if total_pe_oi > total_ce_oi:
-        trend = "బుల్లిష్ (Bullish) - మార్కెట్ పెరిగే అవకాశం ఉంది."
-        strategy = "సపోర్ట్ లెవెల్స్ (PE OI అధికంగా ఉన్న చోట) గమనిస్తూ ఉండండి."
-    else:
-        trend = "బేరిష్ (Bearish) - మార్కెట్ తగ్గే అవకాశం ఉంది."
-        strategy = "రెసిస్టెన్స్ లెవెల్స్ (CE OI అధికంగా ఉన్న చోట) గమనిస్తూ ఉండండి."
-        
-    return f"""
-    ### 📊 AI మార్కెట్ విశ్లేషణ (Telugu)
-    - **ప్రస్తుత ట్రెండ్:** {trend}
-    - **ముఖ్య గమనిక:** PE Change in OI ఎక్కువగా ఉంటే మార్కెట్ పైకి వెళ్లే ఛాన్స్ ఉంది.
-    - **ట్రేడ్ ప్లాన్:** {strategy}
-    """
 
-# --- UI Layout ---
-st.title("🚀 ULTRA PRO AI OPTION CHAIN")
+# =========================
+# TELUGU AI ANALYSIS
+# =========================
+def generate_telugu_analysis(df):
+    if df is None or df.empty:
+        return "⚠️ విశ్లేషణకు డేటా లేదు."
+
+    total_ce = df["CE Change OI"].sum()
+    total_pe = df["PE Change OI"].sum()
+
+    if total_pe > total_ce:
+        trend = "📈 బుల్లిష్ మార్కెట్ అవకాశం"
+        strategy = "PE ఎక్కువ ఉన్న సపోర్ట్ జోన్ గమనించండి"
+    else:
+        trend = "📉 బేరిష్ మార్కెట్ అవకాశం"
+        strategy = "CE ఎక్కువ ఉన్న రెసిస్టెన్స్ జోన్ గమనించండి"
+
+    return f"""
+### 📊 AI OPTION CHAIN ANALYSIS (TELUGU)
+
+- **ట్రెండ్:** {trend}
+- **CE Total OI:** {total_ce}
+- **PE Total OI:** {total_pe}
+
+**ట్రేడ్ ఐడియా:**
+{strategy}
+"""
+
+
+# =========================
+# UI
+# =========================
+st.title("🚀 ULTRA PRO AI OPTION CHAIN (STABLE VERSION)")
 
 with st.sidebar:
-    st.header("📌 Select INDEX")
-    symbol = st.selectbox("Index ఎంచుకోండి", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
-    run_btn = st.button("RUN ANALYSIS")
+    st.header("INDEX SELECT")
+    symbol = st.selectbox("Choose Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
+    run = st.button("RUN ANALYSIS")
 
-if run_btn:
-    with st.spinner('డేటాను సేకరిస్తున్నాము...'):
-        raw_data = get_nse_data(symbol)
-        
-        if raw_data:
-            df_flow = process_option_flow(raw_data)
-            
-            if not df_flow.empty:
-                # 1. Show the 5-Column Table
-                st.subheader(f"Option Flow Analysis - {symbol}")
-                st.dataframe(df_flow.head(15), use_container_width=True)
-                
-                # 2. Show AI Analysis in Telugu
+
+# =========================
+# MAIN LOGIC
+# =========================
+if run:
+    with st.spinner("Fetching NSE data..."):
+
+        data = get_nse_data(symbol)
+
+        if data:
+
+            df = process_option_flow(data)
+
+            if df is not None and not df.empty:
+
+                st.subheader(f"📊 Option Flow - {symbol}")
+                st.dataframe(df.head(20), use_container_width=True)
+
                 st.divider()
-                st.markdown(generate_telugu_analysis(df_flow))
-            else:
-                st.warning("డేటా ప్రాసెస్ చేయడంలో ఇబ్బంది కలిగింది.")
-        else:
-            st.error("NSE నుండి డేటా రావడం లేదు. దయచేసి కాసేపు ఆగి మళ్ళీ ప్రయత్నించండి.")
+                st.markdown(generate_telugu_analysis(df))
 
-st.info("గమనిక: ఇది కేవలం ఎడ్యుకేషనల్ పర్పస్ కోసం మాత్రమే.")
+            else:
+                st.warning("⚠️ Data processing failed or empty response")
+
+        else:
+            st.error("❌ NSE data not available. Try again later.")
+
+
+st.info("⚠️ Educational Purpose Only - Not Financial Advice")
