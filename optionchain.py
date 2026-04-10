@@ -71,3 +71,26 @@ def generate_report_ai(df, ltp):
     }
 
     return report
+    
+import streamlit as st
+from big_player_ai_addon import generate_report_ai
+
+index = st.sidebar.selectbox("Select Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
+
+ltp = get_ltp(index)
+df = option_chain(index)
+df = add_volume(df)
+
+if df.empty:
+    st.error("No Data Found")
+    st.stop()
+
+report = generate_report_ai(df, ltp)
+
+st.metric("ATM", report["ATM"])
+st.write("Trend:", report["TREND"])
+st.write("PCR:", report["PCR"])
+st.write("Pressure:", report["PRESSURE"])
+
+st.subheader("🔥 Big Player Zone")
+st.dataframe(report["BIG_ZONE"])
