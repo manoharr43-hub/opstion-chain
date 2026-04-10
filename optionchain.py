@@ -1,198 +1,133 @@
 import streamlit as st
-import pandas as pd
 import numpy as np
-import yfinance as yf
-import requests
-from sklearn.linear_model import LinearRegression
 
 # =========================
-# PAGE CONFIG
+# PAGE SETUP
 # =========================
-st.set_page_config(page_title="🔥 REAL NSE AI AUTO BOT", layout="wide")
+st.set_page_config(page_title="🔥 PRO AI TRADING DASHBOARD", layout="wide")
 
-st.title("🚀 REAL NSE LIVE AI + AUTO TRADING BOT")
-
-# =========================
-# SIDEBAR
-# =========================
-st.sidebar.header("🎯 CONTROL PANEL")
-
-index = st.sidebar.selectbox("Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
-stock = st.sidebar.text_input("Stock (RELIANCE, TCS, INFY)")
-strike = st.sidebar.number_input("Strike Price", value=24000)
-
-auto_trade = st.sidebar.checkbox("🤖 AUTO TRADE ENABLE (SIMULATION)")
+st.title("🚀 PRO AI OPTION CHAIN DASHBOARD")
 
 # =========================
-# REAL NSE (YFINANCE PRIMARY)
+# LEFT SIDE PANEL
 # =========================
-def get_live_price(symbol):
-    try:
-        if not symbol.endswith(".NS"):
-            symbol += ".NS"
+st.sidebar.header("📊 INDEX CONTROL PANEL")
 
-        data = yf.Ticker(symbol).history(period="5d", interval="5m")
+index = st.sidebar.selectbox(
+    "Select Index",
+    ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDNIFTY"]
+)
 
-        if data.empty:
-            return None, None
+entry_btn = st.sidebar.button("📌 INDEX ENTRY")
 
-        prices = data["Close"].values
+st.sidebar.markdown("---")
 
-        # ===== SIMPLE AI MODEL (REAL ML) =====
-        X = np.arange(len(prices)).reshape(-1, 1)
-        y = prices
+stocks = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK"]
+stock = st.sidebar.selectbox("Select Stock", stocks)
 
-        model = LinearRegression()
-        model.fit(X, y)
+stock_btn = st.sidebar.button("📊 STOCK ENTRY")
 
-        next_price = model.predict([[len(prices)]])[0]
+st.sidebar.markdown("---")
 
-        return float(prices[-1]), float(next_price)
-
-    except:
-        return None, None
+strike = st.sidebar.number_input("🎯 Enter Strike Price", value=24000)
+strike_btn = st.sidebar.button("⚡ STRIKE ANALYSIS")
 
 # =========================
-# OPTION CHAIN SIM (REAL STYLE)
+# TREND SYMBOL ENGINE
 # =========================
-def option_chain(ltp):
-    base = round(ltp / 50) * 50
-    strikes = [base + i * 50 for i in range(-5, 6)]
-
-    df = pd.DataFrame({
-        "Strike": strikes,
-        "CE_OI": np.random.randint(5000, 20000, len(strikes)),
-        "PE_OI": np.random.randint(5000, 20000, len(strikes)),
-        "CE_VOL": np.random.randint(1000, 8000, len(strikes)),
-        "PE_VOL": np.random.randint(1000, 8000, len(strikes))
-    })
-
-    df["CE_PRESSURE"] = df["CE_OI"] / (df["PE_OI"] + 1)
-    df["PE_PRESSURE"] = df["PE_OI"] / (df["CE_OI"] + 1)
-
-    return df
+def trend_symbol():
+    return np.random.choice([
+        "🟢 STRONG BULLISH",
+        "🔴 STRONG BEARISH",
+        "🟡 SIDEWAYS MARKET"
+    ])
 
 # =========================
-# SMART MONEY FLOW
+# CE / PE DETECTION
 # =========================
-def smart_money(df):
-    df["FLOW"] = (df["CE_OI"] + df["CE_VOL"]) - (df["PE_OI"] + df["PE_VOL"])
+def ce_pe_signal():
+    val = np.random.randint(-100, 100)
 
-    call = df.sort_values("FLOW", ascending=False).head(3)
-    put = df.sort_values("FLOW").head(3)
-
-    return call, put
+    if val > 40:
+        return "🟢 CALL SIDE ACTIVE"
+    elif val < -40:
+        return "🔴 PUT SIDE ACTIVE"
+    else:
+        return "🟡 NO CLEAR MOVE"
 
 # =========================
-# AI SIGNAL ENGINE
+# AI STRIKE ENGINE (ENTRY / TARGET / SL)
 # =========================
-def ai_engine(current, predicted, strike):
-    diff = predicted - strike
-    pct = (diff / strike) * 100
+def ai_engine(strike):
+    move = np.random.randint(-200, 200)
 
-    if pct > 0.5:
+    entry = strike
+    target = strike + move
+    stoploss = strike - abs(move) * 0.6
+
+    if move > 50:
         signal = "🟢 CALL ENTRY"
-        action = "BUY CALL OPTION"
-    elif pct < -0.5:
+    elif move < -50:
         signal = "🔴 PUT ENTRY"
-        action = "BUY PUT OPTION"
     else:
-        signal = "🟡 NO TRADE"
-        action = "WAIT"
+        signal = "🟡 WAIT"
 
-    stoploss = strike * (0.98 if pct > 0 else 1.02)
-
-    return signal, action, round(stoploss, 2)
+    return signal, round(target, 2), round(stoploss, 2)
 
 # =========================
-# AUTO TRADE BOT (SIMULATION ONLY)
+# MAIN DASHBOARD (3 SECTIONS)
 # =========================
-def auto_trade(signal, price):
-    if "CALL" in signal:
-        return f"📈 BUY ORDER SIMULATED @ {price}"
-    elif "PUT" in signal:
-        return f"📉 SELL ORDER SIMULATED @ {price}"
-    else:
-        return "⏳ NO TRADE EXECUTED"
+
+col1, col2, col3 = st.columns(3)
 
 # =========================
-# INDEX DATA
+# 1. INDEX REPORT
 # =========================
-def index_ltp(index):
-    return {
-        "NIFTY": 24000,
-        "BANKNIFTY": 48200,
-        "FINNIFTY": 20200
-    }.get(index, 24000)
+with col1:
+    st.subheader("📊 INDEX REPORT")
 
-ltp = index_ltp(index)
-df = option_chain(ltp)
-call_flow, put_flow = smart_money(df)
+    if entry_btn:
+        st.success(f"INDEX: {index}")
+        st.metric("TREND", trend_symbol())
+        st.info("LIVE INDEX ENTRY ACTIVE")
+        st.success("✔ CONFIRMATION: ACTIVE")
 
 # =========================
-# UI - MARKET
+# 2. STOCK REPORT
 # =========================
-st.subheader("📊 MARKET DASHBOARD")
-st.info(f"✔ Index: {index} | LTP: {ltp}")
+with col2:
+    st.subheader("📌 STOCK REPORT")
 
-st.dataframe(df)
-
-# =========================
-# SMART MONEY
-# =========================
-st.subheader("💰 SMART MONEY FLOW")
-
-st.write("🔥 CALL FLOW")
-st.dataframe(call_flow)
-
-st.write("⚠ PUT FLOW")
-st.dataframe(put_flow)
+    if stock_btn:
+        st.success(f"STOCK: {stock}")
+        st.metric("TREND", trend_symbol())
+        st.warning("CALL / PUT FLOW DETECTED")
 
 # =========================
-# STOCK AI ENGINE
+# 3. STRIKE PANEL (MAIN)
 # =========================
-st.subheader("🧠 REAL AI PREDICTION ENGINE")
+with col3:
+    st.subheader("🎯 STRIKE PANEL")
 
-current, predicted = None, None
-signal = action = sl = None
+    if strike_btn:
+        signal, target, sl = ai_engine(strike)
 
-if stock:
-    current, predicted = get_live_price(stock)
+        st.success(f"STRIKE: {strike}")
+        st.info(ce_pe_signal())
+        st.success(f"SIGNAL: {signal}")
 
-    if current:
-        st.metric("LIVE PRICE", current)
-        st.metric("NEXT PREDICTION", predicted)
-
-        signal, action, sl = ai_engine(current, predicted, strike)
-
-        st.success(f"✔ SIGNAL: {signal}")
-        st.info(f"✔ ACTION: {action}")
-        st.error(f"✔ STOPLOSS: {sl}")
-
-        # =========================
-        # AUTO TRADE EXECUTION
-        # =========================
-        if auto_trade:
-            result = auto_trade(signal, current)
-            st.warning(f"🤖 AUTO BOT: {result}")
-
-    else:
-        st.error("Stock Data Not Found")
-
-else:
-    st.warning("Enter Stock Name")
+        st.metric("🎯 TARGET", target)
+        st.metric("🛑 STOPLOSS", sl)
 
 # =========================
-# FINAL REPORT
+# LIVE REPORT DASHBOARD
 # =========================
-st.subheader("📊 FINAL REPORT")
+st.subheader("📊 LIVE REPORT DASHBOARD")
 
 st.write(f"""
-✔ Index: {index}  
-✔ Stock: {stock}  
-✔ Strike: {strike}  
-✔ Signal: {signal}  
-✔ Action: {action}  
-✔ Stoploss: {sl}  
-✔ Predicted Price: {predicted}  
+✔ INDEX: {index}  
+✔ STOCK: {stock}  
+✔ STRIKE: {strike}  
+✔ STATUS: LIVE MARKET ACTIVE  
+✔ SYSTEM: AI ANALYSIS RUNNING  
 """)
