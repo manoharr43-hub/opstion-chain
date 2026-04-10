@@ -10,141 +10,146 @@ st.set_page_config(page_title="Ultra Pro AI Option Chain", layout="wide")
 
 
 # =========================
-# SAFE NSE DATA FETCH
+# SAFE SESSION
 # =========================
-def get_nse_data(symbol="NIFTY"):
+def create_session():
+    session = requests.Session()
+
     headers = {
         "User-Agent": "Mozilla/5.0",
-        "Accept": "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "application/json, text/plain, */*",
         "Referer": "https://www.nseindia.com/option-chain"
     }
 
-    session = requests.Session()
+    session.headers.update(headers)
 
     try:
-        # warm-up call (important for cookies)
-        session.get("https://www.nseindia.com", headers=headers, timeout=10)
+        session.get("https://www.nseindia.com", timeout=5)
+        session.get("https://www.nseindia.com/option-chain", timeout=5)
+    except:
+        pass
 
-        url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+    return session
 
-        response = session.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
 
-        return response.json()
+# =========================
+# FALLBACK DATA (IMPORTANT)
+# =========================
+def fallback_data(symbol):
+    data = []
+    for i in range(10):
+        data.append({
+            "Strike Price": 22000 + (i * 100),
+            "CE Change OI": 1000 - i * 50,
+            "PE Change OI": 800 + i * 60,
+            "OI Difference": (800 + i * 60) - (1000 - i * 50),
+            "Market Sentiment": "Bullish" if i % 2 == 0 else "Bearish"
+        })
+    return pd.DataFrame(data)
 
-    except Exception as e:
-        st.error(f"❌ NSE Fetch Error: {e}")
+
+# =========================
+# NSE FETCH (SAFE)
+# =========================
+def get_nse_data(symbol="NIFTY"):
+    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+
+    try:
+        session = create_session()
+        response = session.get(url, timeout=10)
+
+        if response.status_code == 200:
+            return response.json()
+
+        return None
+
+    except:
         return None
 
 
 # =========================
-# SAFE DATA PROCESSING
+# PROCESS DATA SAFE
 # =========================
 def process_option_flow(data):
     try:
-        if not data:
-            return pd.DataFrame()
-
         records = data.get("filtered", {}).get("data", [])
         if not records:
             return pd.DataFrame()
 
-        flow_list = []
+        result = []
 
-        for entry in records:
-            strike = entry.get("strikePrice", 0)
-
-            ce = entry.get("CE", {})
-            pe = entry.get("PE", {})
+        for r in records:
+            ce = r.get("CE", {})
+            pe = r.get("PE", {})
 
             ce_oi = ce.get("changeinOpenInterest", 0)
             pe_oi = pe.get("changeinOpenInterest", 0)
 
-            oi_diff = pe_oi - ce_oi
-
-            sentiment = "Bullish" if oi_diff > 0 else "Bearish"
-
-            flow_list.append({
-                "Strike Price": strike,
+            result.append({
+                "Strike Price": r.get("strikePrice"),
                 "CE Change OI": ce_oi,
                 "PE Change OI": pe_oi,
-                "OI Difference": oi_diff,
-                "Market Sentiment": sentiment
+                "OI Difference": pe_oi - ce_oi,
+                "Market Sentiment": "Bullish" if pe_oi > ce_oi else "Bearish"
             })
 
-        return pd.DataFrame(flow_list)
+        return pd.DataFrame(result)
 
-    except Exception as e:
-        st.error(f"Processing Error: {e}")
+    except:
         return pd.DataFrame()
 
 
 # =========================
 # TELUGU AI ANALYSIS
 # =========================
-def generate_telugu_analysis(df):
-    if df is None or df.empty:
-        return "⚠️ విశ్లేషణకు డేటా లేదు."
+def analysis(df):
+    if df.empty:
+        return "⚠️ డేటా అందుబాటులో లేదు"
 
-    total_ce = df["CE Change OI"].sum()
-    total_pe = df["PE Change OI"].sum()
+    ce = df["CE Change OI"].sum()
+    pe = df["PE Change OI"].sum()
 
-    if total_pe > total_ce:
-        trend = "📈 బుల్లిష్ మార్కెట్ అవకాశం"
-        strategy = "PE ఎక్కువ ఉన్న సపోర్ట్ జోన్ గమనించండి"
+    if pe > ce:
+        return "📈 Bullish Market - PE dominance high"
     else:
-        trend = "📉 బేరిష్ మార్కెట్ అవకాశం"
-        strategy = "CE ఎక్కువ ఉన్న రెసిస్టెన్స్ జోన్ గమనించండి"
-
-    return f"""
-### 📊 AI OPTION CHAIN ANALYSIS (TELUGU)
-
-- **ట్రెండ్:** {trend}
-- **CE Total OI:** {total_ce}
-- **PE Total OI:** {total_pe}
-
-**ట్రేడ్ ఐడియా:**
-{strategy}
-"""
+        return "📉 Bearish Market - CE dominance high"
 
 
 # =========================
 # UI
 # =========================
-st.title("🚀 ULTRA PRO AI OPTION CHAIN (STABLE VERSION)")
+st.title("🚀 ULTRA PRO AI OPTION CHAIN (FINAL SAFE VERSION)")
 
-with st.sidebar:
-    st.header("INDEX SELECT")
-    symbol = st.selectbox("Choose Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
-    run = st.button("RUN ANALYSIS")
+symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
 
+if st.button("RUN ANALYSIS"):
 
-# =========================
-# MAIN LOGIC
-# =========================
-if run:
-    with st.spinner("Fetching NSE data..."):
+    with st.spinner("Fetching data safely..."):
 
-        data = get_nse_data(symbol)
+        raw = get_nse_data(symbol)
 
-        if data:
+        # =========================
+        # IF NSE FAIL → USE FALLBACK
+        # =========================
+        if raw:
+            df = process_option_flow(raw)
+        else:
+            st.warning("⚠️ NSE blocked - showing fallback data")
+            df = fallback_data(symbol)
 
-            df = process_option_flow(data)
+        # =========================
+        # SHOW DATA SAFELY
+        # =========================
+        if df is not None and not df.empty:
+            st.subheader("Option Chain Data")
+            st.dataframe(df.head(20), use_container_width=True)
 
-            if df is not None and not df.empty:
-
-                st.subheader(f"📊 Option Flow - {symbol}")
-                st.dataframe(df.head(20), use_container_width=True)
-
-                st.divider()
-                st.markdown(generate_telugu_analysis(df))
-
-            else:
-                st.warning("⚠️ Data processing failed or empty response")
+            st.divider()
+            st.markdown("### AI Analysis")
+            st.success(analysis(df))
 
         else:
-            st.error("❌ NSE data not available. Try again later.")
+            st.error("No data available")
 
 
-st.info("⚠️ Educational Purpose Only - Not Financial Advice")
+st.info("Educational Purpose Only - Not Financial Advice")
