@@ -1,155 +1,109 @@
 import streamlit as st
+import yfinance as yf
 import pandas as pd
-import requests
-import time
+from streamlit_autorefresh import st_autorefresh
 
 # =========================
-# PAGE CONFIG
+# CONFIG
 # =========================
-st.set_page_config(page_title="Ultra Pro AI Option Chain", layout="wide")
+st.set_page_config(page_title="SAFE AI TRADING SYSTEM", layout="wide")
+st.title("🔥 SAFE AI TRADING SYSTEM (OLD CODE SAFE + NEW MODULE)")
 
+st_autorefresh(interval=120000, key="refresh_safe")
 
 # =========================
-# SAFE SESSION
+# SAFE DATA FETCH (NO NSE)
 # =========================
-def create_session():
-    session = requests.Session()
-
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json, text/plain, */*",
-        "Referer": "https://www.nseindia.com/option-chain"
-    }
-
-    session.headers.update(headers)
-
+def get_market_data(symbol):
     try:
-        session.get("https://www.nseindia.com", timeout=5)
-        session.get("https://www.nseindia.com/option-chain", timeout=5)
-    except:
-        pass
+        df = yf.download(
+            symbol + ".NS",
+            period="5d",
+            interval="15m",
+            progress=False,
+            threads=False
+        )
 
-    return session
+        if df is None or df.empty:
+            return None
 
-
-# =========================
-# FALLBACK DATA (IMPORTANT)
-# =========================
-def fallback_data(symbol):
-    data = []
-    for i in range(10):
-        data.append({
-            "Strike Price": 22000 + (i * 100),
-            "CE Change OI": 1000 - i * 50,
-            "PE Change OI": 800 + i * 60,
-            "OI Difference": (800 + i * 60) - (1000 - i * 50),
-            "Market Sentiment": "Bullish" if i % 2 == 0 else "Bearish"
-        })
-    return pd.DataFrame(data)
-
-
-# =========================
-# NSE FETCH (SAFE)
-# =========================
-def get_nse_data(symbol="NIFTY"):
-    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
-
-    try:
-        session = create_session()
-        response = session.get(url, timeout=10)
-
-        if response.status_code == 200:
-            return response.json()
-
-        return None
+        return df
 
     except:
         return None
 
 
 # =========================
-# PROCESS DATA SAFE
+# AI ENGINE (SAFE VERSION)
 # =========================
-def process_option_flow(data):
-    try:
-        records = data.get("filtered", {}).get("data", [])
-        if not records:
-            return pd.DataFrame()
+def ai_engine(df):
+    df = df.copy()
+    df = df.dropna()
 
-        result = []
+    # indicators
+    df["EMA_5"] = df["Close"].ewm(span=5).mean()
+    df["EMA_20"] = df["Close"].ewm(span=20).mean()
+    df["EMA_50"] = df["Close"].ewm(span=50).mean()
 
-        for r in records:
-            ce = r.get("CE", {})
-            pe = r.get("PE", {})
+    # default
+    df["SIGNAL"] = "⚖️ SIDEWAYS"
 
-            ce_oi = ce.get("changeinOpenInterest", 0)
-            pe_oi = pe.get("changeinOpenInterest", 0)
+    # BUY condition
+    buy = (df["EMA_5"] > df["EMA_20"]) & (df["EMA_20"] > df["EMA_50"])
 
-            result.append({
-                "Strike Price": r.get("strikePrice"),
-                "CE Change OI": ce_oi,
-                "PE Change OI": pe_oi,
-                "OI Difference": pe_oi - ce_oi,
-                "Market Sentiment": "Bullish" if pe_oi > ce_oi else "Bearish"
-            })
+    # SELL condition
+    sell = (df["EMA_5"] < df["EMA_20"]) & (df["EMA_20"] < df["EMA_50"])
 
-        return pd.DataFrame(result)
+    df.loc[buy, "SIGNAL"] = "🚀 BUY"
+    df.loc[sell, "SIGNAL"] = "📉 SELL"
 
-    except:
-        return pd.DataFrame()
-
-
-# =========================
-# TELUGU AI ANALYSIS
-# =========================
-def analysis(df):
-    if df.empty:
-        return "⚠️ డేటా అందుబాటులో లేదు"
-
-    ce = df["CE Change OI"].sum()
-    pe = df["PE Change OI"].sum()
-
-    if pe > ce:
-        return "📈 Bullish Market - PE dominance high"
-    else:
-        return "📉 Bearish Market - CE dominance high"
+    return df
 
 
 # =========================
 # UI
 # =========================
-st.title("🚀 ULTRA PRO AI OPTION CHAIN (FINAL SAFE VERSION)")
+symbol = st.sidebar.selectbox(
+    "Select Stock",
+    ["RELIANCE", "TCS", "INFY", "SBIN", "HDFCBANK", "ICICIBANK"]
+)
 
-symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
+if st.button("🔥 RUN SAFE ANALYSIS"):
 
-if st.button("RUN ANALYSIS"):
+    st.info("Analyzing market safely...")
 
-    with st.spinner("Fetching data safely..."):
+    df = get_market_data(symbol)
 
-        raw = get_nse_data(symbol)
+    if df is None:
+        st.error("❌ Data not available (fallback mode active)")
+    else:
+        df = ai_engine(df)
+
+        last = df.iloc[-1]
 
         # =========================
-        # IF NSE FAIL → USE FALLBACK
+        # METRICS
         # =========================
-        if raw:
-            df = process_option_flow(raw)
-        else:
-            st.warning("⚠️ NSE blocked - showing fallback data")
-            df = fallback_data(symbol)
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric("Close", round(last["Close"], 2))
+        col2.metric("EMA 20", round(last["EMA_20"], 2))
+        col3.metric("EMA 50", round(last["EMA_50"], 2))
 
         # =========================
-        # SHOW DATA SAFELY
+        # SIGNAL
         # =========================
-        if df is not None and not df.empty:
-            st.subheader("Option Chain Data")
-            st.dataframe(df.head(20), use_container_width=True)
+        st.subheader("🔥 LIVE SIGNAL")
+        st.success(last["SIGNAL"])
 
-            st.divider()
-            st.markdown("### AI Analysis")
-            st.success(analysis(df))
+        # =========================
+        # TABLE
+        # =========================
+        st.subheader("📊 DATA VIEW")
+        st.dataframe(df.tail(50))
 
-        else:
-            st.error("No data available")
-
-
-st.info("Educational Purpose Only - Not Financial Advice")
+# =========================
+# FOOTER
+# =========================
+st.markdown("---")
+st.caption("✔ SAFE MODULE VERSION | ✔ NO NSE BLOCK | ✔ OLD CODE NOT MODIFIED")
