@@ -1,21 +1,39 @@
 import streamlit as st
 import pandas as pd
 import requests
+import time
 from streamlit_autorefresh import st_autorefresh
 
 # =========================
-# APP CONFIG
+# PAGE CONFIG
 # =========================
-st.set_page_config(page_title="🔥 SAFE NSE AI OPTION CHAIN", layout="wide")
+st.set_page_config(page_title="SAFE NSE AI OPTION CHAIN", layout="wide")
 
-st.title("🔥 SAFE NSE AI OPTION CHAIN | STABLE VERSION | NO CRASH GUARANTEE")
+# =========================
+# 5 SECOND LOADING SCREEN
+# =========================
+with st.spinner("🔥 Loading SAFE NSE AI OPTION CHAIN SYSTEM..."):
+    time.sleep(5)
 
+st.success("✅ SAFE NSE AI OPTION CHAIN | STABLE | NO CRASH SYSTEM READY")
+
+# =========================
+# AUTO REFRESH
+# =========================
 st_autorefresh(interval=30000, key="refresh")
 
+# =========================
+# TITLE
+# =========================
+st.title("🔥 SAFE NSE AI OPTION CHAIN DASHBOARD")
+
+# =========================
+# INPUT
+# =========================
 symbol = st.text_input("Enter Symbol (NIFTY / BANKNIFTY)", "NIFTY")
 
 # =========================
-# NSE DATA FETCH (SAFE)
+# NSE FETCH SAFE
 # =========================
 def get_nse_data(symbol):
     try:
@@ -30,26 +48,25 @@ def get_nse_data(symbol):
 
         session.headers.update(headers)
 
-        # Step 1: get cookies
+        # cookies
         session.get("https://www.nseindia.com", timeout=5)
 
-        # Step 2: API call
         url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
-        response = session.get(url, timeout=10)
+        res = session.get(url, timeout=10)
 
-        if response.status_code != 200:
+        if res.status_code != 200:
             return None
 
         try:
-            return response.json()
+            return res.json()
         except:
             return None
 
-    except Exception:
+    except:
         return None
 
 # =========================
-# FALLBACK DATA (ANTI-CRASH)
+# FALLBACK DATA (NO CRASH)
 # =========================
 def fallback():
     base = 22000
@@ -58,10 +75,10 @@ def fallback():
     for i in range(20):
         data.append({
             "strike": base + i * 50,
-            "ce_oi": 1000 + i * 100,
-            "pe_oi": 1200 + i * 90,
+            "ce_oi": 1000 + i * 120,
+            "pe_oi": 1200 + i * 100,
             "ce_change": 200 + i * 10,
-            "pe_change": 180 + i * 12,
+            "pe_change": 180 + i * 15,
             "ce_ltp": 50 + i,
             "pe_ltp": 45 + i
         })
@@ -69,7 +86,7 @@ def fallback():
     return pd.DataFrame(data)
 
 # =========================
-# PROCESS DATA SAFELY
+# PROCESS DATA
 # =========================
 def process(data):
     if not data:
@@ -102,7 +119,7 @@ def process(data):
     return pd.DataFrame(rows)
 
 # =========================
-# AI SIGNAL ENGINE
+# AI ENGINE
 # =========================
 def ai_engine(df):
     if df.empty:
@@ -138,9 +155,9 @@ def trend(df):
         return "📉 BEARISH TREND (PE DOMINANCE)"
 
 # =========================
-# RUN ANALYSIS
+# RUN BUTTON
 # =========================
-if st.button("RUN ANALYSIS"):
+if st.button("RUN AI ANALYSIS"):
 
     data = get_nse_data(symbol)
     df = process(data)
@@ -150,7 +167,7 @@ if st.button("RUN ANALYSIS"):
     st.subheader("🧠 MARKET TREND")
     st.success(trend(df))
 
-    # DATA TABLE
+    # TABLE
     st.subheader("📊 OPTION CHAIN DATA")
     st.dataframe(df)
 
