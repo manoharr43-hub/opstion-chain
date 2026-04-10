@@ -2,128 +2,95 @@ import streamlit as st
 import pandas as pd
 import requests
 import time
-from streamlit_autorefresh import st_autorefresh
 
-# =========================
-# 1. PAGE CONFIG & STYLING
-# =========================
-st.set_page_config(page_title="NSE AI PRO LIVE", layout="wide")
+# --- Page Configuration ---
+st.set_page_config(page_title="NSE Option Chain - AI Analysis", layout="wide")
 
-st.markdown("""
-    <style>
-    .main { background-color: #0e1117; }
-    .stMetric { background-color: #1e2130; padding: 15px; border-radius: 10px; border: 1px solid #4e5d6c; }
-    [data-testid="stMetricValue"] { color: #00ffcc; font-size: 28px; font-weight: bold; }
-    </style>
-    """, unsafe_allow_html=True)
+# --- NSE API Fetching Logic ---
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Accept-Language': 'en-US,en;q=0.9'
+}
 
-st.title("🚀 ULTRA PRO AI OPTION CHAIN DASHBOARD")
-
-# --- ఎర్రర్ రాకుండా ఇక్కడ Unique Key మార్చాను ---
-st_autorefresh(interval=60000, key="nse_live_unique_ref_2026_v1")
-
-# =========================
-# 2. NSE FETCH ENGINE (With Anti-Block)
-# =========================
-def get_nse_data(symbol):
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.nseindia.com/option-chain"
-    }
-    base_url = "https://www.nseindia.com"
-    api_url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
-
+def get_nse_data(symbol="NIFTY"):
+    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+    session = requests.Session()
     try:
-        session = requests.Session()
-        session.get(base_url, headers=headers, timeout=10)
-        response = session.get(api_url, headers=headers, timeout=12)
-        if response.status_code == 200:
-            return response.json()
-    except:
+        # Initial call to get cookies
+        session.get("https://www.nseindia.com", headers=headers, timeout=10)
+        response = session.get(url, headers=headers, timeout=10)
+        return response.json()
+    except Exception as e:
+        st.error(f"Error fetching data: {e}")
         return None
-    return None
 
-# =========================
-# 3. SIDEBAR CONTROLS
-# =========================
-st.sidebar.header("📊 AI CONTROL PANEL")
-market_index = st.sidebar.selectbox("📌 Select INDEX", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
-run_analysis = st.sidebar.button("⚡ RUN AI ANALYSIS")
-
-# =========================
-# 4. MAIN LOGIC
-# =========================
-if run_analysis:
-    with st.spinner(f"{market_index} డేటా విశ్లేషిస్తున్నాను..."):
-        data = get_nse_data(market_index)
-
-    if data and 'records' in data:
-        ltp = data['records']['underlyingValue']
-        st.success(f"✅ {market_index} ప్రస్తుత ధర (LTP): {ltp}")
-
-        # Dataframe Preparation
-        raw_data = data['records']['data']
-        rows = []
-        for item in raw_data:
-            strike = item.get('strikePrice')
-            ce = item.get('CE', {})
-            pe = item.get('PE', {})
-            rows.append({
-                "Strike": strike,
-                "CALL OI": ce.get('openInterest', 0),
-                "CALL CHG": ce.get('changeinOpenInterest', 0),
-                "PUT OI": pe.get('openInterest', 0),
-                "PUT CHG": pe.get('changeinOpenInterest', 0),
+# --- Process Data for Option Flow ---
+def process_option_flow(data):
+    records = data['filtered']['data']
+    flow_list = []
+    
+    for entry in records:
+        strike_price = entry['strikePrice']
+        if 'CE' in entry and 'PE' in entry:
+            ce_oi = entry['CE']['changeinOpenInterest']
+            pe_oi = entry['PE']['changeinOpenInterest']
+            
+            # Difference for Trend Analysis
+            oi_diff = pe_oi - ce_oi
+            sentiment = "Bullish" if oi_diff > 0 else "Bearish"
+            
+            flow_list.append({
+                "Strike Price": strike_price,
+                "CE Change in OI": ce_oi,
+                "PE Change in OI": pe_oi,
+                "OI Difference": oi_diff,
+                "Market Sentiment": sentiment
             })
+            
+    return pd.DataFrame(flow_list)
 
-        df = pd.DataFrame(rows)
-        # Net Flow Calculation
-        df['NET FLOW'] = df['PUT CHG'] - df['CALL CHG']
-
-        # PCR & Trend
-        t_ce = df['CALL OI'].sum()
-        t_pe = df['PUT OI'].sum()
-        pcr = round(t_pe / t_ce, 2) if t_ce > 0 else 0
-
-        # Metrics display
-        col1, col2, col3 = st.columns(3)
-        col1.metric("PCR Value", pcr)
-        col2.metric("Total CALL OI", f"{t_ce:,}")
-        col3.metric("Total PUT OI", f"{t_pe:,}")
-
-        # --- 5 COLUMN LIVE TABLE ---
-        st.subheader("📊 ఆప్షన్ ఫ్లో (LIVE 5 COLUMN TABLE)")
-        display_df = df[(df['Strike'] >= ltp-500) & (df['Strike'] <= ltp+500)]
-        
-        # 'width=stretch' వాడాను (లాగ్ ఎర్రర్ రాకుండా)
-        st.dataframe(
-            display_df[['Strike', 'CALL OI', 'CALL CHG', 'PUT OI', 'PUT CHG', 'NET FLOW']], 
-            width='stretch'
-        )
-
-        # --- AI TRADE PLAN (TELUGU) ---
-        st.subheader("🎯 AI ట్రేడ్ ప్లాన్")
-        
-        if pcr > 1.2:
-            signal = "🟢 BULLISH (CALL BUY)"
-            desc = "మార్కెట్ లో పుట్ రైటింగ్ బలంగా ఉంది. పెరిగే అవకాశం ఉంది."
-        elif pcr < 0.8:
-            signal = "🔴 BEARISH (PUT BUY)"
-            desc = "మార్కెట్ లో కాల్ రైటింగ్ బలంగా ఉంది. తగ్గే అవకాశం ఉంది."
-        else:
-            signal = "🟡 SIDEWAYS (NO TRADE)"
-            desc = "మార్కెట్ ప్రస్తుతానికి రేంజ్ లో ఉంది."
-
-        st.info(f"""
-        📝 **ట్రేడ్ విశ్లేషణ:**
-        * **సిగ్నల్:** {signal}
-        * **వివరణ:** {desc}
-        * **ఎంట్రీ:** {ltp} దగ్గర
-        * **స్టాప్‌లాస్:** {ltp-40 if "CALL" in signal else ltp+40}
-        * **టార్గెట్:** {ltp+80 if "CALL" in signal else ltp-80}
-        """)
+# --- Telugu AI Analysis Generator ---
+def generate_telugu_analysis(df):
+    total_ce_oi = df["CE Change in OI"].sum()
+    total_pe_oi = df["PE Change in OI"].sum()
+    
+    if total_pe_oi > total_ce_oi:
+        trend = "బుల్లిష్ (Bullish) - మార్కెట్ పెరిగే అవకాశం ఉంది."
+        strategy = "సపోర్ట్ లెవెల్స్ వద్ద కాల్ ఆప్షన్స్ (CE) పై దృష్టి పెట్టండి."
     else:
-        st.error("NSE నుండి డేటా రావడం లేదు. దయచేసి 1 నిమిషం ఆగి మళ్ళీ ప్రయత్నించండి.")
-else:
-    st.info("👈 అనాలిసిస్ కోసం ఎడమవైపు ఉన్న బటన్ క్లిక్ చేయండి.")
+        trend = "బేరిష్ (Bearish) - మార్కెట్ తగ్గే అవకాశం ఉంది."
+        strategy = "రెసిస్టెన్స్ లెవెల్స్ వద్ద పుట్ ఆప్షన్స్ (PE) పై దృష్టి పెట్టండి."
+        
+    analysis = f"""
+    ### 📊 AI మార్కెట్ విశ్లేషణ (Telugu)
+    - **ప్రస్తుత ట్రెండ్:** {trend}
+    - **గమనిక:** PE OI ఎక్కువగా ఉంటే మార్కెట్ సపోర్ట్ బలంగా ఉన్నట్లు, CE OI ఎక్కువగా ఉంటే రెసిస్టెన్స్ బలంగా ఉన్నట్లు.
+    - **ట్రేడ్ ప్లాన్:** {strategy}
+    """
+    return analysis
+
+# --- Streamlit UI ---
+st.title("📈 Live NSE Option Chain & AI Trade Plan")
+
+symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
+
+if st.button("Refresh Data"):
+    raw_data = get_nse_data(symbol)
+    
+    if raw_data:
+        df_flow = process_option_flow(raw_data)
+        
+        # 1. Show Option Flow Table (5 Columns)
+        st.subheader(f"Option Flow Analysis - {symbol}")
+        st.table(df_flow.head(10)) # Top 10 rows for clarity
+        
+        # 2. Show AI Analysis in Telugu
+        st.divider()
+        telugu_report = generate_telugu_analysis(df_flow)
+        st.markdown(telugu_report)
+        
+    else:
+        st.warning("Data అందుబాటులో లేదు. దయచేసి మళ్ళీ ప్రయత్నించండి.")
+
+st.info("గమనిక: ఇది కేవలం ఎడ్యుకేషనల్ పర్పస్ కోసం మాత్రమే. ట్రేడింగ్ చేసే ముందు మీ ఫైనాన్షియల్ అడ్వైజర్‌ని సంప్రదించండి.")
