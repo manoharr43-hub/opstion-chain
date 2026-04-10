@@ -9,173 +9,142 @@ from streamlit_autorefresh import st_autorefresh
 # =========================
 st.set_page_config(page_title="ULTRA NSE AI OPTION CHAIN", layout="wide")
 
-st.title("🔥 ULTRA NSE AI OPTION CHAIN (NEW STABLE VERSION)")
+st.title("🔥 ULTRA NSE AI OPTION CHAIN (STABLE 2.0)")
 
 # =========================
-# LOADING SCREEN
-# =========================
-with st.spinner("Initializing AI System..."):
-    time.sleep(3)
-
-st.success("System Ready 🚀")
-
-# =========================
-# AUTO REFRESH
+# AUTO REFRESH (30 Seconds)
 # =========================
 st_autorefresh(interval=30000, key="refresh")
 
 # =========================
-# INPUT
-# =========================
-symbol = st.text_input("Enter Symbol (NIFTY / BANKNIFTY)", "NIFTY")
-
-# =========================
-# NSE SAFE FETCH
+# NSE DATA FETCHER (UPDATED)
 # =========================
 def fetch_nse(symbol):
     try:
-        session = requests.Session()
+        # We need to hit the main page first to get cookies
+        base_url = "https://www.nseindia.com"
+        # Determine if it's an Index or Stock
+        indices = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY']
+        
+        if symbol.upper() in indices:
+            api_url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol.upper()}"
+        else:
+            api_url = f"https://www.nseindia.com/api/option-chain-equities?symbol={symbol.upper()}"
 
         headers = {
-            "User-Agent": "Mozilla/5.0",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
-            "Accept": "application/json",
-            "Referer": "https://www.nseindia.com"
+            "Accept-Encoding": "gzip, deflate, br",
+            "Referer": "https://www.nseindia.com/get-quotes/derivatives?symbol=" + symbol
         }
 
-        session.headers.update(headers)
-
-        session.get("https://www.nseindia.com", timeout=5)
-
-        url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
-        res = session.get(url, timeout=10)
-
-        if res.status_code != 200:
-            return None
-
-        try:
+        session = requests.Session()
+        # Request home page to set cookies
+        session.get(base_url, headers=headers, timeout=10)
+        
+        # Now request the API
+        res = session.get(api_url, headers=headers, timeout=10)
+        
+        if res.status_code == 200:
             return res.json()
-        except:
+        else:
+            st.error(f"NSE Error: Status Code {res.status_code}")
             return None
-
-    except:
+    except Exception as e:
+        st.error(f"Connection Error: {e}")
         return None
 
 # =========================
-# SAFE FALLBACK DATA
+# DATA PROCESSING
 # =========================
-def fallback_data():
-    base = 22000
-    rows = []
+def process_data(data):
+    if not data or "records" not in data:
+        return pd.DataFrame()
 
-    for i in range(20):
-        rows.append({
-            "strike": base + i * 50,
-            "ce_oi": 1000 + i * 110,
-            "pe_oi": 1200 + i * 90,
-            "ce_change": 200 + i * 15,
-            "pe_change": 180 + i * 12,
-            "ce_ltp": 50 + i,
-            "pe_ltp": 45 + i
-        })
-
-    return pd.DataFrame(rows)
-
-# =========================
-# PROCESS DATA
-# =========================
-def process(data):
-    if not data:
-        return fallback_data()
-
-    try:
-        records = data.get("records", {}).get("data", [])
-    except:
-        return fallback_data()
-
-    if len(records) == 0:
-        return fallback_data()
-
+    records = data.get("records", {}).get("data", [])
     rows = []
 
     for r in records:
         ce = r.get("CE", {})
         pe = r.get("PE", {})
-
+        
+        # Only extract relevant strikes (near current market price usually better)
         rows.append({
-            "strike": r.get("strikePrice", 0),
-            "ce_oi": ce.get("openInterest", 0),
-            "pe_oi": pe.get("openInterest", 0),
-            "ce_change": ce.get("changeinOpenInterest", 0),
-            "pe_change": pe.get("changeinOpenInterest", 0),
-            "ce_ltp": ce.get("lastPrice", 0),
-            "pe_ltp": pe.get("lastPrice", 0),
+            "Strike": r.get("strikePrice", 0),
+            "Expiry": r.get("expiryDate"),
+            "CE_OI": ce.get("openInterest", 0),
+            "CE_CHG_OI": ce.get("changeinOpenInterest", 0),
+            "CE_LTP": ce.get("lastPrice", 0),
+            "PE_LTP": pe.get("lastPrice", 0),
+            "PE_CHG_OI": pe.get("changeinOpenInterest", 0),
+            "PE_OI": pe.get("openInterest", 0),
         })
 
     return pd.DataFrame(rows)
 
 # =========================
-# AI ENGINE
+# AI SIGNAL ENGINE
 # =========================
-def ai_engine(df):
+def apply_ai_logic(df):
     if df.empty:
         return df
 
-    df["oi_diff"] = df["ce_change"] - df["pe_change"]
-
-    def signal(row):
-        if row["ce_change"] > row["pe_change"] * 1.5:
-            return "🔥 BUY CE"
-        elif row["pe_change"] > row["ce_change"] * 1.5:
-            return "🔥 BUY PE"
+    # Calculate PCR (Put-Call Ratio) for individual strikes
+    df["OI_DIFF"] = df["PE_CHG_OI"] - df["CE_CHG_OI"]
+    
+    def get_signal(row):
+        # Bullish: PE writing (PE Change > CE Change)
+        if row["PE_CHG_OI"] > row["CE_CHG_OI"] * 1.8:
+            return "🚀 STRONG BUY (BULLISH)"
+        # Bearish: CE writing (CE Change > PE Change)
+        elif row["CE_CHG_OI"] > row["PE_CHG_OI"] * 1.8:
+            return "📉 STRONG SELL (BEARISH)"
         else:
-            return "NO TRADE"
+            return "⚖️ NEUTRAL"
 
-    df["signal"] = df.apply(signal, axis=1)
-
+    df["AI_SIGNAL"] = df.apply(get_signal, axis=1)
     return df
 
 # =========================
-# TREND ENGINE
+# UI / DASHBOARD
 # =========================
-def trend(df):
-    ce = df["ce_oi"].sum()
-    pe = df["pe_oi"].sum()
+symbol = st.sidebar.selectbox("Select Symbol", ["NIFTY", "BANKNIFTY", "FINNIFTY", "RELIANCE", "SBIN"])
 
-    if ce > pe:
-        return "📈 BULLISH MARKET"
-    else:
-        return "📉 BEARISH MARKET"
+if st.button("🔄 FETCH LATEST AI SIGNALS"):
+    with st.spinner("Analyzing Market Depth..."):
+        raw_data = fetch_nse(symbol)
+        df = process_data(raw_data)
+        
+        if not df.empty:
+            df = apply_ai_logic(df)
+            
+            # Summary Metrics
+            total_ce_oi = df["CE_OI"].sum()
+            total_pe_oi = df["PE_OI"].sum()
+            pcr = total_pe_oi / total_ce_oi if total_ce_oi != 0 else 0
+            
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total CE OI", f"{total_ce_oi:,}")
+            col2.metric("Total PE OI", f"{total_pe_oi:,}")
+            col3.metric("Market PCR", round(pcr, 2))
 
-# =========================
-# RUN ANALYSIS
-# =========================
-if st.button("RUN ANALYSIS"):
+            if pcr > 1.2:
+                st.success("🎯 OVERALL MARKET SENTIMENT: VERY BULLISH")
+            elif pcr < 0.8:
+                st.error("🎯 OVERALL MARKET SENTIMENT: VERY BEARISH")
+            else:
+                st.warning("🎯 OVERALL MARKET SENTIMENT: SIDEWAYS")
 
-    data = fetch_nse(symbol)
-    df = process(data)
-    df = ai_engine(df)
+            # Signal Tables
+            st.subheader("🔥 Top AI Signals (Active Strikes)")
+            # Filter for strikes with high activity to avoid noise
+            active_signals = df[(df["AI_SIGNAL"] != "⚖️ NEUTRAL") & (df["CE_OI"] > 1000)]
+            st.table(active_signals[["Strike", "AI_SIGNAL", "CE_LTP", "PE_LTP", "OI_DIFF"]].head(10))
 
-    st.subheader("🧠 MARKET TREND")
-    st.success(trend(df))
+            st.subheader("📊 Full Option Chain Analysis")
+            st.dataframe(df)
+        else:
+            st.warning("Could not fetch data. NSE might be blocking the request or the market is closed.")
 
-    st.subheader("📊 OPTION CHAIN DATA")
-    st.dataframe(df)
-
-    st.subheader("🚀 CE BUY SIGNALS")
-    st.dataframe(df[df["signal"] == "🔥 BUY CE"].head(10))
-
-    st.subheader("🔴 PE BUY SIGNALS")
-    st.dataframe(df[df["signal"] == "🔥 BUY PE"].head(10))
-
-    st.subheader("💥 BIG MOVERS")
-    st.dataframe(df.sort_values("oi_diff", ascending=False).head(10))
-
-    st.subheader("⚡ SELL PRESSURE")
-    st.dataframe(df.sort_values("oi_diff").head(10))
-
-# =========================
-# FOOTER
-# =========================
 st.markdown("---")
-st.markdown("🔥 ULTRA NSE AI OPTION CHAIN | NEW STABLE VERSION")
+st.caption("Note: Use this tool for educational purposes. Trading involves risk.")
