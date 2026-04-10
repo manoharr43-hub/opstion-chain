@@ -4,8 +4,8 @@ import numpy as np
 import requests
 import plotly.express as px
 
-st.set_page_config(page_title="🔥 Next Level Option AI", layout="wide")
-st.title("📊 Next Level Option Chain PRO")
+st.set_page_config(page_title="🔥 Ultra Option AI", layout="wide")
+st.title("📊 Ultra Option Chain AI")
 
 # =============================
 # SIDEBAR
@@ -15,8 +15,31 @@ st.sidebar.title("📊 Market Setup")
 indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"]
 symbol = st.sidebar.selectbox("Select Index", indices)
 
-# Strike input
 user_strike = st.sidebar.number_input("🎯 Enter Strike", min_value=0, step=50)
+
+# =============================
+# FETCH EXPIRY
+# =============================
+def get_expiries():
+    try:
+        url = f"https://api.allorigins.win/raw?url=https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+        res = requests.get(url, timeout=10)
+
+        if res.status_code != 200:
+            return []
+
+        data = res.json()
+        return data["records"]["expiryDates"]
+
+    except:
+        return []
+
+expiry_list = get_expiries()
+
+selected_expiry = st.sidebar.selectbox(
+    "📅 Select Expiry",
+    expiry_list if expiry_list else ["No Data"]
+)
 
 # =============================
 # FETCH DATA
@@ -33,6 +56,10 @@ def fetch_data():
 
         rows = []
         for item in data["records"]["data"]:
+
+            if item.get("expiryDate") != selected_expiry:
+                continue
+
             rows.append({
                 "Strike": item.get("strikePrice", 0),
                 "Call_OI": item.get("CE", {}).get("openInterest", 0),
@@ -65,7 +92,7 @@ def demo():
 # =============================
 # MAIN
 # =============================
-if st.button("🚀 Run Scanner"):
+if st.button("🚀 Run Ultra AI"):
 
     df = fetch_data()
 
@@ -74,29 +101,37 @@ if st.button("🚀 Run Scanner"):
         df = demo()
 
     # =============================
-    # ATM STRIKE
+    # EXPIRY TYPE
     # =============================
-    atm = df.iloc[(df["Strike"] - df["Strike"].mean()).abs().argsort()[:1]].iloc[0]["Strike"]
+    if "No Data" not in selected_expiry:
+        day = int(selected_expiry.split("-")[0])
+        expiry_type = "🟡 Monthly" if day <= 7 else "🔵 Weekly"
+    else:
+        expiry_type = "Unknown"
+
+    st.subheader(f"📅 {expiry_type} Expiry")
 
     # =============================
-    # SIGNAL LOGIC
+    # TOTALS
     # =============================
-    df["Signal"] = "WAIT"
-    df["Trade"] = "-"
-
-    for i in range(len(df)):
-        if df.loc[i,"Put_Change"] > 3000 and df.loc[i,"Call_Change"] < 0:
-            df.loc[i,"Signal"] = "BUY"
-            df.loc[i,"Trade"] = "CALL (CE)"
-
-        elif df.loc[i,"Call_Change"] > 3000 and df.loc[i,"Put_Change"] < 0:
-            df.loc[i,"Signal"] = "SELL"
-            df.loc[i,"Trade"] = "PUT (PE)"
+    total_call = df["Call_OI"].sum()
+    total_put = df["Put_OI"].sum()
+    total_call_chg = df["Call_Change"].sum()
+    total_put_chg = df["Put_Change"].sum()
+    pcr = round(total_put / total_call, 2)
 
     # =============================
-    # BEST STRIKE
+    # EXPIRY SIGNAL
     # =============================
-    best = df[df["Signal"] != "WAIT"]
+    if total_put_chg > total_call_chg and pcr > 1:
+        expiry_signal = "🟢 BUY SUPPORT"
+    elif total_call_chg > total_put_chg and pcr < 1:
+        expiry_signal = "🔴 SELL PRESSURE"
+    else:
+        expiry_signal = "⚠ SIDEWAYS"
+
+    st.subheader("📢 Expiry Signal")
+    st.success(expiry_signal)
 
     # =============================
     # SUPPORT / RESISTANCE
@@ -104,27 +139,44 @@ if st.button("🚀 Run Scanner"):
     resistance = df.loc[df["Call_OI"].idxmax()]["Strike"]
     support = df.loc[df["Put_OI"].idxmax()]["Strike"]
 
-    # =============================
-    # UI TOP
-    # =============================
-    c1,c2,c3 = st.columns(3)
-    c1.metric("🎯 ATM", int(atm))
-    c2.metric("🔴 Resistance", int(resistance))
-    c3.metric("🟢 Support", int(support))
+    c1,c2 = st.columns(2)
+    c1.metric("🔴 Resistance", int(resistance))
+    c2.metric("🟢 Support", int(support))
 
     # =============================
-    # STRONG SIGNAL BOX
+    # TRAP DETECTION
     # =============================
-    st.subheader("🔥 Strong Signals")
-
-    if not best.empty:
-        for i in best.index[:5]:
-            st.success(f"{df.loc[i,'Trade']} at {int(df.loc[i,'Strike'])}")
-    else:
-        st.warning("No strong signals")
+    df["Trap"] = "-"
+    for i in range(len(df)):
+        if df.loc[i,"Call_Change"] > 4000 and df.loc[i,"Put_Change"] > 4000:
+            df.loc[i,"Trap"] = "⚠ TRAP"
 
     # =============================
-    # SELECTED STRIKE
+    # SCALPING
+    # =============================
+    df["Scalp"] = "-"
+    for i in range(len(df)):
+        if df.loc[i,"Put_Change"] > 2000 and df.loc[i,"Call_Change"] < 0:
+            df.loc[i,"Scalp"] = "🟢 BUY"
+        elif df.loc[i,"Call_Change"] > 2000 and df.loc[i,"Put_Change"] < 0:
+            df.loc[i,"Scalp"] = "🔴 SELL"
+
+    # =============================
+    # ALERTS
+    # =============================
+    st.subheader("🚨 Ultra Alerts")
+
+    best_buy = df[df["Scalp"] == "🟢 BUY"]
+    best_sell = df[df["Scalp"] == "🔴 SELL"]
+
+    if not best_buy.empty:
+        st.success(f"🟢 Best BUY: {int(best_buy.iloc[-1]['Strike'])}")
+
+    if not best_sell.empty:
+        st.error(f"🔴 Best SELL: {int(best_sell.iloc[-1]['Strike'])}")
+
+    # =============================
+    # STRIKE ENTRY
     # =============================
     st.subheader("🎯 Selected Strike Trade")
 
@@ -134,13 +186,13 @@ if st.button("🚀 Run Scanner"):
         if not row.empty:
             row = row.iloc[0]
 
-            if row["Signal"] == "BUY":
+            if row["Scalp"] == "🟢 BUY":
                 st.success("🟢 CALL (CE)")
                 st.write("Entry:", user_strike)
                 st.write("Target:", user_strike+100)
                 st.write("SL:", user_strike-50)
 
-            elif row["Signal"] == "SELL":
+            elif row["Scalp"] == "🔴 SELL":
                 st.error("🔴 PUT (PE)")
                 st.write("Entry:", user_strike)
                 st.write("Target:", user_strike-100)
@@ -161,4 +213,4 @@ if st.button("🚀 Run Scanner"):
     st.dataframe(df)
 
 else:
-    st.info("Click Run Scanner")
+    st.info("Click Run Ultra AI")
