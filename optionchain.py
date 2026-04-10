@@ -4,63 +4,84 @@ import numpy as np
 import yfinance as yf
 
 # =========================
-# PAGE CONFIG
+# PAGE SETUP
 # =========================
-st.set_page_config(page_title="🔥 CE vs PE + AI TRADING BOT", layout="wide")
+st.set_page_config(page_title="🔥 NSE AI OPTION BOT", layout="wide")
 
 # =========================
-# INDEX LTP
+# HEADER
 # =========================
-def get_ltp(index):
-    return {
-        "NIFTY": 24015,
-        "BANKNIFTY": 48250,
-        "FINNIFTY": 20250
-    }.get(index, 24000)
+st.title("🚀 NSE AI OPTION CHAIN + CE/PE SYSTEM")
 
 # =========================
-# OPTION CHAIN
+# SIDEBAR INPUTS
+# =========================
+st.sidebar.header("🎯 CONTROL PANEL")
+
+sector = st.sidebar.selectbox(
+    "Select Index",
+    ["NIFTY", "BANKNIFTY", "FINNIFTY"]
+)
+
+stock = st.sidebar.text_input("Stock Name (RELIANCE, TCS, INFY)")
+strike = st.sidebar.number_input("Strike Price", value=24000)
+
+# =========================
+# INDEX LTP (SAFE MOCK)
+# =========================
+def get_index_ltp(index):
+    data = {
+        "NIFTY": 24010,
+        "BANKNIFTY": 48200,
+        "FINNIFTY": 20200
+    }
+    return data.get(index, 24000)
+
+ltp = get_index_ltp(sector)
+
+# =========================
+# OPTION CHAIN MOCK
 # =========================
 def option_chain(ltp):
-    ltp = float(ltp)
     base = round(ltp / 50) * 50
     strikes = [base + i * 50 for i in range(-3, 4)]
 
-    return pd.DataFrame({
+    df = pd.DataFrame({
         "Strike": strikes,
-        "CE_OI": np.random.randint(2000, 9000, len(strikes)),
-        "PE_OI": np.random.randint(2000, 9000, len(strikes)),
+        "CE_OI": np.random.randint(1000, 9000, len(strikes)),
+        "PE_OI": np.random.randint(1000, 9000, len(strikes))
     })
 
+    return df
+
+df = option_chain(ltp)
+
 # =========================
-# CE PE ZONES
+# CE / PE STRENGTH
 # =========================
-def ce_pe_zone(df):
+def ce_pe_strength(df):
     df["CE_PRESSURE"] = df["CE_OI"] / (df["PE_OI"] + 1)
     df["PE_PRESSURE"] = df["PE_OI"] / (df["CE_OI"] + 1)
 
-    return (
-        df.sort_values("CE_PRESSURE", ascending=False).head(3),
-        df.sort_values("PE_PRESSURE", ascending=False).head(3)
-    )
+    return df
+
+df = ce_pe_strength(df)
 
 # =========================
 # TREND
 # =========================
 def trend(df):
-    ce = df["CE_OI"].sum()
-    pe = df["PE_OI"].sum()
+    if df["CE_OI"].sum() > df["PE_OI"].sum():
+        return "🟢 BULLISH (CALL SIDE)"
+    else:
+        return "🔴 BEARISH (PUT SIDE)"
 
-    if ce > pe * 1.1:
-        return "🟢 BULLISH"
-    elif pe > ce * 1.1:
-        return "🔴 BEARISH"
-    return "🟡 SIDEWAYS"
+market_trend = trend(df)
 
 # =========================
-# STOCK PRICE
+# STOCK PRICE FETCH
 # =========================
-def get_price(symbol):
+def get_stock_price(symbol):
     try:
         if not symbol.endswith(".NS"):
             symbol += ".NS"
@@ -76,105 +97,86 @@ def get_price(symbol):
         return None
 
 # =========================
-# AI TRADING ENGINE
+# CE / PE SIGNAL ENGINE
 # =========================
-def ai_engine(price, strike):
+def signal_engine(price, strike):
     diff = price - strike
-    perc = (diff / strike) * 100
+    pct = (diff / strike) * 100
 
-    # ENTRY
-    if abs(perc) < 0.5:
-        entry = "🟡 NO TRADE (WAIT)"
-    elif perc > 0.5:
-        entry = "🟢 CALL ENTRY"
+    if pct > 0.5:
+        signal = "🟢 CALL ENTRY"
+    elif pct < -0.5:
+        signal = "🔴 PUT ENTRY"
     else:
-        entry = "🔴 PUT ENTRY"
+        signal = "🟡 WAIT"
 
-    # EXIT
-    if abs(perc) > 2:
-        exit_signal = "⚠ EXIT (TARGET HIT)"
-    else:
-        exit_signal = "🟡 HOLD"
+    exit_signal = "⚠ EXIT" if abs(pct) > 2 else "🟡 HOLD"
 
-    # STOPLOSS
-    stoploss = round(strike * (0.98 if perc > 0 else 1.02), 2)
+    stoploss = strike * (0.98 if pct > 0 else 1.02)
 
-    return entry, exit_signal, stoploss
+    return signal, exit_signal, round(stoploss, 2)
 
 # =========================
-# UI
+# UI - 3 REPORT PANELS
 # =========================
-st.title("🔥 CE vs PE + AI TRADING BOT (SAFE VERSION)")
-
-# SIDEBAR
-index = st.sidebar.selectbox("Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
-stock = st.sidebar.text_input("Stock Search (RELIANCE, TCS, INFY)")
-strike = st.sidebar.number_input("Strike Price", value=24000)
-
-# DATA
-ltp = get_ltp(index)
-df = option_chain(ltp)
-
-ce_zone, pe_zone = ce_pe_zone(df)
-trend_value = trend(df)
 
 # =========================
-# OPTION CHAIN
+# PANEL 1 - SECTOR REPORT
 # =========================
-st.subheader("📊 Option Chain")
+st.subheader("📊 1. SECTOR REPORT")
+
+st.info(f"""
+✔ Selected Index: {sector}  
+✔ LTP: {ltp}  
+✔ Market Trend: {market_trend}  
+""")
+
 st.dataframe(df)
 
 # =========================
-# CE PE ZONES
+# PANEL 2 - STOCK REPORT
 # =========================
-st.subheader("🚀 CE ZONE")
-st.dataframe(ce_zone)
-
-st.subheader("📉 PE ZONE")
-st.dataframe(pe_zone)
-
-# =========================
-# STOCK ANALYSIS
-# =========================
-st.subheader("📌 STOCK ANALYSIS")
+st.subheader("📌 2. STOCK REPORT")
 
 price = None
-entry = exit_signal = stoploss = None
+signal = exit_signal = sl = None
 
 if stock:
-    with st.spinner("Loading Stock..."):
-        price = get_price(stock)
+    price = get_stock_price(stock)
 
     if price:
-        entry, exit_signal, stoploss = ai_engine(price, strike)
-
-        st.metric("Live Price", price)
-        st.success(entry)
-        st.warning(exit_signal)
-        st.error(f"STOPLOSS: {stoploss}")
+        st.success(f"✔ Stock: {stock}")
+        st.metric("LIVE PRICE", price)
     else:
         st.error("Stock Data Not Found")
 
+else:
+    st.warning("Enter Stock Name")
+
 # =========================
-# REPORT
+# PANEL 3 - STRIKE REPORT (CE / PE)
 # =========================
-st.subheader("📊 FINAL REPORT")
+st.subheader("🎯 3. STRIKE REPORT (CE / PE AI)")
+
+if stock and price:
+    signal, exit_signal, sl = signal_engine(price, strike)
+
+    st.success(f"✔ Strike Price: {strike}")
+    st.success(f"✔ Entry Signal: {signal}")
+    st.warning(f"✔ Exit Signal: {exit_signal}")
+    st.error(f"✔ Stoploss: {sl}")
+
+# =========================
+# FINAL SUMMARY
+# =========================
+st.subheader("📊 FINAL SUMMARY REPORT")
 
 st.write(f"""
-✔ Index: {index}  
-✔ LTP: {ltp}  
-✔ Trend: {trend_value}  
+✔ Index: {sector}  
 ✔ Stock: {stock}  
 ✔ Strike: {strike}  
-✔ Entry: {entry}  
+✔ Market Trend: {market_trend}  
+✔ Entry: {signal}  
 ✔ Exit: {exit_signal}  
-✔ Stoploss: {stoploss}  
+✔ Stoploss: {sl}  
 """)
-
-# =========================
-# FINAL SIGNAL
-# =========================
-if df["CE_PRESSURE"].mean() > df["PE_PRESSURE"].mean():
-    st.success("🟢 CALL SIDE STRONG MARKET")
-else:
-    st.warning("🔴 PUT SIDE STRONG MARKET")
