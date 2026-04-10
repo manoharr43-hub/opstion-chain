@@ -5,10 +5,10 @@ import numpy as np
 # =========================
 # PAGE CONFIG
 # =========================
-st.set_page_config(page_title="🔥 CE vs PE BIG MOVE ZONE", layout="wide")
+st.set_page_config(page_title="🔥 BIG PLAYER AI SCANNER", layout="wide")
 
 # =========================
-# LTP
+# LTP SIM
 # =========================
 def get_ltp(index):
     return {
@@ -18,7 +18,7 @@ def get_ltp(index):
     }.get(index, 0)
 
 # =========================
-# OPTION CHAIN
+# OPTION CHAIN GENERATOR
 # =========================
 def option_chain(index):
     if index == "NIFTY":
@@ -32,36 +32,44 @@ def option_chain(index):
 
     return pd.DataFrame({
         "Strike": strikes,
-        "CE_OI": np.random.randint(1000, 4500, len(strikes)),
-        "PE_OI": np.random.randint(1000, 4500, len(strikes)),
+        "CE_OI": np.random.randint(1000, 5000, len(strikes)),
+        "PE_OI": np.random.randint(1000, 5000, len(strikes)),
     })
 
 # =========================
-# ATM FINDER
+# ATM DETECTION
 # =========================
 def get_atm(df, ltp):
     return min(df["Strike"], key=lambda x: abs(x - ltp))
 
 # =========================
-# CE vs PE PRESSURE ZONE
+# BIG PLAYER AI ENGINE
 # =========================
-def ce_pe_zone(df, atm):
-    df["TOTAL_OI"] = df["CE_OI"] + df["PE_OI"]
-    df["DIST"] = abs(df["Strike"] - atm)
+def big_player_ai(df):
+    df = df.copy()
 
-    # CE dominance
-    df["CE_PRESSURE"] = df["CE_OI"] / (df["PE_OI"] + 1)
+    # simulate volume (AI observation)
+    df["VOLUME"] = np.random.randint(2000, 12000, len(df))
 
-    # PE dominance
-    df["PE_PRESSURE"] = df["PE_OI"] / (df["CE_OI"] + 1)
+    # OI strength
+    df["OI_STRENGTH"] = df["CE_OI"] + df["PE_OI"]
 
-    ce_zone = df.sort_values(["CE_PRESSURE", "DIST"], ascending=[False, True]).head(3)
-    pe_zone = df.sort_values(["PE_PRESSURE", "DIST"], ascending=[False, True]).head(3)
+    # CE / PE imbalance
+    df["CE_PE_RATIO"] = df["CE_OI"] / (df["PE_OI"] + 1)
 
-    return ce_zone, pe_zone
+    # PE / CE imbalance
+    df["PE_CE_RATIO"] = df["PE_OI"] / (df["CE_OI"] + 1)
+
+    # SPIKE SCORE (BIG PLAYER ACTIVITY)
+    df["SPIKE_SCORE"] = df["VOLUME"] * df["OI_STRENGTH"]
+
+    # TOP BIG PLAYER ZONE
+    top = df.sort_values("SPIKE_SCORE", ascending=False).head(3)
+
+    return top
 
 # =========================
-# TREND
+# TREND ENGINE
 # =========================
 def trend(df):
     ce = df["CE_OI"].sum()
@@ -80,7 +88,7 @@ def pcr(df):
     return round(df["PE_OI"].sum() / df["CE_OI"].sum(), 2)
 
 # =========================
-# VIX
+# VIX (SIM)
 # =========================
 def vix():
     return round(np.random.uniform(11, 18), 2)
@@ -88,7 +96,7 @@ def vix():
 # =========================
 # SIDEBAR
 # =========================
-st.sidebar.title("📊 CE vs PE ZONE PANEL")
+st.sidebar.title("📊 BIG PLAYER AI PANEL")
 
 index = st.sidebar.selectbox(
     "Select Index",
@@ -110,7 +118,7 @@ atm = get_atm(df, ltp)
 
 df["TOTAL_OI"] = df["CE_OI"] + df["PE_OI"]
 
-ce_zone, pe_zone = ce_pe_zone(df, atm)
+big_zone = big_player_ai(df)
 
 trend_value = trend(df)
 pcr_value = pcr(df)
@@ -119,8 +127,8 @@ vix_value = vix()
 # =========================
 # HEADER
 # =========================
-st.title("🔥 CE vs PE BIG MOVE ZONE SCANNER")
-st.caption("Separate Call & Put Pressure Detection (ATM Based)")
+st.title("🔥 NEXT LEVEL BIG PLAYER AI SCANNER")
+st.caption("Smart Money Detection | Spike Score Engine | Fully Separate System")
 
 # =========================
 # SIDEBAR INFO
@@ -145,25 +153,18 @@ c3.metric("PCR", pcr_value)
 c4.metric("VIX", vix_value)
 
 # =========================
-# FULL TABLE
+# OPTION CHAIN
 # =========================
-st.subheader("📊 Option Chain")
+st.subheader("📊 Option Chain Data")
 
 st.dataframe(df, use_container_width=True)
 
 # =========================
-# CE BIG MOVE ZONE
+# BIG PLAYER ZONE
 # =========================
-st.subheader("🚀 CE (CALL) BIG MOVE ZONE")
+st.subheader("🔥 BIG PLAYER ENTRY ZONE (AI DETECTED)")
 
-st.dataframe(ce_zone, use_container_width=True)
-
-# =========================
-# PE BIG MOVE ZONE
-# =========================
-st.subheader("📉 PE (PUT) BIG MOVE ZONE")
-
-st.dataframe(pe_zone, use_container_width=True)
+st.dataframe(big_zone, use_container_width=True)
 
 # =========================
 # REPORT
@@ -176,15 +177,4 @@ st.write(f"""
 ✔ ATM: {atm}  
 ✔ PCR: {pcr_value}  
 ✔ VIX: {vix_value}  
-✔ Trend: {trend_value}  
-""")
-
-# =========================
-# SIGNAL
-# =========================
-if ce_zone["CE_PRESSURE"].mean() > pe_zone["PE_PRESSURE"].mean():
-    st.success("🟢 CALL SIDE STRONG (CE DOMINANCE)")
-else:
-    st.warning("🔴 PUT SIDE STRONG (PE DOMINANCE)")
-
-st.success("✅ CE vs PE BIG MOVE ZONE READY (OLD CODE SAFE)")
+✔ Trend
