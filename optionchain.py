@@ -1,152 +1,94 @@
 import streamlit as st
-import numpy as np
 import pandas as pd
+import requests
+import numpy as np
 
 # =========================
 # CONFIG
 # =========================
-st.set_page_config(page_title="🔥 PRO OPTION CHAIN AI", layout="wide")
-st.title("🚀 ULTRA PRO AI OPTION CHAIN DASHBOARD")
+st.set_page_config(page_title="🔥 LIVE NSE AI", layout="wide")
+st.title("🚀 REAL-TIME NSE AI OPTION CHAIN")
 
 # =========================
-# DATA
+# LIVE DATA FETCH FUNCTION
 # =========================
-INDEX_MAP = {
-    "NIFTY": 24000,
-    "BANKNIFTY": 48200,
-    "FINNIFTY": 20200
-}
-
-STOCKS = ["NONE","RELIANCE","TCS","INFY","HDFCBANK","SBIN","ITC"]
-
-# =========================
-# SIDEBAR
-# =========================
-st.sidebar.header("📊 CONTROL PANEL")
-
-index = st.sidebar.selectbox("📌 Select INDEX", list(INDEX_MAP.keys()))
-stock = st.sidebar.selectbox("📌 Select STOCK", STOCKS)
-
-strike = st.sidebar.number_input("🎯 Enter Strike Price", value=INDEX_MAP[index], step=50)
-
-run = st.sidebar.button("⚡ RUN ANALYSIS")
-
-ltp = INDEX_MAP[index]
+def get_live_nse_data(symbol):
+    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.nseindia.com/"
+    }
+    try:
+        session = requests.Session()
+        session.get("https://www.nseindia.com", headers=headers, timeout=10)
+        response = session.get(url, headers=headers, timeout=10)
+        return response.json()
+    except:
+        return None
 
 # =========================
-# TREND ENGINE
+# SIDEBAR CONTROLS
 # =========================
-def trend_engine():
-    return np.random.choice(["🟢 BULLISH", "🔴 BEARISH", "🟡 SIDEWAYS"])
-
-# =========================
-# OI ENGINE (5 COLUMN)
-# =========================
-def oi_engine():
-    call_oi = np.random.randint(10000, 50000)
-    call_chg = np.random.randint(-5000, 5000)
-    put_oi = np.random.randint(10000, 50000)
-    put_chg = np.random.randint(-5000, 5000)
-
-    net = call_oi - put_oi
-
-    return call_oi, call_chg, put_oi, put_chg, net
+index = st.sidebar.selectbox("📌 Select INDEX", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
+run = st.sidebar.button("⚡ FETCH LIVE DATA")
 
 # =========================
-# AI ENGINE
-# =========================
-def ai_engine(strike):
-    move = np.random.randint(-300, 300)
-
-    entry = strike + (50 if move > 0 else -50)
-    sl = entry - 100 if move > 0 else entry + 100
-
-    t1 = entry + 50
-    t2 = entry + 100
-    t3 = entry + 150
-
-    ce = np.random.randint(2000, 9000)
-    pe = np.random.randint(2000, 9000)
-
-    signal = "🟢 CALL" if ce > pe else "🔴 PUT"
-
-    return signal, entry, sl, t1, t2, t3, ce, pe
-
-# =========================
-# VALIDATION
-# =========================
-if index not in INDEX_MAP:
-    st.stop()
-
-# =========================
-# HEADER
-# =========================
-st.success(f"INDEX: {index}")
-st.info(f"LTP: {ltp}")
-
-# =========================
-# TREND SECTION
-# =========================
-trend = trend_engine()
-
-st.subheader("📊 TREND ANALYSIS")
-st.success(f"TREND: {trend}")
-
-# =========================
-# 5 COLUMN TABLE (MAIN REQUIREMENT)
-# =========================
-call_oi, call_chg, put_oi, put_chg, net = oi_engine()
-
-df = pd.DataFrame([{
-    "CALL OI": call_oi,
-    "CALL CHG": call_chg,
-    "PUT OI": put_oi,
-    "PUT CHG": put_chg,
-    "NET FLOW": net
-}])
-
-st.subheader("📊 OPTION FLOW (5 COLUMN)")
-st.dataframe(df, use_container_width=True)
-
-# =========================
-# STOCK SECTION
-# =========================
-st.subheader("📌 STOCK ANALYSIS")
-
-if stock == "NONE":
-    st.warning("⚠ No Stock Selected")
-else:
-    stock_signal = "🟢 CALL STRONG" if np.random.rand() > 0.5 else "🔴 PUT STRONG"
-    st.success(f"STOCK: {stock}")
-    st.info(f"FLOW: {stock_signal}")
-
-# =========================
-# BIG MOVE + AI PLAN
+# MAIN LOGIC
 # =========================
 if run:
+    data = get_live_nse_data(index)
+    
+    if data:
+        # ప్రాథమిక వివరాలు
+        ltp = data['records']['underlyingValue']
+        st.success(f"📊 {index} Current Price (LTP): {ltp}")
+        
+        # డేటా ప్రాసెసింగ్
+        raw_data = data['records']['data']
+        df_list = []
+        for item in raw_data:
+            ce = item.get('CE', {})
+            pe = item.get('PE', {})
+            df_list.append({
+                "Strike": item.get('strikePrice'),
+                "CALL_OI": ce.get('openInterest', 0),
+                "CALL_CHG": ce.get('changeinOpenInterest', 0),
+                "PUT_OI": pe.get('openInterest', 0),
+                "PUT_CHG": pe.get('changeinOpenInterest', 0),
+            })
+        
+        df = pd.DataFrame(df_list)
+        df['NET_FLOW'] = df['PUT_CHG'] - df['CALL_CHG']
 
-    signal, entry, sl, t1, t2, t3, ce, pe = ai_engine(strike)
+        # 1. Trend Analysis (PCR ఆధారంగా)
+        total_ce_oi = df['CALL_OI'].sum()
+        total_pe_oi = df['PUT_OI'].sum()
+        pcr = total_pe_oi / total_ce_oi if total_ce_oi > 0 else 0
+        
+        st.subheader("📊 TREND ANALYSIS")
+        if pcr > 1.2:
+            st.write("TREND: 🟢 BULLISH (Strong Put Writing)")
+        elif pcr < 0.8:
+            st.write("TREND: 🔴 BEARISH (Strong Call Writing)")
+        else:
+            st.write("TREND: 🟡 SIDEWAYS")
 
-    st.subheader("🚀 TODAY BIG MOVE + AI STRIKE")
+        # 2. Option Flow Table (5 Columns)
+        st.subheader("📊 OPTION FLOW (LIVE 5 COLUMN)")
+        st.dataframe(df[['CALL_OI', 'CALL_CHG', 'PUT_OI', 'PUT_CHG', 'NET_FLOW']].tail(15), use_container_width=True)
 
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.metric("CALL STRENGTH", ce)
-
-    with col2:
-        st.metric("PUT STRENGTH", pe)
-
-    with col3:
-        st.success(signal)
-
-    st.subheader("🎯 AI TRADE PLAN")
-
-    st.info(f"""
-    ENTRY: {entry}
-    EXIT: {t1}
-    STOPLOSS: {sl}
-    TARGET 1: {t1}
-    TARGET 2: {t2}
-    TARGET 3: {t3}
-    """)
+        # 3. AI Trade Plan
+        st.subheader("🎯 AI TRADE PLAN")
+        # ATM Strike ని గుర్తించడం
+        atm_strike = min(df['Strike'], key=lambda x: abs(x - ltp))
+        
+        st.info(f"""
+        🎯 ATM STRIKE: {atm_strike}
+        🚦 SIGNAL: {"🟢 CALL" if pcr > 1 else "🔴 PUT"}
+        🚀 ENTRY: {ltp}
+        🛡️ STOPLOSS: {ltp - 50 if pcr > 1 else ltp + 50}
+        📈 TARGET: {ltp + 100 if pcr > 1 else ltp - 100}
+        """)
+    else:
+        st.error("NSE నుండి డేటా పొందలేకపోతున్నాము. దయచేసి కాసేపు ఆగి ప్రయత్నించండి.")
