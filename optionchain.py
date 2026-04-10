@@ -5,10 +5,10 @@ import numpy as np
 # =========================
 # PAGE CONFIG
 # =========================
-st.set_page_config(page_title="🔥 ATM ZONE BIG MOVE SCANNER", layout="wide")
+st.set_page_config(page_title="🔥 CE vs PE BIG MOVE ZONE", layout="wide")
 
 # =========================
-# LTP SIMULATION
+# LTP
 # =========================
 def get_ltp(index):
     return {
@@ -32,8 +32,8 @@ def option_chain(index):
 
     return pd.DataFrame({
         "Strike": strikes,
-        "CE_OI": np.random.randint(1000, 4000, len(strikes)),
-        "PE_OI": np.random.randint(1000, 4000, len(strikes)),
+        "CE_OI": np.random.randint(1000, 4500, len(strikes)),
+        "PE_OI": np.random.randint(1000, 4500, len(strikes)),
     })
 
 # =========================
@@ -43,17 +43,22 @@ def get_atm(df, ltp):
     return min(df["Strike"], key=lambda x: abs(x - ltp))
 
 # =========================
-# BIG MOVE DETECTOR
+# CE vs PE PRESSURE ZONE
 # =========================
-def big_move_zone(df, atm):
+def ce_pe_zone(df, atm):
     df["TOTAL_OI"] = df["CE_OI"] + df["PE_OI"]
-
-    # ATM + nearby strikes
     df["DIST"] = abs(df["Strike"] - atm)
 
-    zone = df.sort_values(["DIST", "TOTAL_OI"], ascending=[True, False])
+    # CE dominance
+    df["CE_PRESSURE"] = df["CE_OI"] / (df["PE_OI"] + 1)
 
-    return zone.head(3)
+    # PE dominance
+    df["PE_PRESSURE"] = df["PE_OI"] / (df["CE_OI"] + 1)
+
+    ce_zone = df.sort_values(["CE_PRESSURE", "DIST"], ascending=[False, True]).head(3)
+    pe_zone = df.sort_values(["PE_PRESSURE", "DIST"], ascending=[False, True]).head(3)
+
+    return ce_zone, pe_zone
 
 # =========================
 # TREND
@@ -75,7 +80,7 @@ def pcr(df):
     return round(df["PE_OI"].sum() / df["CE_OI"].sum(), 2)
 
 # =========================
-# VIX (SIM)
+# VIX
 # =========================
 def vix():
     return round(np.random.uniform(11, 18), 2)
@@ -83,7 +88,7 @@ def vix():
 # =========================
 # SIDEBAR
 # =========================
-st.sidebar.title("📊 ATM ZONE PANEL")
+st.sidebar.title("📊 CE vs PE ZONE PANEL")
 
 index = st.sidebar.selectbox(
     "Select Index",
@@ -91,7 +96,7 @@ index = st.sidebar.selectbox(
 )
 
 expiry = st.sidebar.radio(
-    "Expiry",
+    "Select Expiry",
     ["Weekly", "Monthly"]
 )
 
@@ -102,9 +107,10 @@ ltp = get_ltp(index)
 df = option_chain(index)
 
 atm = get_atm(df, ltp)
+
 df["TOTAL_OI"] = df["CE_OI"] + df["PE_OI"]
 
-zone = big_move_zone(df, atm)
+ce_zone, pe_zone = ce_pe_zone(df, atm)
 
 trend_value = trend(df)
 pcr_value = pcr(df)
@@ -113,8 +119,8 @@ vix_value = vix()
 # =========================
 # HEADER
 # =========================
-st.title("🔥 ATM ZONE BIG MOVE SCANNER (NEW VERSION)")
-st.caption("Detects Big Movement Near ATM Strike | Fully Separate App")
+st.title("🔥 CE vs PE BIG MOVE ZONE SCANNER")
+st.caption("Separate Call & Put Pressure Detection (ATM Based)")
 
 # =========================
 # SIDEBAR INFO
@@ -134,23 +140,30 @@ st.sidebar.info(f"Expiry: {expiry}")
 c1, c2, c3, c4 = st.columns(4)
 
 c1.metric("Index", index)
-c2.metric("ATM Strike", atm)
+c2.metric("ATM", atm)
 c3.metric("PCR", pcr_value)
 c4.metric("VIX", vix_value)
 
 # =========================
-# FULL OPTION CHAIN
+# FULL TABLE
 # =========================
-st.subheader("📊 Option Chain Data")
+st.subheader("📊 Option Chain")
 
 st.dataframe(df, use_container_width=True)
 
 # =========================
-# ATM BIG MOVE ZONE
+# CE BIG MOVE ZONE
 # =========================
-st.subheader("🚀 ATM BIG MOVE ZONE (TOP STRIKES)")
+st.subheader("🚀 CE (CALL) BIG MOVE ZONE")
 
-st.dataframe(zone, use_container_width=True)
+st.dataframe(ce_zone, use_container_width=True)
+
+# =========================
+# PE BIG MOVE ZONE
+# =========================
+st.subheader("📉 PE (PUT) BIG MOVE ZONE")
+
+st.dataframe(pe_zone, use_container_width=True)
 
 # =========================
 # REPORT
@@ -160,7 +173,6 @@ st.subheader("📌 Market Report")
 st.write(f"""
 ✔ Index: {index}  
 ✔ Expiry: {expiry}  
-✔ LTP: {ltp}  
 ✔ ATM: {atm}  
 ✔ PCR: {pcr_value}  
 ✔ VIX: {vix_value}  
@@ -170,9 +182,9 @@ st.write(f"""
 # =========================
 # SIGNAL
 # =========================
-if pcr_value > 1:
-    st.success("🟢 PUT Pressure Strong (Bearish Bias)")
+if ce_zone["CE_PRESSURE"].mean() > pe_zone["PE_PRESSURE"].mean():
+    st.success("🟢 CALL SIDE STRONG (CE DOMINANCE)")
 else:
-    st.warning("🔴 CALL Pressure Strong (Bullish Bias)")
+    st.warning("🔴 PUT SIDE STRONG (PE DOMINANCE)")
 
-st.success("✅ ATM ZONE BIG MOVE SCANNER READY (NO OLD CODE IMPACT)")
+st.success("✅ CE vs PE BIG MOVE ZONE READY (OLD CODE SAFE)")
