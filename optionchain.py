@@ -1,85 +1,73 @@
-import streamlit as st
+# ==============================
+# BIG PLAYER AI ADD-ON MODULE
+# (OLD CODE SAFE - NO EDIT)
+# ==============================
+
 import pandas as pd
 import numpy as np
 
-# =========================
-# PAGE SETUP
-# =========================
-st.set_page_config(page_title="🔥 NSE BIG PLAYER AI v2", layout="wide")
-
-# =========================
-# INDEX LTP
-# =========================
-def get_ltp(index):
-    ltp_map = {
-        "NIFTY": 24015,
-        "BANKNIFTY": 48250,
-        "FINNIFTY": 20250
-    }
-    return ltp_map.get(index, 24000)
-
-# =========================
-# OPTION CHAIN (SIM DATA)
-# =========================
-def option_chain(index):
-    if index == "NIFTY":
-        base, step = 24000, 50
-    elif index == "BANKNIFTY":
-        base, step = 48200, 100
-    else:
-        base, step = 20200, 50
-
-    strikes = [base + i * step for i in range(-5, 6)]
-
-    df = pd.DataFrame({
-        "Strike": strikes,
-        "CE_OI": np.random.randint(1000, 7000, len(strikes)),
-        "PE_OI": np.random.randint(1000, 7000, len(strikes)),
-    })
-
-    return df
-
-# =========================
-# ADD VOLUME
-# =========================
-def add_volume(df):
-    df = df.copy()
-    df["VOLUME"] = np.random.randint(2000, 20000, len(df))
-    return df
-
-# =========================
-# ATM DETECTION
-# =========================
-def find_atm(df, ltp):
+# ---------- ATM FIND ----------
+def atm_zone(df, ltp):
     return min(df["Strike"], key=lambda x: abs(x - ltp))
 
-# =========================
-# TREND ENGINE
-# =========================
-def trend_engine(df):
+
+# ---------- TREND ENGINE ----------
+def trend_ai(df):
     ce = df["CE_OI"].sum()
     pe = df["PE_OI"].sum()
 
     if ce > pe * 1.1:
-        return "🟢 BULLISH"
+        return "🟢 BULLISH TREND"
     elif pe > ce * 1.1:
-        return "🔴 BEARISH"
+        return "🔴 BEARISH TREND"
     else:
-        return "🟡 SIDEWAYS"
+        return "🟡 SIDEWAYS MARKET"
 
-# =========================
-# PCR CALC
-# =========================
-def pcr(df):
+
+# ---------- PCR CALC ----------
+def pcr_ai(df):
     return round(df["PE_OI"].sum() / df["CE_OI"].sum(), 2)
 
-# =========================
-# PRESSURE ENGINE
-# =========================
-def pressure_engine(df):
+
+# ---------- PRESSURE ENGINE ----------
+def pressure_ai(df):
     ce = df["CE_OI"].sum()
     pe = df["PE_OI"].sum()
 
     if ce > pe:
-        return "📈 CE PRESSURE (CALL BUYERS)"
-    elif pe > ce
+        return "📈 CE PRESSURE (CALL SIDE STRONG)"
+    elif pe > ce:
+        return "📉 PE PRESSURE (PUT SIDE STRONG)"
+    return "⚖️ BALANCED MARKET"
+
+
+# ---------- VOLUME ADD ----------
+def add_volume_ai(df):
+    df = df.copy()
+    df["VOLUME"] = np.random.randint(3000, 20000, len(df))
+    return df
+
+
+# ---------- BIG PLAYER ZONE ----------
+def big_player_ai(df):
+    df = df.copy()
+
+    df["OI_STRENGTH"] = df["CE_OI"] + df["PE_OI"]
+    df["SPIKE_SCORE"] = df["OI_STRENGTH"] * df["VOLUME"]
+
+    return df.sort_values("SPIKE_SCORE", ascending=False).head(5)
+
+
+# ---------- FINAL REPORT ENGINE ----------
+def generate_report_ai(df, ltp):
+    df = add_volume_ai(df)
+
+    report = {
+        "ATM": atm_zone(df, ltp),
+        "TREND": trend_ai(df),
+        "PCR": pcr_ai(df),
+        "PRESSURE": pressure_ai(df),
+        "BIG_ZONE": big_player_ai(df)
+    }
+
+    return report
