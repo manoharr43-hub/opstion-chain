@@ -1,69 +1,80 @@
 import streamlit as st
 import numpy as np
+import pandas as pd
 
 # =========================
-# PAGE SETUP
+# PAGE CONFIG
 # =========================
 st.set_page_config(page_title="🔥 PRO AI TRADING DASHBOARD", layout="wide")
 
-st.title("🚀 PRO AI OPTION CHAIN DASHBOARD")
+st.title("🚀 PRO AI MULTI INDEX OPTION CHAIN")
 
 # =========================
-# LEFT SIDE PANEL
+# INDEX MAP
 # =========================
-st.sidebar.header("📊 INDEX CONTROL PANEL")
-
-index = st.sidebar.selectbox(
-    "Select Index",
-    ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDNIFTY"]
-)
-
-entry_btn = st.sidebar.button("📌 INDEX ENTRY")
-
-st.sidebar.markdown("---")
-
-stocks = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK"]
-stock = st.sidebar.selectbox("Select Stock", stocks)
-
-stock_btn = st.sidebar.button("📊 STOCK ENTRY")
-
-st.sidebar.markdown("---")
-
-strike = st.sidebar.number_input("🎯 Enter Strike Price", value=24000)
-strike_btn = st.sidebar.button("⚡ STRIKE ANALYSIS")
+INDEX_MAP = {
+    "NIFTY": 24000,
+    "BANKNIFTY": 48200,
+    "FINNIFTY": 20200,
+    "MIDNIFTY": 12000
+}
 
 # =========================
-# TREND SYMBOL ENGINE
+# STOCK LIST
 # =========================
-def trend_symbol():
+STOCKS = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK"]
+
+# =========================
+# TREND ENGINE
+# =========================
+def trend():
     return np.random.choice([
-        "🟢 STRONG BULLISH",
-        "🔴 STRONG BEARISH",
-        "🟡 SIDEWAYS MARKET"
+        "🟢 BULLISH",
+        "🔴 BEARISH",
+        "🟡 SIDEWAYS"
     ])
 
 # =========================
-# CE / PE DETECTION
+# CE / PE FLOW
 # =========================
 def ce_pe_signal():
     val = np.random.randint(-100, 100)
-
     if val > 40:
         return "🟢 CALL SIDE ACTIVE"
     elif val < -40:
         return "🔴 PUT SIDE ACTIVE"
-    else:
-        return "🟡 NO CLEAR MOVE"
+    return "🟡 NEUTRAL"
 
 # =========================
-# AI STRIKE ENGINE (ENTRY / TARGET / SL)
+# PCR + VIX
+# =========================
+def pcr():
+    ce = np.random.randint(50000, 120000)
+    pe = np.random.randint(50000, 120000)
+    return round(pe / ce, 2), ce, pe
+
+def vix():
+    return round(np.random.uniform(11, 20), 2)
+
+# =========================
+# OI TABLE
+# =========================
+def oi_table():
+    return pd.DataFrame({
+        "Strike": [24000, 24050, 24100, 24150, 24200],
+        "CALL_OI": np.random.randint(1000, 5000, 5),
+        "PUT_OI": np.random.randint(1000, 5000, 5),
+        "CHG_CALL": np.random.randint(-500, 500, 5),
+        "CHG_PUT": np.random.randint(-500, 500, 5),
+    })
+
+# =========================
+# AI STRIKE ENGINE
 # =========================
 def ai_engine(strike):
-    move = np.random.randint(-200, 200)
-
-    entry = strike
+    move = np.random.randint(-300, 300)
     target = strike + move
-    stoploss = strike - abs(move) * 0.6
+    sl = strike - abs(move) * 0.6
 
     if move > 50:
         signal = "🟢 CALL ENTRY"
@@ -72,62 +83,101 @@ def ai_engine(strike):
     else:
         signal = "🟡 WAIT"
 
-    return signal, round(target, 2), round(stoploss, 2)
+    return signal, target, sl
 
 # =========================
-# MAIN DASHBOARD (3 SECTIONS)
+# LEFT PANEL
 # =========================
+st.sidebar.header("📊 CONTROL PANEL")
 
+index = st.sidebar.selectbox("Select Index", list(INDEX_MAP.keys()))
+stock = st.sidebar.selectbox("Select Stock", STOCKS)
+
+ltp = INDEX_MAP[index]
+
+st.sidebar.info(f"LTP: {ltp}")
+
+strike = st.sidebar.number_input("Enter Strike", value=ltp)
+
+run = st.sidebar.button("⚡ RUN ANALYSIS")
+
+# =========================
+# MAIN DASHBOARD (3 COLUMNS)
+# =========================
 col1, col2, col3 = st.columns(3)
 
 # =========================
-# 1. INDEX REPORT
+# INDEX PANEL
 # =========================
 with col1:
     st.subheader("📊 INDEX REPORT")
 
-    if entry_btn:
-        st.success(f"INDEX: {index}")
-        st.metric("TREND", trend_symbol())
-        st.info("LIVE INDEX ENTRY ACTIVE")
-        st.success("✔ CONFIRMATION: ACTIVE")
+    st.metric("INDEX", index)
+    st.metric("LTP", ltp)
+    st.markdown(f"### TREND: {trend()}")
+    st.success("LIVE INDEX ACTIVE")
 
 # =========================
-# 2. STOCK REPORT
+# STOCK PANEL
 # =========================
 with col2:
     st.subheader("📌 STOCK REPORT")
 
-    if stock_btn:
-        st.success(f"STOCK: {stock}")
-        st.metric("TREND", trend_symbol())
-        st.warning("CALL / PUT FLOW DETECTED")
+    st.metric("STOCK", stock)
+    st.markdown(f"### FLOW: {ce_pe_signal()}")
+    st.warning("CALL / PUT MOVEMENT ACTIVE")
 
 # =========================
-# 3. STRIKE PANEL (MAIN)
+# STRIKE PANEL
 # =========================
 with col3:
     st.subheader("🎯 STRIKE PANEL")
 
-    if strike_btn:
+    if run:
         signal, target, sl = ai_engine(strike)
 
-        st.success(f"STRIKE: {strike}")
-        st.info(ce_pe_signal())
+        st.metric("STRIKE", strike)
+        st.metric("TARGET", round(target, 2))
+        st.metric("STOPLOSS", round(sl, 2))
+
         st.success(f"SIGNAL: {signal}")
-
-        st.metric("🎯 TARGET", target)
-        st.metric("🛑 STOPLOSS", sl)
+        st.info(ce_pe_signal())
 
 # =========================
-# LIVE REPORT DASHBOARD
+# OI TABLE
 # =========================
-st.subheader("📊 LIVE REPORT DASHBOARD")
+st.subheader("📊 CALL vs PUT OI FLOW")
+
+st.dataframe(oi_table(), use_container_width=True)
+
+# =========================
+# PCR + VIX
+# =========================
+pcr_value, ce_total, pe_total = pcr()
+vix_value = vix()
+
+c1, c2, c3 = st.columns(3)
+
+with c1:
+    st.metric("📌 PCR", pcr_value)
+
+with c2:
+    st.metric("📉 CE OI", ce_total)
+
+with c3:
+    st.metric("📈 PE OI", pe_total)
+
+st.info(f"🇮🇳 INDIA VIX: {vix_value}")
+
+# =========================
+# FINAL REPORT
+# =========================
+st.subheader("📊 LIVE REPORT")
 
 st.write(f"""
 ✔ INDEX: {index}  
 ✔ STOCK: {stock}  
 ✔ STRIKE: {strike}  
-✔ STATUS: LIVE MARKET ACTIVE  
-✔ SYSTEM: AI ANALYSIS RUNNING  
+✔ STATUS: LIVE AI ANALYSIS ACTIVE  
+✔ SYSTEM: MULTI INDEX OPTION ENGINE  
 """)
