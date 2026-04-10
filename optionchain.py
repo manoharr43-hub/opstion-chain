@@ -5,37 +5,47 @@ import numpy as np
 # =========================
 # PAGE CONFIG
 # =========================
-st.set_page_config(page_title="🔥 NEW NSE PRO SCANNER", layout="wide")
+st.set_page_config(page_title="🔥 NEW NSE PRO SCANNER V2", layout="wide")
 
 # =========================
-# SAFE DATA MODULE (NEW)
+# LIVE SIM PRICES
 # =========================
-def get_option_chain(index):
-    data = {
-        "NIFTY": pd.DataFrame({
-            "Strike": [22000, 22100, 22200, 22300, 22400],
-            "CE_OI": [1200, 1800, 1100, 900, 1300],
-            "PE_OI": [1000, 1300, 1400, 1600, 1700],
-        }),
-
-        "BANKNIFTY": pd.DataFrame({
-            "Strike": [46000, 46100, 46200, 46300, 46400],
-            "CE_OI": [2000, 2800, 2200, 2100, 2500],
-            "PE_OI": [1700, 1900, 1600, 2000, 2300],
-        }),
-
-        "FINNIFTY": pd.DataFrame({
-            "Strike": [20000, 20100, 20200, 20300, 20400],
-            "CE_OI": [1500, 1900, 1700, 2100, 1600],
-            "PE_OI": [1400, 1600, 1800, 2000, 2200],
-        })
-    }
-    return data.get(index, pd.DataFrame())
+def get_ltp(index):
+    return {
+        "NIFTY": 24015,
+        "BANKNIFTY": 48250,
+        "FINNIFTY": 20250
+    }.get(index, 0)
 
 # =========================
-# TREND ENGINE (NEW)
+# OPTION CHAIN GENERATOR
 # =========================
-def trend_engine(df):
+def option_chain(index):
+    if index == "NIFTY":
+        base, step = 24000, 50
+    elif index == "BANKNIFTY":
+        base, step = 48200, 100
+    else:
+        base, step = 20200, 50
+
+    strikes = [base + i * step for i in range(-2, 3)]
+
+    return pd.DataFrame({
+        "Strike": strikes,
+        "CE_OI": np.random.randint(1000, 3500, 5),
+        "PE_OI": np.random.randint(1000, 3500, 5),
+    })
+
+# =========================
+# ATM CALC
+# =========================
+def find_atm(df, ltp):
+    return min(df["Strike"], key=lambda x: abs(x - ltp))
+
+# =========================
+# TREND ENGINE
+# =========================
+def trend(df):
     ce = df["CE_OI"].sum()
     pe = df["PE_OI"].sum()
 
@@ -46,90 +56,71 @@ def trend_engine(df):
     return "🟡 SIDEWAYS"
 
 # =========================
-# ATM FINDER
-# =========================
-def get_atm(df):
-    return df.iloc[len(df)//2]["Strike"]
-
-# =========================
-# ATM MOVEMENT ZONE
-# =========================
-def atm_zone(df, atm):
-    df["TOTAL_OI"] = df["CE_OI"] + df["PE_OI"]
-    return df.iloc[(df["Strike"] - atm).abs().argsort()[:3]]
-
-# =========================
-# PCR CALC
+# PCR
 # =========================
 def pcr(df):
     return round(df["PE_OI"].sum() / df["CE_OI"].sum(), 2)
 
 # =========================
-# VIX (SIMULATED SAFE)
+# VIX (SIM)
 # =========================
 def vix():
     return round(np.random.uniform(11, 18), 2)
 
 # =========================
-# SIDEBAR UI
+# SIDEBAR
 # =========================
-st.sidebar.title("📊 CONTROL PANEL (NEW)")
+st.sidebar.title("📊 NEW CONTROL PANEL")
 
 index = st.sidebar.selectbox(
     "Select Index",
     ["NIFTY", "BANKNIFTY", "FINNIFTY"]
 )
 
-expiry = st.sidebar.selectbox(
+expiry = st.sidebar.radio(
     "Select Expiry",
     ["Weekly", "Monthly"]
 )
 
 # =========================
-# LOAD DATA
+# DATA
 # =========================
-df = get_option_chain(index)
+ltp = get_ltp(index)
+df = option_chain(index)
 
-if df.empty:
-    st.error("❌ No Data Found")
-    st.stop()
-
-# =========================
-# CALCULATIONS
-# =========================
+atm = find_atm(df, ltp)
 df["TOTAL_OI"] = df["CE_OI"] + df["PE_OI"]
 
-trend = trend_engine(df)
-atm = get_atm(df)
-zone = atm_zone(df, atm)
+trend_value = trend(df)
 pcr_value = pcr(df)
 vix_value = vix()
 
 # =========================
 # HEADER
 # =========================
-st.title("🔥 NEW NSE PRO SCANNER (CLEAN VERSION)")
-st.caption("Fully Separated from Old Code | Safe Upgrade Version")
+st.title("🔥 NEW NSE PRO SCANNER V2 (SEPARATE APP)")
+st.caption("No Old Code Impact | Clean New Version")
 
 # =========================
-# SIDEBAR REPORT
+# SIDEBAR INFO
 # =========================
 st.sidebar.markdown("---")
 st.sidebar.success(f"Index: {index}")
-st.sidebar.info(f"Expiry: {expiry}")
+st.sidebar.info(f"LTP: {ltp}")
 st.sidebar.warning(f"ATM: {atm}")
 st.sidebar.error(f"PCR: {pcr_value}")
 st.sidebar.info(f"VIX: {vix_value}")
-st.sidebar.success(f"Trend: {trend}")
+st.sidebar.success(f"Trend: {trend_value}")
+st.sidebar.info(f"Expiry: {expiry}")
 
 # =========================
-# TOP METRICS
+# METRICS
 # =========================
 c1, c2, c3, c4 = st.columns(4)
 
 c1.metric("Index", index)
-c2.metric("Trend", trend)
-c3.metric("ATM Strike", atm)
+c2.metric("LTP", ltp)
+c3.metric("ATM", atm)
 c4.metric("PCR", pcr_value)
 
 # =========================
@@ -140,11 +131,12 @@ st.subheader("📊 Option Chain Data")
 st.dataframe(df, use_container_width=True)
 
 # =========================
-# ATM ZONE REPORT
+# ATM ZONE
 # =========================
-st.subheader("🚀 ATM Near Strong Movement Zone")
+st.subheader("🚀 ATM Zone")
 
-st.dataframe(zone, use_container_width=True)
+atm_df = df[df["Strike"] == atm]
+st.dataframe(atm_df, use_container_width=True)
 
 # =========================
 # REPORT
@@ -154,18 +146,19 @@ st.subheader("📌 Market Report")
 st.write(f"""
 ✔ Index: {index}  
 ✔ Expiry: {expiry}  
-✔ ATM Strike: {atm}  
-✔ PCR Ratio: {pcr_value}  
-✔ India VIX: {vix_value}  
-✔ Trend: {trend}  
+✔ LTP: {ltp}  
+✔ ATM: {atm}  
+✔ PCR: {pcr_value}  
+✔ VIX: {vix_value}  
+✔ Trend: {trend_value}  
 """)
 
 # =========================
-# SIGNAL LOGIC
+# SIGNAL
 # =========================
 if pcr_value > 1:
-    st.success("🟢 Bearish Pressure (PUT dominance)")
+    st.success("🟢 PUT Dominance (Bearish Bias)")
 else:
-    st.warning("🔴 Bullish Pressure (CALL dominance)")
+    st.warning("🔴 CALL Dominance (Bullish Bias)")
 
-st.success("✅ NEW VERSION RUNNING SUCCESSFULLY (OLD CODE SAFE)")
+st.success("✅ NEW SEPARATE VERSION RUNNING SUCCESSFULLY")
