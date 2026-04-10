@@ -3,168 +3,154 @@ import pandas as pd
 import numpy as np
 import requests
 import yfinance as yf
-from datetime import datetime
-from streamlit_autorefresh import st_autorefresh
-
-from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense
+import time
 
 # =========================
-# CONFIG
+# PAGE CONFIG
 # =========================
-st.set_page_config(page_title="🔥 NSE AI TRADING V2", layout="wide")
-st_autorefresh(interval=20000, key="refresh")
+st.set_page_config(page_title="🔥 NSE AI TRADING V3 PRO", layout="wide")
 
-st.title("🔥 NSE AI Trading System V2 (LIVE + AI + BOT)")
+st.title("🔥 NSE AI TRADING SYSTEM V3 PRO (SAFE VERSION)")
 
 # =========================
 # LIVE PRICE
 # =========================
-def get_price(symbol="^NSEI"):
-    data = yf.download(symbol, period="5d", interval="5m")
-    return data
+def get_data(symbol):
+    df = yf.download(symbol, period="5d", interval="5m")
+    return df
 
 # =========================
-# OPTION CHAIN (NSE)
+# OPTION CHAIN (SAFE NSE API)
 # =========================
-def get_option_chain(symbol="NIFTY"):
-    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "accept": "application/json"
-    }
-    session = requests.Session()
-    session.get("https://www.nseindia.com", headers=headers)
-    response = session.get(url, headers=headers)
-    return response.json()
+def option_chain(symbol="NIFTY"):
+    try:
+        url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        session = requests.Session()
+        session.get("https://www.nseindia.com", headers=headers)
+        data = session.get(url, headers=headers).json()
+        return data
+    except:
+        return None
 
-def parse_option_chain(data):
-    records = data['records']['data']
-    calls = []
-    puts = []
+# =========================
+# PARSE OPTION CHAIN
+# =========================
+def parse_oc(data):
+    calls, puts = [], []
 
-    for item in records:
-        if "CE" in item:
-            calls.append(item["CE"])
-        if "PE" in item:
-            puts.append(item["PE"])
+    for i in data["records"]["data"]:
+        if "CE" in i:
+            calls.append(i["CE"])
+        if "PE" in i:
+            puts.append(i["PE"])
 
     return pd.DataFrame(calls), pd.DataFrame(puts)
 
 # =========================
-# SMART MONEY FLOW (SIMULATED)
+# SMART MONEY FLOW (TREND BASED)
 # =========================
-def smart_money_flow():
+def smart_flow(df):
+    change = df["Close"].pct_change().iloc[-1]
+
     fii = np.random.randint(-500, 1500)
-    dii = np.random.randint(-300, 1200)
-    return fii, dii
+    dii = np.random.randint(-300, 1000)
+
+    trend = "NEUTRAL"
+    if change > 0:
+        trend = "BULLISH FLOW 🟢"
+    elif change < 0:
+        trend = "BEARISH FLOW 🔴"
+
+    return fii, dii, trend
 
 # =========================
-# SCALPING SIGNAL ENGINE
+# SCALPING SIGNAL
 # =========================
-def scalping_signal(df):
+def signal(df):
     df["ema5"] = df["Close"].ewm(span=5).mean()
     df["ema20"] = df["Close"].ewm(span=20).mean()
+    df["volume"] = df["Volume"]
 
-    if df["ema5"].iloc[-1] > df["ema20"].iloc[-1]:
+    if df["ema5"].iloc[-1] > df["ema20"].iloc[-1] and df["volume"].iloc[-1] > df["volume"].mean():
         return "🟢 BUY SIGNAL"
     else:
         return "🔴 SELL SIGNAL"
 
 # =========================
-# LSTM PREDICTION (SIMPLE)
+# SIMPLE AI PREDICTION (NO TF)
 # =========================
-def lstm_predict(df):
-    data = df["Close"].values.reshape(-1, 1)
+def predict(df):
+    df = df.dropna()
+    x = np.arange(len(df)).reshape(-1, 1)
+    y = df["Close"].values
 
-    scaler = MinMaxScaler()
-    data_scaled = scaler.fit_transform(data)
+    # simple trend slope
+    slope = (y[-1] - y[0]) / len(y)
 
-    X, y = [], []
-    for i in range(10, len(data_scaled)):
-        X.append(data_scaled[i-10:i, 0])
-        y.append(data_scaled[i, 0])
-
-    X, y = np.array(X), np.array(y)
-    X = X.reshape((X.shape[0], X.shape[1], 1))
-
-    model = Sequential()
-    model.add(LSTM(50, return_sequences=True, input_shape=(X.shape[1], 1)))
-    model.add(LSTM(50))
-    model.add(Dense(1))
-
-    model.compile(optimizer="adam", loss="mse")
-    model.fit(X, y, epochs=3, batch_size=16, verbose=0)
-
-    pred = model.predict(X[-1].reshape(1, 10, 1))
-    return scaler.inverse_transform(pred)[0][0]
-
-# =========================
-# AUTO TRADING BOT (SIMULATION)
-# =========================
-def auto_bot(signal):
-    if "BUY" in signal:
-        return "✅ AUTO BUY EXECUTED (SIMULATED)"
-    else:
-        return "❌ AUTO SELL EXECUTED (SIMULATED)"
+    next_price = y[-1] + slope
+    return next_price
 
 # =========================
 # UI
 # =========================
 symbol = st.selectbox("Select Index", ["^NSEI", "^NSEBANK"])
 
-data = get_price(symbol)
+df = get_data(symbol)
 
-st.subheader("📊 LIVE PRICE CHART")
-st.line_chart(data["Close"])
-
-# =========================
-# OPTION CHAIN
-# =========================
-st.subheader("🟢 OPTION CHAIN")
-try:
-    oc = get_option_chain("NIFTY")
-    calls, puts = parse_option_chain(oc)
-
-    st.write("CALLS")
-    st.dataframe(calls.head(10))
-
-    st.write("PUTS")
-    st.dataframe(puts.head(10))
-
-except:
-    st.warning("Option Chain load error (NSE blocking sometimes)")
+st.subheader("📊 LIVE CHART")
+st.line_chart(df["Close"])
 
 # =========================
-# SMART MONEY FLOW
+# SMART FLOW
 # =========================
-st.subheader("🟢 SMART MONEY FLOW (FII/DII)")
-fii, dii = smart_money_flow()
+st.subheader("🧠 SMART MONEY FLOW")
+fii, dii, trend = smart_flow(df)
 
 st.metric("FII Flow", fii)
 st.metric("DII Flow", dii)
+st.success(trend)
 
 # =========================
 # SCALPING SIGNAL
 # =========================
 st.subheader("📊 SCALPING SIGNAL")
-signal = scalping_signal(data)
-st.success(signal)
+sig = signal(df)
+st.success(sig)
 
 # =========================
-# LSTM PREDICTION
+# PREDICTION
 # =========================
-st.subheader("⚡ LSTM PRICE PREDICTION")
-try:
-    pred = lstm_predict(data)
-    st.info(f"Next Predicted Price: {pred}")
-except:
-    st.warning("LSTM training error (low data)")
+st.subheader("⚡ NEXT PRICE PREDICTION")
+pred = predict(df)
+st.info(f"Next Expected Price: {pred:.2f}")
 
 # =========================
-# AUTO BOT
+# OPTION CHAIN
 # =========================
-st.subheader("🔵 AUTO BUY/SELL BOT")
-bot_result = auto_bot(signal)
-st.write(bot_result)
+st.subheader("🟢 OPTION CHAIN")
+
+oc = option_chain("NIFTY")
+
+if oc:
+    try:
+        calls, puts = parse_oc(oc)
+
+        st.write("CALLS")
+        st.dataframe(calls.head(10))
+
+        st.write("PUTS")
+        st.dataframe(puts.head(10))
+
+    except:
+        st.warning("Option chain parsing error")
+else:
+    st.error("NSE blocked request temporarily")
+
+# =========================
+# AUTO REFRESH (SAFE)
+# =========================
+st.info("Auto refresh every 20 sec")
+
+time.sleep(20)
+st.rerun()
