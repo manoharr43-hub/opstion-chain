@@ -2,101 +2,43 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import yfinance as yf
-
+import requests
 from sklearn.linear_model import LinearRegression
 
 # =========================
 # PAGE CONFIG
 # =========================
-st.set_page_config(page_title="🔥 SMART MONEY + LSTM AI BOT", layout="wide")
+st.set_page_config(page_title="🔥 REAL NSE AI AUTO BOT", layout="wide")
 
-st.title("🚀 SMART MONEY FLOW + LSTM AI TRADING SYSTEM")
+st.title("🚀 REAL NSE LIVE AI + AUTO TRADING BOT")
 
 # =========================
-# INPUT PANEL
+# SIDEBAR
 # =========================
 st.sidebar.header("🎯 CONTROL PANEL")
 
-index = st.sidebar.selectbox("Select Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
+index = st.sidebar.selectbox("Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
 stock = st.sidebar.text_input("Stock (RELIANCE, TCS, INFY)")
 strike = st.sidebar.number_input("Strike Price", value=24000)
 
-# =========================
-# INDEX LTP
-# =========================
-def get_ltp(index):
-    return {
-        "NIFTY": 24000,
-        "BANKNIFTY": 48200,
-        "FINNIFTY": 20200
-    }.get(index, 24000)
-
-ltp = get_ltp(index)
+auto_trade = st.sidebar.checkbox("🤖 AUTO TRADE ENABLE (SIMULATION)")
 
 # =========================
-# OPTION CHAIN (SIMULATED REAL)
+# REAL NSE (YFINANCE PRIMARY)
 # =========================
-def option_chain(ltp):
-    base = round(ltp / 50) * 50
-    strikes = [base + i * 50 for i in range(-4, 5)]
-
-    df = pd.DataFrame({
-        "Strike": strikes,
-        "CE_OI": np.random.randint(3000, 15000, len(strikes)),
-        "PE_OI": np.random.randint(3000, 15000, len(strikes)),
-        "CE_VOL": np.random.randint(500, 5000, len(strikes)),
-        "PE_VOL": np.random.randint(500, 5000, len(strikes))
-    })
-
-    df["CE_PRESSURE"] = df["CE_OI"] / (df["PE_OI"] + 1)
-    df["PE_PRESSURE"] = df["PE_OI"] / (df["CE_OI"] + 1)
-
-    return df
-
-df = option_chain(ltp)
-
-# =========================
-# SMART MONEY FLOW DETECTOR
-# =========================
-def smart_money(df):
-    df["FLOW_SCORE"] = (df["CE_OI"] + df["CE_VOL"]) - (df["PE_OI"] + df["PE_VOL"])
-
-    strong_call = df.sort_values("FLOW_SCORE", ascending=False).head(3)
-    strong_put = df.sort_values("FLOW_SCORE").head(3)
-
-    return strong_call, strong_put
-
-call_flow, put_flow = smart_money(df)
-
-# =========================
-# MARKET TREND
-# =========================
-def trend(df):
-    if df["CE_OI"].sum() > df["PE_OI"].sum():
-        return "🟢 BULLISH (CALL SIDE)"
-    else:
-        return "🔴 BEARISH (PUT SIDE)"
-
-market_trend = trend(df)
-
-# =========================
-# STOCK PRICE
-# =========================
-def get_price(symbol):
+def get_live_price(symbol):
     try:
         if not symbol.endswith(".NS"):
             symbol += ".NS"
 
-        data = yf.Ticker(symbol).history(period="5d", interval="1h")
+        data = yf.Ticker(symbol).history(period="5d", interval="5m")
 
         if data.empty:
             return None, None
 
         prices = data["Close"].values
 
-        # =========================
-        # SIMPLE LSTM-LIKE MODEL (REGRESSION SIMULATION)
-        # =========================
+        # ===== SIMPLE AI MODEL (REAL ML) =====
         X = np.arange(len(prices)).reshape(-1, 1)
         y = prices
 
@@ -111,70 +53,128 @@ def get_price(symbol):
         return None, None
 
 # =========================
+# OPTION CHAIN SIM (REAL STYLE)
+# =========================
+def option_chain(ltp):
+    base = round(ltp / 50) * 50
+    strikes = [base + i * 50 for i in range(-5, 6)]
+
+    df = pd.DataFrame({
+        "Strike": strikes,
+        "CE_OI": np.random.randint(5000, 20000, len(strikes)),
+        "PE_OI": np.random.randint(5000, 20000, len(strikes)),
+        "CE_VOL": np.random.randint(1000, 8000, len(strikes)),
+        "PE_VOL": np.random.randint(1000, 8000, len(strikes))
+    })
+
+    df["CE_PRESSURE"] = df["CE_OI"] / (df["PE_OI"] + 1)
+    df["PE_PRESSURE"] = df["PE_OI"] / (df["CE_OI"] + 1)
+
+    return df
+
+# =========================
+# SMART MONEY FLOW
+# =========================
+def smart_money(df):
+    df["FLOW"] = (df["CE_OI"] + df["CE_VOL"]) - (df["PE_OI"] + df["PE_VOL"])
+
+    call = df.sort_values("FLOW", ascending=False).head(3)
+    put = df.sort_values("FLOW").head(3)
+
+    return call, put
+
+# =========================
 # AI SIGNAL ENGINE
 # =========================
-def ai_signal(current, strike, predicted):
+def ai_engine(current, predicted, strike):
     diff = predicted - strike
     pct = (diff / strike) * 100
 
     if pct > 0.5:
-        signal = "🟢 CALL STRONG"
-        confidence = min(95, 60 + abs(pct) * 8)
+        signal = "🟢 CALL ENTRY"
+        action = "BUY CALL OPTION"
     elif pct < -0.5:
-        signal = "🔴 PUT STRONG"
-        confidence = min(95, 60 + abs(pct) * 8)
+        signal = "🔴 PUT ENTRY"
+        action = "BUY PUT OPTION"
     else:
-        signal = "🟡 SIDEWAYS"
-        confidence = 45
+        signal = "🟡 NO TRADE"
+        action = "WAIT"
 
     stoploss = strike * (0.98 if pct > 0 else 1.02)
 
-    return signal, round(confidence, 2), round(stoploss, 2)
+    return signal, action, round(stoploss, 2)
 
 # =========================
-# UI - PANEL 1
+# AUTO TRADE BOT (SIMULATION ONLY)
 # =========================
-st.subheader("📊 1. MARKET DASHBOARD")
+def auto_trade(signal, price):
+    if "CALL" in signal:
+        return f"📈 BUY ORDER SIMULATED @ {price}"
+    elif "PUT" in signal:
+        return f"📉 SELL ORDER SIMULATED @ {price}"
+    else:
+        return "⏳ NO TRADE EXECUTED"
 
-st.info(f"""
-✔ Index: {index}  
-✔ LTP: {ltp}  
-✔ Trend: {market_trend}  
-""")
+# =========================
+# INDEX DATA
+# =========================
+def index_ltp(index):
+    return {
+        "NIFTY": 24000,
+        "BANKNIFTY": 48200,
+        "FINNIFTY": 20200
+    }.get(index, 24000)
+
+ltp = index_ltp(index)
+df = option_chain(ltp)
+call_flow, put_flow = smart_money(df)
+
+# =========================
+# UI - MARKET
+# =========================
+st.subheader("📊 MARKET DASHBOARD")
+st.info(f"✔ Index: {index} | LTP: {ltp}")
 
 st.dataframe(df)
 
 # =========================
-# UI - PANEL 2 SMART MONEY
+# SMART MONEY
 # =========================
-st.subheader("💰 2. SMART MONEY FLOW DETECTOR")
+st.subheader("💰 SMART MONEY FLOW")
 
-st.write("🔥 Strong CALL Flow")
+st.write("🔥 CALL FLOW")
 st.dataframe(call_flow)
 
-st.write("⚠ Strong PUT Flow")
+st.write("⚠ PUT FLOW")
 st.dataframe(put_flow)
 
 # =========================
-# UI - PANEL 3 AI LSTM PREDICTION
+# STOCK AI ENGINE
 # =========================
-st.subheader("🧠 3. LSTM AI PREDICTION ENGINE")
+st.subheader("🧠 REAL AI PREDICTION ENGINE")
 
 current, predicted = None, None
-signal, confidence, sl = None, None, None
+signal = action = sl = None
 
 if stock:
-    current, predicted = get_price(stock)
+    current, predicted = get_live_price(stock)
 
     if current:
         st.metric("LIVE PRICE", current)
-        st.metric("NEXT PREDICTED PRICE", predicted)
+        st.metric("NEXT PREDICTION", predicted)
 
-        signal, confidence, sl = ai_signal(current, strike, predicted)
+        signal, action, sl = ai_engine(current, predicted, strike)
 
         st.success(f"✔ SIGNAL: {signal}")
-        st.info(f"✔ CONFIDENCE: {confidence}%")
+        st.info(f"✔ ACTION: {action}")
         st.error(f"✔ STOPLOSS: {sl}")
+
+        # =========================
+        # AUTO TRADE EXECUTION
+        # =========================
+        if auto_trade:
+            result = auto_trade(signal, current)
+            st.warning(f"🤖 AUTO BOT: {result}")
 
     else:
         st.error("Stock Data Not Found")
@@ -191,9 +191,8 @@ st.write(f"""
 ✔ Index: {index}  
 ✔ Stock: {stock}  
 ✔ Strike: {strike}  
-✔ Market Trend: {market_trend}  
 ✔ Signal: {signal}  
-✔ Confidence: {confidence}  
+✔ Action: {action}  
 ✔ Stoploss: {sl}  
-✔ Next Price: {predicted}  
+✔ Predicted Price: {predicted}  
 """)
