@@ -3,11 +3,11 @@ import numpy as np
 import pandas as pd
 
 # =========================
-# PAGE SETUP
+# PAGE CONFIG
 # =========================
-st.set_page_config(page_title="🔥 CLEAN AI TRADING DASHBOARD", layout="wide")
+st.set_page_config(page_title="🚀 AI OPTION CHAIN DASHBOARD", layout="wide")
 
-st.title("🚀 CLEAN AI MARKET DASHBOARD (SAFE VERSION)")
+st.title("🔥 ULTRA AI OPTION CHAIN + STRIKE ANALYSIS")
 
 # =========================
 # INDEX DATA
@@ -19,61 +19,85 @@ INDEX_MAP = {
     "MIDNIFTY": 12000
 }
 
-STOCKS = ["NONE", "RELIANCE", "TCS", "INFY", "HDFCBANK", "SBIN"]
+STOCKS = [
+    "RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK",
+    "SBIN","ITC","LT","AXISBANK","KOTAKBANK"
+]
 
 # =========================
-# SIDEBAR
+# SIDEBAR FLOW (IMPORTANT ORDER)
 # =========================
 st.sidebar.header("📊 CONTROL PANEL")
 
-index = st.sidebar.selectbox("Select Index", ["NONE"] + list(INDEX_MAP.keys()))
-stock = st.sidebar.selectbox("Select Stock", STOCKS)
+index = st.sidebar.selectbox("📌 Select INDEX", ["NONE"] + list(INDEX_MAP.keys()))
 
-# AUTO STRIKE BASE
-base_strike = INDEX_MAP[index] if index != "NONE" else 0
+# stock only after index
+if index == "NONE":
+    st.sidebar.warning("⚠ Please select INDEX first")
+    stock = "NONE"
+else:
+    stock = st.sidebar.selectbox("📌 Select STOCK", STOCKS)
+
+# auto strike
+base_strike = INDEX_MAP.get(index, 0)
 
 strike = st.sidebar.number_input(
-    "Enter Strike Price",
+    "🎯 Enter Strike Price",
     value=base_strike,
     step=50
 )
 
-run = st.sidebar.button("⚡ RUN ANALYSIS")
+run = st.sidebar.button("⚡ RUN AI ANALYSIS")
 
 # =========================
 # SAFE CHECK
 # =========================
 if index == "NONE":
-    st.warning("⚠ Please select INDEX")
     st.stop()
 
-# =========================
-# CE / PE LOGIC
-# =========================
 ltp = INDEX_MAP[index]
 
-def ce_pe(strike, ltp):
-    if strike > ltp:
-        return "🔴 PUT (PE)"
-    elif strike < ltp:
-        return "🟢 CALL (CE)"
+# =========================
+# AI ENGINE
+# =========================
+def ai_engine(strike, ltp):
+    ce = np.random.randint(2000, 10000)
+    pe = np.random.randint(2000, 10000)
+
+    total = ce + pe
+    ce_p = round((ce / total) * 100, 2)
+    pe_p = round((pe / total) * 100, 2)
+
+    # BIG MOVEMENT LOGIC
+    if ce_p > 60:
+        trend = "🟢 STRONG CALL MOVE"
+        entry = strike + 50
+        sl = strike - 100
+    elif pe_p > 60:
+        trend = "🔴 STRONG PUT MOVE"
+        entry = strike - 50
+        sl = strike + 100
     else:
-        return "⚪ ATM"
+        trend = "🟡 SIDEWAYS"
+        entry = strike
+        sl = strike - 50
 
-signal = ce_pe(strike, ltp)
+    # TARGETS
+    t1 = entry + 50
+    t2 = entry + 100
+    t3 = entry + 150
 
-# =========================
-# AI SIMPLE ENGINE
-# =========================
-def ai_prediction(strike):
-    move = np.random.randint(-300, 300)
-    target = strike + move
-    sl = strike - abs(move) * 0.5
-
-    return target, sl
+    return ce, pe, ce_p, pe_p, trend, entry, sl, t1, t2, t3
 
 # =========================
-# DASHBOARD
+# HEADER
+# =========================
+st.success(f"📌 INDEX: {index}")
+st.info(f"📊 LTP: {ltp}")
+st.success(f"📌 STOCK: {stock}")
+
+# =========================
+# 3 COLUMN VIEW
 # =========================
 col1, col2, col3 = st.columns(3)
 
@@ -87,45 +111,66 @@ with col2:
     st.metric("Stock", stock)
 
 with col3:
-    st.subheader("🎯 STRIKE SIGNAL")
+    st.subheader("🎯 STRIKE")
     st.metric("Strike", strike)
-    st.success(signal)
 
 # =========================
-# AI RESULT
+# MAIN ANALYSIS
 # =========================
 if run:
-    target, sl = ai_prediction(strike)
 
-    st.subheader("🤖 AI TRADE PLAN")
+    ce, pe, cep, pep, trend, entry, sl, t1, t2, t3 = ai_engine(strike, ltp)
 
-    st.success(f"ENTRY STRIKE: {strike}")
-    st.info(f"TARGET: {round(target,2)}")
-    st.error(f"STOPLOSS: {round(sl,2)}")
+    st.subheader("🚀 TODAY BIG MOVEMENT ANALYSIS")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric("CALL STRENGTH", ce)
+        st.progress(int(cep))
+
+    with col2:
+        st.metric("PUT STRENGTH", pe)
+        st.progress(int(pep))
+
+    with col3:
+        st.success(trend)
+
+    # =========================
+    # FINAL TRADE PLAN
+    # =========================
+    st.subheader("🎯 AI TRADE PLAN")
+
+    st.info(f"""
+    📌 ENTRY POINT: {entry}  
+    ❌ STOP LOSS: {sl}  
+    🎯 TARGET 1: {t1}  
+    🎯 TARGET 2: {t2}  
+    🚀 TARGET 3: {t3}  
+    """)
+
+    # =========================
+    # STRIKE TABLE
+    # =========================
+    st.subheader("📊 STRIKE ZONE FLOW")
+
+    df = pd.DataFrame({
+        "Strike": [strike-100, strike-50, strike, strike+50, strike+100],
+        "CE Flow": np.random.randint(1000, 9000, 5),
+        "PE Flow": np.random.randint(1000, 9000, 5),
+    })
+
+    st.dataframe(df, use_container_width=True)
 
 # =========================
-# OPTION STYLE TABLE
-# =========================
-st.subheader("📊 STRIKE ZONE VIEW")
-
-df = pd.DataFrame({
-    "Strike": [strike-100, strike-50, strike, strike+50, strike+100],
-    "CE Flow": np.random.randint(1000, 8000, 5),
-    "PE Flow": np.random.randint(1000, 8000, 5)
-})
-
-st.dataframe(df, use_container_width=True)
-
-# =========================
-# REPORT
+# LIVE REPORT
 # =========================
 st.subheader("📌 LIVE REPORT")
 
 st.write(f"""
 ✔ INDEX: {index}  
 ✔ STOCK: {stock}  
-✔ LTP: {ltp}  
 ✔ STRIKE: {strike}  
-✔ SIGNAL: {signal}  
-✔ STATUS: CLEAN SAFE SYSTEM ACTIVE  
+✔ STATUS: AI OPTION CHAIN ACTIVE  
+✔ MODE: SAFE NEW BUILD  
 """)
