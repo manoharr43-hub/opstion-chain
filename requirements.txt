@@ -2,3 +2,7 @@ streamlit
 pandas
 yfinance
 streamlit-autorefresh
+kiteconnect
+streamlit
+pandas
+numpy
