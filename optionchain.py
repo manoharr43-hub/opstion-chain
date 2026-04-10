@@ -3,23 +3,23 @@ import pandas as pd
 import numpy as np
 
 # =========================
-# APP CONFIG
+# PAGE SETUP
 # =========================
-st.set_page_config(page_title="🔥 NSE BIG PLAYER AI", layout="wide")
+st.set_page_config(page_title="🔥 NSE BIG PLAYER AI v2", layout="wide")
 
 # =========================
-# INDEX DATA
+# INDEX LTP
 # =========================
 def get_ltp(index):
-    data = {
+    ltp_map = {
         "NIFTY": 24015,
         "BANKNIFTY": 48250,
         "FINNIFTY": 20250
     }
-    return data.get(index, 24000)
+    return ltp_map.get(index, 24000)
 
 # =========================
-# OPTION CHAIN SIM DATA
+# OPTION CHAIN (SIM DATA)
 # =========================
 def option_chain(index):
     if index == "NIFTY":
@@ -29,29 +29,29 @@ def option_chain(index):
     else:
         base, step = 20200, 50
 
-    strikes = [base + i * step for i in range(-4, 5)]
+    strikes = [base + i * step for i in range(-5, 6)]
 
     df = pd.DataFrame({
         "Strike": strikes,
-        "CE_OI": np.random.randint(1000, 6000, len(strikes)),
-        "PE_OI": np.random.randint(1000, 6000, len(strikes)),
+        "CE_OI": np.random.randint(1000, 7000, len(strikes)),
+        "PE_OI": np.random.randint(1000, 7000, len(strikes)),
     })
 
     return df
 
 # =========================
-# ATM LOGIC
-# =========================
-def find_atm(df, ltp):
-    return min(df["Strike"], key=lambda x: abs(x - ltp))
-
-# =========================
-# VOLUME ADD
+# ADD VOLUME
 # =========================
 def add_volume(df):
     df = df.copy()
-    df["VOLUME"] = np.random.randint(2000, 15000, len(df))
+    df["VOLUME"] = np.random.randint(2000, 20000, len(df))
     return df
+
+# =========================
+# ATM DETECTION
+# =========================
+def find_atm(df, ltp):
+    return min(df["Strike"], key=lambda x: abs(x - ltp))
 
 # =========================
 # TREND ENGINE
@@ -64,4 +64,22 @@ def trend_engine(df):
         return "🟢 BULLISH"
     elif pe > ce * 1.1:
         return "🔴 BEARISH"
-    return "🟡
+    else:
+        return "🟡 SIDEWAYS"
+
+# =========================
+# PCR CALC
+# =========================
+def pcr(df):
+    return round(df["PE_OI"].sum() / df["CE_OI"].sum(), 2)
+
+# =========================
+# PRESSURE ENGINE
+# =========================
+def pressure_engine(df):
+    ce = df["CE_OI"].sum()
+    pe = df["PE_OI"].sum()
+
+    if ce > pe:
+        return "📈 CE PRESSURE (CALL BUYERS)"
+    elif pe > ce
