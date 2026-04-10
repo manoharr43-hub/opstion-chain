@@ -7,7 +7,7 @@ import time
 # =========================
 # PAGE CONFIG
 # =========================
-st.set_page_config(page_title="🔥 NSE AI STOCK + OPTION CHAIN", layout="wide")
+st.set_page_config(page_title="🔥 NSE AI OPTION + STOCK SCANNER", layout="wide")
 
 # =========================
 # SESSION (NSE SAFE)
@@ -23,7 +23,7 @@ session = requests.Session()
 session.headers.update(headers)
 
 # =========================
-# INDEX LIST (EXPANDED)
+# INDEX LIST
 # =========================
 INDEX_LIST = [
     "NIFTY",
@@ -34,20 +34,61 @@ INDEX_LIST = [
 ]
 
 # =========================
-# STOCK SEARCH (USER INPUT)
+# STOCK SYMBOL FIX
 # =========================
-st.sidebar.title("📊 CONTROL PANEL")
+def normalize_stock(symbol):
+    symbol = symbol.upper().strip()
 
-index = st.sidebar.selectbox("Select Index", INDEX_LIST)
+    common = {
+        "RELIANCE": "RELIANCE.NS",
+        "INFY": "INFY.NS",
+        "TCS": "TCS.NS",
+        "HDFCBANK": "HDFCBANK.NS",
+        "ICICIBANK": "ICICIBANK.NS"
+    }
 
-stock = st.sidebar.text_input("🔎 Search ANY Stock (NSE Symbol)", "RELIANCE")
-
-expiry = st.sidebar.radio("Select Expiry", ["Weekly", "Monthly"])
+    return common.get(symbol, symbol if symbol.endswith(".NS") else symbol + ".NS")
 
 # =========================
-# NSE OPTION CHAIN FETCH
+# STOCK ANALYSIS
 # =========================
-def fetch_option_chain(symbol="NIFTY"):
+def stock_analysis(symbol):
+    try:
+        symbol = normalize_stock(symbol)
+
+        url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}"
+        res = requests.get(url, timeout=5)
+
+        if res.text.strip() == "":
+            return None, None, "⚠ EMPTY RESPONSE"
+
+        data = res.json()
+        result = data.get("quoteResponse", {}).get("result", [])
+
+        if not result:
+            return None, None, "⚠ STOCK NOT FOUND"
+
+        result = result[0]
+
+        price = result.get("regularMarketPrice", 0)
+        change = result.get("regularMarketChangePercent", 0)
+
+        if change > 1:
+            signal = "🟢 CALL SIDE STRONG"
+        elif change < -1:
+            signal = "🔴 PUT SIDE STRONG"
+        else:
+            signal = "🟡 SIDEWAYS"
+
+        return price, change, signal
+
+    except Exception as e:
+        return None, None, f"⚠ ERROR: {str(e)}"
+
+# =========================
+# NSE OPTION CHAIN
+# =========================
+def fetch_option_chain(symbol):
     try:
         url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
 
@@ -65,6 +106,7 @@ def fetch_option_chain(symbol="NIFTY"):
         rows = []
         for i in records:
             strike = i.get("strikePrice")
+
             ce = i.get("CE", {})
             pe = i.get("PE", {})
 
@@ -82,37 +124,24 @@ def fetch_option_chain(symbol="NIFTY"):
         return None
 
 # =========================
-# STOCK SIMPLE MOMENTUM ENGINE
+# SIDEBAR
 # =========================
-def stock_analysis(symbol):
-    try:
-        url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}.NS"
-        data = requests.get(url).json()
+st.sidebar.title("📊 CONTROL PANEL")
 
-        result = data["quoteResponse"]["result"][0]
+index = st.sidebar.selectbox("Select Index", INDEX_LIST)
 
-        price = result.get("regularMarketPrice", 0)
-        change = result.get("regularMarketChangePercent", 0)
+stock = st.sidebar.text_input("🔎 Search ANY Stock", "RELIANCE")
 
-        if change > 1:
-            signal = "🟢 STRONG CALL SIDE (BULLISH)"
-        elif change < -1:
-            signal = "🔴 STRONG PUT SIDE (BEARISH)"
-        else:
-            signal = "🟡 SIDEWAYS"
-
-        return price, change, signal
-
-    except:
-        return None, None, "⚠ DATA NOT FOUND"
+expiry = st.sidebar.radio("Expiry", ["Weekly", "Monthly"])
 
 # =========================
-# OPTION CHAIN LOAD
+# DATA LOAD
 # =========================
 df = fetch_option_chain(index)
 
 if df is None or df.empty:
     st.warning("⚠ NSE BLOCKED → fallback mode")
+
     df = pd.DataFrame({
         "Strike": np.arange(24000, 24150, 50),
         "CE_OI": np.random.randint(2000, 8000, 3),
@@ -127,34 +156,37 @@ if df is None or df.empty:
 price, change, stock_signal = stock_analysis(stock)
 
 # =========================
-# ATM + ANALYSIS
+# ATM
 # =========================
 ltp = df["Strike"].mean()
 atm = min(df["Strike"], key=lambda x: abs(x - ltp))
 
+# =========================
+# PRESSURE ENGINE
+# =========================
 df["CE_PRESSURE"] = df["CE_OI"] / (df["PE_OI"] + 1)
 df["PE_PRESSURE"] = df["PE_OI"] / (df["CE_OI"] + 1)
+
+ce_total = df["CE_OI"].sum()
+pe_total = df["PE_OI"].sum()
 
 # =========================
 # TREND
 # =========================
-ce_total = df["CE_OI"].sum()
-pe_total = df["PE_OI"].sum()
-
 if ce_total > pe_total * 1.1:
-    trend = "🟢 MARKET BULLISH"
+    trend = "🟢 BULLISH"
 elif pe_total > ce_total * 1.1:
-    trend = "🔴 MARKET BEARISH"
+    trend = "🔴 BEARISH"
 else:
     trend = "🟡 SIDEWAYS"
 
 # =========================
 # UI HEADER
 # =========================
-st.title("🔥 NSE AI OPTION CHAIN + STOCK MOVEMENT SCANNER")
+st.title("🔥 NSE AI OPTION CHAIN + STOCK SCANNER")
 
 # =========================
-# LEFT SIDE PANEL OUTPUT
+# LEFT METRICS
 # =========================
 c1, c2, c3 = st.columns(3)
 
@@ -163,23 +195,25 @@ c2.metric("ATM", atm)
 c3.metric("TREND", trend)
 
 # =========================
-# STOCK OUTPUT
+# STOCK PANEL
 # =========================
 st.subheader("📌 STOCK ANALYSIS")
 
-st.metric("Stock", stock)
-st.metric("Price", price)
-st.metric("Change %", change)
-st.success(stock_signal)
+if price is None:
+    st.error(stock_signal)
+else:
+    st.metric("Stock Price", price)
+    st.metric("Change %", change)
+    st.success(stock_signal)
 
 # =========================
-# OPTION CHAIN TABLE
+# OPTION CHAIN
 # =========================
-st.subheader("📊 OPTION CHAIN DATA")
+st.subheader("📊 OPTION CHAIN")
 st.dataframe(df, use_container_width=True)
 
 # =========================
-# CE / PE ZONES
+# ZONES
 # =========================
 st.subheader("🚀 CE STRONG ZONE")
 st.dataframe(df.sort_values("CE_PRESSURE", ascending=False).head(5))
@@ -188,15 +222,15 @@ st.subheader("📉 PE STRONG ZONE")
 st.dataframe(df.sort_values("PE_PRESSURE", ascending=False).head(5))
 
 # =========================
-# FINAL SIGNAL ENGINE
+# FINAL SIGNAL
 # =========================
 st.subheader("🧠 FINAL AI SIGNAL")
 
 if "CALL" in stock_signal and ce_total > pe_total:
-    st.success("🟢 STRONG CALL SIDE CONFIRMED")
+    st.success("🟢 STRONG CALL CONFIRMED")
 elif "PUT" in stock_signal and pe_total > ce_total:
-    st.error("🔴 STRONG PUT SIDE CONFIRMED")
+    st.error("🔴 STRONG PUT CONFIRMED")
 else:
-    st.warning("🟡 MIXED SIGNAL - WAIT")
+    st.warning("🟡 MIXED MARKET")
 
-st.success("✅ UPGRADED SYSTEM READY (INDEX + STOCK + OPTION CHAIN)")
+st.success("✅ SYSTEM READY (OLD CODE SAFE + FULL UPGRADE)")
