@@ -6,20 +6,18 @@ from streamlit_autorefresh import st_autorefresh
 # =========================
 # CONFIG
 # =========================
-st.set_page_config(page_title="FINAL AI TRADING SCANNER", layout="wide")
-st.title("🔥 FINAL AI STOCK SCANNER (STABLE + NO ERROR)")
+st.set_page_config(page_title="FINAL AI SCANNER", layout="wide")
+st.title("🔥 FINAL AI STOCK SCANNER (CRASH FREE VERSION)")
 
 st_autorefresh(interval=120000, key="refresh")
 
 # =========================
-# FETCH DATA
+# DATA FETCH
 # =========================
 def get_data(symbol):
     try:
-        ticker = symbol + ".NS"
-
         df = yf.download(
-            ticker,
+            symbol + ".NS",
             period="5d",
             interval="15m",
             progress=False,
@@ -36,24 +34,36 @@ def get_data(symbol):
 
 
 # =========================
-# AI ENGINE
+# AI ENGINE (FIXED - NO APPLY ERROR)
 # =========================
 def ai_engine(df):
     df = df.copy()
 
+    # remove bad data
+    df = df.dropna()
+
+    # indicators
     df["EMA_5"] = df["Close"].ewm(span=5).mean()
     df["EMA_20"] = df["Close"].ewm(span=20).mean()
     df["EMA_50"] = df["Close"].ewm(span=50).mean()
 
-    def signal(row):
-        if row["EMA_5"] > row["EMA_20"] > row["EMA_50"]:
-            return "🚀 STRONG BUY"
-        elif row["EMA_5"] < row["EMA_20"] < row["EMA_50"]:
-            return "📉 STRONG SELL"
-        else:
-            return "⚖️ SIDEWAYS"
+    # default signal
+    df["SIGNAL"] = "⚖️ SIDEWAYS"
 
-    df["SIGNAL"] = df.apply(signal, axis=1)
+    # BUY condition
+    buy_condition = (
+        (df["EMA_5"] > df["EMA_20"]) &
+        (df["EMA_20"] > df["EMA_50"])
+    )
+
+    # SELL condition
+    sell_condition = (
+        (df["EMA_5"] < df["EMA_20"]) &
+        (df["EMA_20"] < df["EMA_50"])
+    )
+
+    df.loc[buy_condition, "SIGNAL"] = "🚀 STRONG BUY"
+    df.loc[sell_condition, "SIGNAL"] = "📉 STRONG SELL"
 
     return df
 
@@ -66,14 +76,14 @@ symbol = st.sidebar.selectbox(
     ["RELIANCE", "TCS", "INFY", "SBIN", "HDFCBANK", "ICICIBANK", "NIFTY"]
 )
 
-if st.button("🔥 GET LIVE AI SIGNALS"):
+if st.button("🔥 GET AI SIGNALS"):
 
     st.info("Fetching market data...")
 
     df = get_data(symbol)
 
     if df is None:
-        st.error("❌ No data available. Try again after 1 minute.")
+        st.error("❌ No data received. Try again later.")
     else:
         df = ai_engine(df)
 
@@ -84,18 +94,18 @@ if st.button("🔥 GET LIVE AI SIGNALS"):
         # =========================
         col1, col2, col3 = st.columns(3)
 
-        col1.metric("Close Price", round(last["Close"], 2))
+        col1.metric("Close", round(last["Close"], 2))
         col2.metric("EMA 20", round(last["EMA_20"], 2))
         col3.metric("EMA 50", round(last["EMA_50"], 2))
 
         # =========================
         # SIGNAL
         # =========================
-        st.subheader("🔥 LIVE AI SIGNAL")
+        st.subheader("🔥 LIVE SIGNAL")
         st.success(last["SIGNAL"])
 
         # =========================
-        # CHART DATA
+        # DATA
         # =========================
         st.subheader("📊 MARKET DATA")
         st.dataframe(df.tail(50))
