@@ -5,17 +5,19 @@ import time
 from streamlit_autorefresh import st_autorefresh
 
 # =========================
-# PAGE CONFIG
+# CONFIG
 # =========================
-st.set_page_config(page_title="SAFE NSE AI OPTION CHAIN", layout="wide")
+st.set_page_config(page_title="ULTRA NSE AI OPTION CHAIN", layout="wide")
+
+st.title("🔥 ULTRA NSE AI OPTION CHAIN (NEW STABLE VERSION)")
 
 # =========================
-# 5 SECOND LOADING SCREEN
+# LOADING SCREEN
 # =========================
-with st.spinner("🔥 Loading SAFE NSE AI OPTION CHAIN SYSTEM..."):
-    time.sleep(5)
+with st.spinner("Initializing AI System..."):
+    time.sleep(3)
 
-st.success("✅ SAFE NSE AI OPTION CHAIN | STABLE | NO CRASH SYSTEM READY")
+st.success("System Ready 🚀")
 
 # =========================
 # AUTO REFRESH
@@ -23,19 +25,14 @@ st.success("✅ SAFE NSE AI OPTION CHAIN | STABLE | NO CRASH SYSTEM READY")
 st_autorefresh(interval=30000, key="refresh")
 
 # =========================
-# TITLE
-# =========================
-st.title("🔥 SAFE NSE AI OPTION CHAIN DASHBOARD")
-
-# =========================
 # INPUT
 # =========================
 symbol = st.text_input("Enter Symbol (NIFTY / BANKNIFTY)", "NIFTY")
 
 # =========================
-# NSE FETCH SAFE
+# NSE SAFE FETCH
 # =========================
-def get_nse_data(symbol):
+def fetch_nse(symbol):
     try:
         session = requests.Session()
 
@@ -48,7 +45,6 @@ def get_nse_data(symbol):
 
         session.headers.update(headers)
 
-        # cookies
         session.get("https://www.nseindia.com", timeout=5)
 
         url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
@@ -66,39 +62,39 @@ def get_nse_data(symbol):
         return None
 
 # =========================
-# FALLBACK DATA (NO CRASH)
+# SAFE FALLBACK DATA
 # =========================
-def fallback():
+def fallback_data():
     base = 22000
-    data = []
+    rows = []
 
     for i in range(20):
-        data.append({
+        rows.append({
             "strike": base + i * 50,
-            "ce_oi": 1000 + i * 120,
-            "pe_oi": 1200 + i * 100,
-            "ce_change": 200 + i * 10,
-            "pe_change": 180 + i * 15,
+            "ce_oi": 1000 + i * 110,
+            "pe_oi": 1200 + i * 90,
+            "ce_change": 200 + i * 15,
+            "pe_change": 180 + i * 12,
             "ce_ltp": 50 + i,
             "pe_ltp": 45 + i
         })
 
-    return pd.DataFrame(data)
+    return pd.DataFrame(rows)
 
 # =========================
 # PROCESS DATA
 # =========================
 def process(data):
     if not data:
-        return fallback()
+        return fallback_data()
 
     try:
         records = data.get("records", {}).get("data", [])
     except:
-        return fallback()
+        return fallback_data()
 
-    if not records:
-        return fallback()
+    if len(records) == 0:
+        return fallback_data()
 
     rows = []
 
@@ -143,42 +139,35 @@ def ai_engine(df):
 # TREND ENGINE
 # =========================
 def trend(df):
-    if df.empty:
-        return "NO DATA"
-
     ce = df["ce_oi"].sum()
     pe = df["pe_oi"].sum()
 
     if ce > pe:
-        return "📈 BULLISH TREND (CE DOMINANCE)"
+        return "📈 BULLISH MARKET"
     else:
-        return "📉 BEARISH TREND (PE DOMINANCE)"
+        return "📉 BEARISH MARKET"
 
 # =========================
-# RUN BUTTON
+# RUN ANALYSIS
 # =========================
-if st.button("RUN AI ANALYSIS"):
+if st.button("RUN ANALYSIS"):
 
-    data = get_nse_data(symbol)
+    data = fetch_nse(symbol)
     df = process(data)
     df = ai_engine(df)
 
-    # TREND
     st.subheader("🧠 MARKET TREND")
     st.success(trend(df))
 
-    # TABLE
     st.subheader("📊 OPTION CHAIN DATA")
     st.dataframe(df)
 
-    # SIGNALS
     st.subheader("🚀 CE BUY SIGNALS")
     st.dataframe(df[df["signal"] == "🔥 BUY CE"].head(10))
 
     st.subheader("🔴 PE BUY SIGNALS")
     st.dataframe(df[df["signal"] == "🔥 BUY PE"].head(10))
 
-    # MOVERS
     st.subheader("💥 BIG MOVERS")
     st.dataframe(df.sort_values("oi_diff", ascending=False).head(10))
 
@@ -189,4 +178,4 @@ if st.button("RUN AI ANALYSIS"):
 # FOOTER
 # =========================
 st.markdown("---")
-st.markdown("🔥 SAFE NSE AI OPTION CHAIN | STABLE | NO CRASH SYSTEM")
+st.markdown("🔥 ULTRA NSE AI OPTION CHAIN | NEW STABLE VERSION")
