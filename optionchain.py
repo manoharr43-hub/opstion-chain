@@ -1,109 +1,141 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
-from streamlit_autorefresh import st_autorefresh
+import requests
 
 # =========================
-# CONFIG
+# PAGE CONFIG
 # =========================
-st.set_page_config(page_title="SAFE AI TRADING SYSTEM", layout="wide")
-st.title("🔥 SAFE AI TRADING SYSTEM (OLD CODE SAFE + NEW MODULE)")
+st.set_page_config(page_title="Option Chain Only", layout="wide")
 
-st_autorefresh(interval=120000, key="refresh_safe")
 
 # =========================
-# SAFE DATA FETCH (NO NSE)
+# SAFE NSE SESSION
 # =========================
-def get_market_data(symbol):
+def get_session():
+    session = requests.Session()
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://www.nseindia.com/option-chain"
+    }
+
+    session.headers.update(headers)
+
     try:
-        df = yf.download(
-            symbol + ".NS",
-            period="5d",
-            interval="15m",
-            progress=False,
-            threads=False
-        )
+        session.get("https://www.nseindia.com", timeout=5)
+    except:
+        pass
 
-        if df is None or df.empty:
-            return None
+    return session
 
-        return df
+
+# =========================
+# FETCH OPTION CHAIN
+# =========================
+def fetch_option_chain(symbol):
+    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+
+    try:
+        session = get_session()
+        res = session.get(url, timeout=10)
+
+        if res.status_code == 200:
+            return res.json()
+        return None
 
     except:
         return None
 
 
 # =========================
-# AI ENGINE (SAFE VERSION)
+# PROCESS ONLY OPTION DATA
 # =========================
-def ai_engine(df):
-    df = df.copy()
-    df = df.dropna()
+def process_option_chain(data):
+    try:
+        records = data.get("filtered", {}).get("data", [])
+        if not records:
+            return pd.DataFrame()
 
-    # indicators
-    df["EMA_5"] = df["Close"].ewm(span=5).mean()
-    df["EMA_20"] = df["Close"].ewm(span=20).mean()
-    df["EMA_50"] = df["Close"].ewm(span=50).mean()
+        result = []
 
-    # default
-    df["SIGNAL"] = "⚖️ SIDEWAYS"
+        for r in records:
+            ce = r.get("CE", {})
+            pe = r.get("PE", {})
 
-    # BUY condition
-    buy = (df["EMA_5"] > df["EMA_20"]) & (df["EMA_20"] > df["EMA_50"])
+            ce_oi = ce.get("changeinOpenInterest", 0)
+            pe_oi = pe.get("changeinOpenInterest", 0)
 
-    # SELL condition
-    sell = (df["EMA_5"] < df["EMA_20"]) & (df["EMA_20"] < df["EMA_50"])
+            result.append({
+                "Strike Price": r.get("strikePrice"),
+                "CE OI": ce_oi,
+                "PE OI": pe_oi,
+                "OI Difference": pe_oi - ce_oi,
+                "Trend": "Bullish" if pe_oi > ce_oi else "Bearish"
+            })
 
-    df.loc[buy, "SIGNAL"] = "🚀 BUY"
-    df.loc[sell, "SIGNAL"] = "📉 SELL"
+        return pd.DataFrame(result)
 
-    return df
+    except:
+        return pd.DataFrame()
+
+
+# =========================
+# FALLBACK DATA (SAFE)
+# =========================
+def fallback(symbol):
+    base = 22000 if symbol == "NIFTY" else 45000
+
+    data = []
+    for i in range(15):
+        data.append({
+            "Strike Price": base + i * 50,
+            "CE OI": 1000 - i * 30,
+            "PE OI": 800 + i * 40,
+            "OI Difference": (800 + i * 40) - (1000 - i * 30),
+            "Trend": "Bullish" if i % 2 == 0 else "Bearish"
+        })
+
+    return pd.DataFrame(data)
 
 
 # =========================
 # UI
 # =========================
-symbol = st.sidebar.selectbox(
-    "Select Stock",
-    ["RELIANCE", "TCS", "INFY", "SBIN", "HDFCBANK", "ICICIBANK"]
-)
+st.title("🚀 OPTION CHAIN ONLY (SAFE VERSION)")
 
-if st.button("🔥 RUN SAFE ANALYSIS"):
+symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
 
-    st.info("Analyzing market safely...")
+if st.button("RUN OPTION CHAIN"):
 
-    df = get_market_data(symbol)
+    st.info("Fetching option chain data...")
 
-    if df is None:
-        st.error("❌ Data not available (fallback mode active)")
+    raw = fetch_option_chain(symbol)
+    df = process_option_chain(raw)
+
+    # =========================
+    # SAFE FALLBACK
+    # =========================
+    if df is None or df.empty:
+        st.warning("NSE blocked → showing fallback data")
+        df = fallback(symbol)
+
+    # =========================
+    # SHOW DATA
+    # =========================
+    st.success("Data loaded")
+
+    st.subheader(f"{symbol} Option Chain")
+    st.dataframe(df, use_container_width=True)
+
+    # =========================
+    # SIMPLE VIEW
+    # =========================
+    ce_total = df["CE OI"].sum()
+    pe_total = df["PE OI"].sum()
+
+    if pe_total > ce_total:
+        st.markdown("### 📈 Bullish Bias")
     else:
-        df = ai_engine(df)
+        st.markdown("### 📉 Bearish Bias")
 
-        last = df.iloc[-1]
 
-        # =========================
-        # METRICS
-        # =========================
-        col1, col2, col3 = st.columns(3)
-
-        col1.metric("Close", round(last["Close"], 2))
-        col2.metric("EMA 20", round(last["EMA_20"], 2))
-        col3.metric("EMA 50", round(last["EMA_50"], 2))
-
-        # =========================
-        # SIGNAL
-        # =========================
-        st.subheader("🔥 LIVE SIGNAL")
-        st.success(last["SIGNAL"])
-
-        # =========================
-        # TABLE
-        # =========================
-        st.subheader("📊 DATA VIEW")
-        st.dataframe(df.tail(50))
-
-# =========================
-# FOOTER
-# =========================
-st.markdown("---")
-st.caption("✔ SAFE MODULE VERSION | ✔ NO NSE BLOCK | ✔ OLD CODE NOT MODIFIED")
+st.info("Educational Purpose Only")
