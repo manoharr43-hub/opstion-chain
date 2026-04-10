@@ -1,59 +1,24 @@
 import streamlit as st
 import pandas as pd
-import requests
-import time
+from nsepython import option_chain
 from streamlit_autorefresh import st_autorefresh
 
 # =========================
 # CONFIG
 # =========================
-st.set_page_config(page_title="NSE AI OPTION CHAIN PRO", layout="wide")
-st.title("🔥 NSE AI OPTION CHAIN PRO (NO BLOCK VERSION)")
+st.set_page_config(page_title="ULTRA NSE AI OPTION CHAIN V3", layout="wide")
+st.title("🔥 ULTRA NSE AI OPTION CHAIN V3 (STABLE + NO BLOCK)")
 
-# auto refresh safe
+# refresh every 60 sec
 st_autorefresh(interval=60000, key="refresh")
 
 # =========================
-# NSE FETCH (ROBUST VERSION)
+# FETCH DATA (STABLE API)
 # =========================
-def fetch_nse(symbol):
+def fetch_data(symbol):
     try:
-        session = requests.Session()
-
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Accept": "*/*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://www.nseindia.com/option-chain",
-            "Connection": "keep-alive",
-        }
-
-        session.headers.update(headers)
-
-        # warm up cookies
-        session.get("https://www.nseindia.com", timeout=10)
-        time.sleep(1)
-
-        indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"]
-
-        if symbol.upper() in indices:
-            url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol.upper()}"
-        else:
-            url = f"https://www.nseindia.com/api/option-chain-equities?symbol={symbol.upper()}"
-
-        for _ in range(4):
-            res = session.get(url, timeout=10)
-
-            if res.status_code == 200:
-                return res.json()
-
-            elif res.status_code in [401, 403]:
-                time.sleep(2)
-                session.get("https://www.nseindia.com", timeout=10)
-                continue
-
-        return None
-
+        data = option_chain(symbol.upper())
+        return data
     except Exception as e:
         st.error(f"Fetch Error: {e}")
         return None
@@ -90,15 +55,15 @@ def process_data(data):
 # =========================
 # AI SIGNAL ENGINE
 # =========================
-def ai_signals(df):
+def ai_engine(df):
     if df.empty:
         return df
 
     def signal(row):
         if row["PE_CHG_OI"] > row["CE_CHG_OI"] * 1.7:
-            return "🚀 BUY (BULLISH)"
+            return "🚀 STRONG BUY"
         elif row["CE_CHG_OI"] > row["PE_CHG_OI"] * 1.7:
-            return "📉 SELL (BEARISH)"
+            return "📉 STRONG SELL"
         else:
             return "⚖️ NEUTRAL"
 
@@ -111,22 +76,22 @@ def ai_signals(df):
 # UI
 # =========================
 symbol = st.sidebar.selectbox(
-    "Select Index / Stock",
-    ["NIFTY", "BANKNIFTY", "FINNIFTY", "RELIANCE", "SBIN", "TCS"]
+    "Select Symbol",
+    ["NIFTY", "BANKNIFTY", "FINNIFTY"]
 )
 
-if st.button("🔥 GET AI SIGNALS"):
-    with st.spinner("Fetching NSE Data..."):
+if st.button("🔥 GET LIVE AI SIGNALS"):
 
-        data = fetch_nse(symbol)
+    with st.spinner("Fetching live NSE data..."):
+        data = fetch_data(symbol)
         df = process_data(data)
 
         if not df.empty:
 
-            df = ai_signals(df)
+            df = ai_engine(df)
 
             # =========================
-            # METRICS
+            # MARKET SUMMARY
             # =========================
             ce_total = df["CE_OI"].sum()
             pe_total = df["PE_OI"].sum()
@@ -137,7 +102,6 @@ if st.button("🔥 GET AI SIGNALS"):
             col2.metric("PE OI", f"{pe_total:,}")
             col3.metric("PCR", round(pcr, 2))
 
-            # market sentiment
             if pcr > 1.2:
                 st.success("🔥 STRONG BULLISH MARKET")
             elif pcr < 0.8:
@@ -146,14 +110,11 @@ if st.button("🔥 GET AI SIGNALS"):
                 st.warning("⚖️ SIDEWAYS MARKET")
 
             # =========================
-            # SIGNAL TABLE
+            # TOP SIGNALS
             # =========================
-            st.subheader("🔥 AI SIGNALS")
-            st.dataframe(
-                df[df["SIGNAL"] != "⚖️ NEUTRAL"]
-                .sort_values("OI_DIFF", ascending=False)
-                .head(15)
-            )
+            st.subheader("🔥 TOP AI SIGNALS")
+            signals = df[df["SIGNAL"] != "⚖️ NEUTRAL"]
+            st.dataframe(signals.sort_values("OI_DIFF", ascending=False).head(15))
 
             # =========================
             # FULL DATA
@@ -162,7 +123,7 @@ if st.button("🔥 GET AI SIGNALS"):
             st.dataframe(df)
 
         else:
-            st.error("❌ Data not loaded. NSE blocked or market closed.")
+            st.error("❌ No data received (try again after some time)")
 
 st.markdown("---")
 st.caption("⚠️ Educational tool only. Not financial advice.")
