@@ -1,189 +1,90 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import requests
 import yfinance as yf
-import time
+
+st.set_page_config(page_title="🔥 NSE AI Smart Money Scanner", layout="wide")
 
 # =========================
-# CONFIG
+# DATA LOADER
 # =========================
-st.set_page_config(page_title="🔥 NSE AI V4 STABLE", layout="wide")
-st.title("🔥 NSE AI TRADING SYSTEM V4 (STABLE + SAFE)")
+@st.cache_data
+def load_data(symbol="^NSEI", period="5d", interval="5m"):
+    df = yf.download(symbol, period=period, interval=interval)
+    df.dropna(inplace=True)
+    return df
 
 # =========================
-# SAFE DATA FETCH
-# =========================
-def get_data(symbol):
-    try:
-        df = yf.download(symbol, period="5d", interval="5m", progress=False)
-        df = df.dropna()
-        return df
-    except:
-        return pd.DataFrame()
-
-# =========================
-# SAFE OPTION CHAIN
-# =========================
-def option_chain(symbol="NIFTY"):
-    try:
-        url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
-        headers = {"User-Agent": "Mozilla/5.0"}
-
-        session = requests.Session()
-        session.get("https://www.nseindia.com", headers=headers)
-
-        res = session.get(url, headers=headers, timeout=5)
-        return res.json()
-    except:
-        return None
-
-# =========================
-# PARSE OPTION CHAIN
-# =========================
-def parse_oc(data):
-    calls, puts = [], []
-
-    for i in data.get("records", {}).get("data", []):
-        if "CE" in i:
-            calls.append(i["CE"])
-        if "PE" in i:
-            puts.append(i["PE"])
-
-    return pd.DataFrame(calls), pd.DataFrame(puts)
-
-# =========================
-# SMART MONEY FLOW (SAFE)
+# SMART MONEY LOGIC (FIXED)
 # =========================
 def smart_money(df):
-    if df is None or df.empty or len(df) < 2:
-        return 0, 0, "NO DATA 🟡"
-
-    change = df["Close"].pct_change().fillna(0).iloc[-1]
-
-    fii = np.random.randint(-400, 1400)
-    dii = np.random.randint(-300, 900)
-
-    if change > 0:
-        trend = "BULLISH FLOW 🟢"
-    elif change < 0:
-        trend = "BEARISH FLOW 🔴"
-    else:
-        trend = "NEUTRAL 🟡"
-
-    return fii, dii, trend
-
-# =========================
-# SCALPING SIGNAL ENGINE
-# =========================
-def scalping_signal(df):
-    if df is None or df.empty or len(df) < 20:
-        return "NO SIGNAL"
-
     df = df.copy()
-    df["ema5"] = df["Close"].ewm(span=5).mean()
-    df["ema20"] = df["Close"].ewm(span=20).mean()
 
-    volume_ok = df["Volume"].iloc[-1] > df["Volume"].mean()
+    df["change"] = df["Close"] - df["Open"]
+    df["volume_change"] = df["Volume"].diff().fillna(0)
 
-    if df["ema5"].iloc[-1] > df["ema20"].iloc[-1] and volume_ok:
-        return "🟢 BUY SIGNAL"
+    # SAFE scalar calculations (NO Series error)
+    bullish_volume = df.loc[df["change"] > 0, "Volume"].sum()
+    bearish_volume = df.loc[df["change"] < 0, "Volume"].sum()
+
+    total_change = df["change"].sum()
+
+    if total_change > 0:
+        trend = "🟢 BULLISH"
     else:
-        return "🔴 SELL SIGNAL"
+        trend = "🔴 BEARISH"
+
+    return bullish_volume, bearish_volume, trend
 
 # =========================
-# SIMPLE PRICE PREDICTOR
+# BIG MOVERS
 # =========================
-def predict_price(df):
-    if df is None or df.empty or len(df) < 2:
-        return 0
+def detect_big_moves(df, threshold=0.3):
+    df = df.copy()
+    df["pct_change"] = df["Close"].pct_change() * 100
 
-    y = df["Close"].values
-    x = np.arange(len(y))
-
-    slope = (y[-1] - y[0]) / max(len(y), 1)
-
-    return float(y[-1] + slope)
+    big_moves = df[abs(df["pct_change"]) > threshold].copy()
+    return big_moves
 
 # =========================
-# AUTO REFRESH SAFE
+# STREAMLIT UI
 # =========================
-def auto_refresh():
-    time.sleep(15)
-    st.rerun()
+st.title("🔥 NSE AI Smart Money + Big Movers Scanner")
+
+symbol = st.text_input("Enter Symbol", "^NSEI")
+
+df = load_data(symbol)
+
+st.subheader("📊 Live Chart Data")
+st.dataframe(df.tail(20))
 
 # =========================
-# UI INPUT
+# SMART MONEY OUTPUT
 # =========================
-symbol = st.selectbox("Select Index", ["^NSEI", "^NSEBANK"])
+bullish, bearish, trend = smart_money(df)
 
-df = get_data(symbol)
-
-# =========================
-# VALIDATION
-# =========================
-if df is None or df.empty:
-    st.error("No Data Found / API Issue")
-    st.stop()
+st.subheader("🧠 Smart Money Analysis")
+st.write("Bullish Volume:", bullish)
+st.write("Bearish Volume:", bearish)
+st.success(f"Market Trend: {trend}")
 
 # =========================
-# CHART
+# BIG MOVERS
 # =========================
-st.subheader("📊 LIVE CHART")
-st.line_chart(df["Close"])
+st.subheader("⚡ Big Movers Detection")
+big_moves = detect_big_moves(df)
 
-# =========================
-# SMART MONEY
-# =========================
-st.subheader("🧠 SMART MONEY FLOW")
-fii, dii, trend = smart_money(df)
-
-st.metric("FII FLOW", fii)
-st.metric("DII FLOW", dii)
-st.success(trend)
-
-# =========================
-# SIGNAL
-# =========================
-st.subheader("📊 SCALPING SIGNAL")
-sig = scalping_signal(df)
-st.success(sig)
-
-# =========================
-# PREDICTION
-# =========================
-st.subheader("⚡ AI PRICE PREDICTION")
-pred = predict_price(df)
-st.info(f"Next Expected Price: {pred:.2f}")
-
-# =========================
-# OPTION CHAIN
-# =========================
-st.subheader("🟢 OPTION CHAIN")
-
-oc = option_chain("NIFTY")
-
-if oc:
-    try:
-        calls, puts = parse_oc(oc)
-
-        st.write("CALLS")
-        st.dataframe(calls.head(10))
-
-        st.write("PUTS")
-        st.dataframe(puts.head(10))
-
-    except:
-        st.warning("Option chain parsing error")
+if not big_moves.empty:
+    st.dataframe(big_moves.tail(20))
 else:
-    st.warning("Option chain not available (NSE block / timeout)")
+    st.warning("No big moves detected now")
 
 # =========================
-# FOOTER STATUS
+# SIMPLE SIGNAL
 # =========================
-st.info("V4 Stable System Running... Refresh in 15 sec")
+last = df.iloc[-1]
 
-# =========================
-# AUTO REFRESH CALL
-# =========================
-auto_refresh()
+if last["Close"] > last["Open"]:
+    st.success("📈 BUY Pressure Detected")
+else:
+    st.error("📉 SELL Pressure Detected")
