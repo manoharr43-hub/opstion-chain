@@ -5,93 +5,98 @@ import numpy as np
 # =========================
 # PAGE CONFIG
 # =========================
-st.set_page_config(page_title="🔥 NSE AI Side Indicator", layout="wide")
+st.set_page_config(page_title="🔥 NSE Trend Scanner", layout="wide")
 
 # =========================
-# SMART DATA (INDEX BASED)
+# DATA (NIFTY / MID NIFTY)
 # =========================
-def load_data(symbol):
-    if symbol == "NIFTY":
-        df = pd.DataFrame({
-            "Strike": [22000, 22100, 22200, 22300, 22400],
-            "CE OI": [1200, 1500, 1100, 900, 1300],
-            "PE OI": [1000, 1300, 1400, 1600, 1700],
-        })
-    else:  # BANKNIFTY
-        df = pd.DataFrame({
-            "Strike": [46000, 46100, 46200, 46300, 46400],
-            "CE OI": [2000, 1800, 2200, 2100, 2500],
-            "PE OI": [1700, 1900, 1600, 2000, 2300],
+def load_data(index):
+    if index == "NIFTY":
+        return pd.DataFrame({
+            "Strike": [22000, 22100, 22200, 22300],
+            "CE OI": [1200, 1500, 1100, 900],
+            "PE OI": [1000, 1300, 1400, 1600],
         })
 
-    return df
+    else:  # MID NIFTY
+        return pd.DataFrame({
+            "Strike": [24000, 24100, 24200, 24300],
+            "CE OI": [900, 1100, 1300, 1200],
+            "PE OI": [800, 1000, 1500, 1700],
+        })
 
 # =========================
-# EXPIRY (SIMPLE)
+# TREND CALCULATION
 # =========================
-def get_expiries():
-    return [
-        "Weekly-10 Apr",
-        "Weekly-17 Apr",
-        "Monthly-24 Apr"
-    ]
+def get_trend(df):
+    ce = df["CE OI"].sum()
+    pe = df["PE OI"].sum()
+
+    if ce > pe * 1.1:
+        return "🟢 BULLISH"
+    elif pe > ce * 1.1:
+        return "🔴 BEARISH"
+    else:
+        return "🟡 SIDEWAYS"
 
 # =========================
 # HEADER
 # =========================
-st.title("🔥 NSE AI Side Indicator System")
+st.title("🔥 NSE AI Trend Scanner (NIFTY + MID NIFTY)")
 
 # =========================
-# SIDEBAR CONTROLS
+# LEFT SIDEBAR
 # =========================
-st.sidebar.markdown("## 📊 CONTROL PANEL")
+st.sidebar.markdown("## 📊 INDEX PANEL")
 
-symbol = st.sidebar.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
+index = st.sidebar.selectbox(
+    "Select Index",
+    ["NIFTY", "MID NIFTY"]
+)
 
-expiries = get_expiries()
-expiry = st.sidebar.selectbox("📅 Select Expiry", expiries)
+expiry = st.sidebar.selectbox(
+    "📅 Expiry",
+    ["Weekly", "Monthly"]
+)
 
 # =========================
-# LOAD INDEX DATA
+# LOAD DATA
 # =========================
-df = load_data(symbol)
+df = load_data(index)
 
-# =========================
-# AMI + SIGNAL
-# =========================
 df["AMI"] = (df["CE OI"] + df["PE OI"]) / 2
 
-df["Signal"] = np.where(df["CE OI"] > df["PE OI"], "CALL 📈", "PUT 📉")
+# =========================
+# TREND ANALYSIS
+# =========================
+trend = get_trend(df)
 
 # =========================
-# SIDE INDICATOR (IMPORTANT FIX)
+# LEFT SIDE STATUS
 # =========================
-if symbol == "NIFTY":
-    side_status = "🟢 NIFTY ACTIVE MODE"
-    market_bias = "Trend: INDEX BASED MOVEMENT"
-else:
-    side_status = "🟠 BANKNIFTY ACTIVE MODE"
-    market_bias = "Trend: BANK HEAVY VOLATILITY"
+st.sidebar.markdown("---")
+st.sidebar.subheader("📌 Market Status")
+
+st.sidebar.success(f"Index: {index}")
+st.sidebar.info(f"Trend: {trend}")
+st.sidebar.warning(f"Expiry: {expiry}")
 
 # =========================
-# DASHBOARD HEADER INDICATOR
+# MAIN DASHBOARD
 # =========================
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.metric("Index", symbol)
+    st.metric("Index", index)
 
 with col2:
-    st.metric("Expiry", expiry)
+    st.metric("Trend", trend)
 
 with col3:
-    st.metric("Mode", "LIVE")
-
-st.success(side_status)
-st.info(market_bias)
+    st.metric("Status", "LIVE")
 
 # =========================
-# MAIN DATA
+# TABLE
 # =========================
 st.subheader("📊 Option Chain Data")
 
@@ -100,18 +105,23 @@ st.dataframe(df, use_container_width=True)
 # =========================
 # AMI CHART
 # =========================
-st.subheader("📈 AMI Trend")
+st.subheader("📈 AMI Movement")
 
 st.line_chart(df["AMI"])
 
 # =========================
-# SIGNAL TABLE
+# TREND REPORT (BOTTOM)
 # =========================
-st.subheader("🎯 Buy / Sell Signal")
+st.subheader("📌 Trend Report")
 
-st.dataframe(df[["Strike", "AMI", "Signal"]], use_container_width=True)
+if trend == "🟢 BULLISH":
+    st.success("Market is STRONG BUYING pressure 📈")
+elif trend == "🔴 BEARISH":
+    st.error("Market is STRONG SELLING pressure 📉")
+else:
+    st.warning("Market is SIDEWAYS (no clear trend) ↔️")
 
 # =========================
 # FINAL STATUS
 # =========================
-st.success("✅ Side Indicator Working | NIFTY & BANKNIFTY Auto Switch Enabled")
+st.success("✅ NIFTY + MID NIFTY + Trend System Active")
