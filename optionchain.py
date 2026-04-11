@@ -1,87 +1,52 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import yfinance as yf
-from streamlit_autorefresh import st_autorefresh
-
 # ===============================
-# ✅ MUST BE FIRST
+# SIGNALS + TABLE (FIXED)
 # ===============================
-st.set_page_config(page_title="MANOHAR AI SCANNER", layout="wide")
+st.subheader("🔥 AI SIGNALS")
 
-# ===============================
-# AUTO REFRESH
-# ===============================
-st_autorefresh(interval=5 * 60 * 1000, key="final_refresh")
-
-# ===============================
-# TITLE
-# ===============================
-st.title("🚀 MANOHAR FINAL AI MARKET SCANNER")
-
-# ===============================
-# SAFE LIVE INDEX DATA
-# ===============================
-def get_live_index():
-    symbols = {
-        "NIFTY": "^NSEI",
-        "BANKNIFTY": "^NSEBANK",
-        "FINNIFTY": "^NSEI",
-        "MIDCAPNIFTY": "^NSEI"
-    }
-
-    result = {}
-
-    for name, symbol in symbols.items():
-        try:
-            data = yf.Ticker(symbol).history(period="1d", interval="5m")
-
-            if data.empty:
-                raise Exception("No data")
-
-            last = data.iloc[-1]
-            prev = data.iloc[-2]
-
-            result[name] = {
-                "price": round(last["Close"], 2),
-                "chg": round(last["Close"] - prev["Close"], 2),
-                "vol": int(last["Volume"]) if last["Volume"] > 0 else 100000
-            }
-
-        except:
-            result[name] = {
-                "price": 24500,
-                "chg": 10,
-                "vol": 100000
-            }
-
-    return result
-
-idx_data = get_live_index()
-
-# ===============================
-# DISPLAY INDEX
-# ===============================
 try:
-    c1, c2, c3, c4 = st.columns(4)
+    if df is None or df.empty:
+        st.warning("⚠️ No data available")
+    else:
+        signals_found = False
 
-    c1.metric("NIFTY", idx_data["NIFTY"]["price"], idx_data["NIFTY"]["chg"])
-    c2.metric("BANKNIFTY", idx_data["BANKNIFTY"]["price"], idx_data["BANKNIFTY"]["chg"])
-    c3.metric("FINNIFTY", idx_data["FINNIFTY"]["price"], idx_data["FINNIFTY"]["chg"])
-    c4.metric("MIDCAPNIFTY", idx_data["MIDCAPNIFTY"]["price"], idx_data["MIDCAPNIFTY"]["chg"])
+        for _, row in df.iterrows():
+            ce = row.get("CE_OI", 0)
+            pe = row.get("PE_OI", 0)
 
-except:
-    st.error("Index display error")
+            # SAFE CHECK
+            if ce is None or pe is None:
+                continue
 
-st.divider()
+            if ce > pe * 2:
+                signals_found = True
+                entry = row.get("PE_LTP", 0)
+                st.error(f"{selected_idx} {row['Strike']} PE SIGNAL")
 
-# ===============================
-# SELECT INDEX
-# ===============================
-selected_idx = st.sidebar.selectbox(
-    "SELECT INDEX",
-    ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCAPNIFTY"]
-)
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("ENTRY", entry)
+                c2.metric("SL", round(entry * 0.8, 2))
+                c3.metric("TG1", round(entry * 1.2, 2))
+                c4.metric("TG2", round(entry * 1.5, 2))
 
-spot = idx_data.get(selected_idx, {}).get("price", 24500)
-volume = idx_data.get(selected_idx, {}).get("vol", 100000)
+            elif pe > ce * 2:
+                signals_found = True
+                entry = row.get("CE_LTP", 0)
+                st.success(f"{selected_idx} {row['Strike']} CE SIGNAL")
+
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("ENTRY", entry)
+                c2.metric("SL", round(entry * 0.8, 2))
+                c3.metric("TG1", round(entry * 1.2, 2))
+                c4.metric("TG2", round(entry * 1.5, 2))
+
+        # 👉 fallback message
+        if not signals_found:
+            st.info("No strong signals — showing data below")
+
+        # 👉 ALWAYS SHOW TABLE
+        st.subheader("📊 DATA TABLE")
+        st.dataframe(df.set_index("Strike"), use_container_width=True)
+
+except Exception as e:
+    st.error("⚠️ Error in signals section")
+    st.write(e)
