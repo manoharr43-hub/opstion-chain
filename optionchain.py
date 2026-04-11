@@ -5,7 +5,7 @@ import numpy as np
 # =========================
 # PAGE CONFIG
 # =========================
-st.set_page_config(page_title="Stable Option Chain AI with Greeks", layout="wide")
+st.set_page_config(page_title="Stable Option Chain AI", layout="wide")
 
 
 # =========================
@@ -21,7 +21,7 @@ def generate_data(symbol):
         "Strike Price": strikes,
         "CE OI": np.random.randint(500, 2000, 20),
         "PE OI": np.random.randint(500, 2000, 20),
-        # Adding Greeks Logic (Simulated for Education)
+        # Adding Greeks Logic (Simulated)
         "Delta": np.random.uniform(0.1, 0.9, 20).round(2),
         "Theta": np.random.uniform(-50, -10, 20).round(2),
         "Gamma": np.random.uniform(0.001, 0.005, 20).round(4),
@@ -42,10 +42,10 @@ if "df" not in st.session_state:
 
 
 # =========================
-# UI
+# UI HEADER
 # =========================
 st.title("🚀 ULTRA STABLE OPTION CHAIN + GREEKS")
-st.write("ఈ స్కానర్ ఇప్పుడు Delta, Theta, Gamma మరియు Vega వాల్యూస్‌ను కూడా చూపిస్తుంది.")
+st.write("ఈ వెర్షన్‌లో ఎర్రర్స్ రాకుండా స్టైలింగ్ ఫిక్స్ చేయబడింది.")
 
 symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
 
@@ -64,57 +64,57 @@ if st.session_state.data_loaded:
 
     df = st.session_state.df.copy()
 
-    # SAFE CALCULATION
+    # CALCULATIONS
     df["OI Diff"] = df["PE OI"] - df["CE OI"]
     df["Trend"] = np.where(df["OI Diff"] > 0, "Bullish", "Bearish")
 
-    st.success("✅ Data Loaded Successfully with Greeks")
+    st.success(f"✅ {symbol} Data Loaded Successfully")
 
-    # METRICS ROW
-    col1, col2, col3, col4 = st.columns(4)
-    avg_delta = df["Delta"].mean().round(2)
-    avg_theta = df["Theta"].mean().round(2)
-    
-    col1.metric("Avg Delta", avg_delta)
-    col2.metric("Avg Theta (Time Decay)", avg_theta)
-    col3.metric("Total CE OI", df["CE OI"].sum())
-    col4.metric("Total PE OI", df["PE OI"].sum())
+    # TOP METRICS
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total CE OI", f"{df['CE OI'].sum():,}")
+    m2.metric("Total PE OI", f"{df['PE OI'].sum():,}")
+    m3.metric("Avg Delta", df["Delta"].mean().round(2))
+    m4.metric("Avg Theta", df["Theta"].mean().round(2))
 
-    # TABLE
-    st.subheader("📊 Option Chain & Greeks Data")
-    # Styling for better visibility
-    st.dataframe(df.style.background_gradient(subset=['OI Diff'], cmap='RdYlGn'), use_container_width=True)
+    # DATA TABLE (Fixed: No background_gradient to avoid errors)
+    st.subheader("📊 Option Chain & Greeks Table")
+    st.dataframe(df, use_container_width=True)
 
-    # CHART SECTION
+    # VISUAL CHARTS
     st.divider()
-    c1, c2 = st.columns(2)
+    col_a, col_b = st.columns(2)
     
-    with c1:
-        st.subheader("📈 OI Difference Heat")
-        st.bar_chart(df["OI Diff"])
+    with col_a:
+        st.subheader("📈 OI Difference (Strength)")
+        st.bar_chart(df.set_index("Strike Price")["OI Diff"])
     
-    with c2:
-        st.subheader("📉 Theta Decay Impact")
-        st.line_chart(df["Theta"])
+    with col_b:
+        st.subheader("⏳ Theta Decay (Time Value)")
+        st.line_chart(df.set_index("Strike Price")["Theta"])
 
-    # SUMMARY
+    # MARKET SENTIMENT
+    st.divider()
     ce_total = df["CE OI"].sum()
     pe_total = df["PE OI"].sum()
 
-    st.subheader("🧠 Market Summary")
     if pe_total > ce_total:
-        st.markdown("### 🟢 Bullish Market Bias (Put Writers are Strong)")
+        st.markdown("### 🟢 Market Sentiment: **BULLISH**")
+        st.info("పుట్ రైటర్లు (PE) ఎక్కువగా ఉన్నారు, మార్కెట్ సపోర్ట్ తీసుకునే అవకాశం ఉంది.")
     else:
-        st.markdown("### 🔴 Bearish Market Bias (Call Writers are Strong)")
+        st.markdown("### 🔴 Market Sentiment: **BEARISH**")
+        st.warning("కాల్ రైటర్లు (CE) ఎక్కువగా ఉన్నారు, మార్కెట్ రెసిస్టెన్స్ ఫేస్ చేసే అవకాశం ఉంది.")
 
 # =========================
-# INFO
+# SIDEBAR INFO
 # =========================
-st.sidebar.header("Options Greeks Guide")
-st.sidebar.info("""
-- **Delta:** ధర ఎంత మారుతుందో చెబుతుంది.
-- **Theta:** సమయం గడిచేకొద్దీ ప్రీమియం ఎంత తగ్గుతుందో చెబుతుంది.
-- **Gamma:** డెల్టా మారే వేగాన్ని చెబుతుంది.
-- **Vega:** వోలటాలిటీ (Volatility) ప్రభావాన్ని చెబుతుంది.
-""")
-st.info("⚠️ Educational Purpose Only - Greeks values are simulated for display stability.")
+with st.sidebar:
+    st.header("Greeks Guide")
+    st.write("**Delta:** దిశను సూచిస్తుంది.")
+    st.write("**Theta:** టైమ్ డికే (Time Decay).")
+    st.write("**Gamma:** వేగాన్ని సూచిస్తుంది.")
+    st.write("**Vega:** వోలటాలిటీని సూచిస్తుంది.")
+    st.divider()
+    st.info("Developed for Manohar's NSE Pro Scanner")
+
+st.info("⚠️ Educational Purpose Only - Stable Version")
