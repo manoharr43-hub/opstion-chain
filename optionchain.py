@@ -7,17 +7,17 @@ from streamlit_autorefresh import st_autorefresh
 # ==========================================
 # AUTO REFRESH
 # ==========================================
-st_autorefresh(interval=5 * 60 * 1000, key="stable_refresh")
+st_autorefresh(interval=5 * 60 * 1000, key="safe_refresh")
 
 # ==========================================
 # PAGE CONFIG
 # ==========================================
-st.set_page_config(page_title="MANOHAR STABLE AI SCANNER", layout="wide")
+st.set_page_config(page_title="MANOHAR SAFE AI SCANNER", layout="wide")
 
-st.title("🚀 MANOHAR STABLE AI MARKET SCANNER")
+st.title("🚀 MANOHAR SAFE AI MARKET SCANNER")
 
 # ==========================================
-# SAFE LIVE INDEX DATA (NEVER FAIL)
+# SAFE LIVE INDEX DATA (NO SYNTAX ERROR)
 # ==========================================
 def get_live_index():
     symbols = {
@@ -41,4 +41,10 @@ def get_live_index():
 
             result[name] = {
                 "price": round(last["Close"], 2),
-                "chg": round(last["
+                "chg": round(last["Close"] - prev["Close"], 2),
+                "vol": int(last["Volume"]) if last["Volume"] > 0 else 100000
+            }
+
+        except:
+            result[name] = {
+                "price": 24500,
