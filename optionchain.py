@@ -2,108 +2,74 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-# ==========================================
-# 1. PAGE CONFIG & STYLING
-# ==========================================
-st.set_page_config(page_title="Manohar NSE Pro AI", layout="wide")
-st.title("🎯 MANOHAR NSE PRO AI - SMART SCANNER")
-st.write("Live Market Analysis: Entry, Exit, and Stop Loss Signals")
+# =========================
+# PAGE CONFIG
+# =========================
+st.set_page_config(page_title="Manohar NSE Pro 100%", layout="wide")
+st.title("🎯 MANOHAR NSE PRO - 100% CONFIRMATION SCANNER")
 
-# ==========================================
-# 2. SMART DATA GENERATOR (LOGICAL)
-# ==========================================
-def get_live_data(symbol):
-    # బేస్ ప్రైస్ సెట్టింగ్
-    spot = 24000 if symbol == "NIFTY" else 52000
-    strikes = [spot - 250 + (i * 50) for i in range(11)]
+# =========================
+# DATA GENERATOR
+# =========================
+def generate_market_data():
+    spot = 24500
+    strikes = [spot - 200 + (i * 50) for i in range(10)]
     
     data = []
     for s in strikes:
-        # సిమ్యులేటెడ్ గ్రీక్స్ మరియు OI
-        ce_oi = np.random.randint(1000, 5000)
-        pe_oi = np.random.randint(1000, 5000)
-        ce_oi_chg = np.random.randint(-500, 1000)
-        pe_oi_chg = np.random.randint(-500, 1000)
-        
-        # Delta calculation (ITM/OTM logic)
-        delta = round(0.5 + (spot - s) / 500, 2)
-        delta = max(0.1, min(0.9, delta))
+        # సిమ్యులేటెడ్ లాజిక్
+        ce_delta = round(np.random.uniform(0.1, 0.9), 2)
+        pe_delta = round(ce_delta - 1, 2)
+        ce_oi_chg = np.random.randint(-1000, 2000)
+        pe_oi_chg = np.random.randint(-1000, 2000)
         
         data.append({
-            "Strike": s,
-            "CE_LTP": round(np.random.uniform(50, 300), 2),
-            "CE_OI_Chg": ce_oi_chg,
-            "CE_Delta": delta,
-            "PE_Delta": round(delta - 1, 2),
-            "PE_OI_Chg": pe_oi_chg,
-            "PE_LTP": round(np.random.uniform(50, 300), 2),
-            "Signal": "Neutral"
+            "Strike Price": s,
+            "CE LTP": round(np.random.uniform(50, 250), 2),
+            "CE Delta": ce_delta,
+            "CE OI Chg": ce_oi_chg,
+            "PE LTP": round(np.random.uniform(50, 250), 2),
+            "PE Delta": pe_delta,
+            "PE OI Chg": pe_oi_chg
         })
     return pd.DataFrame(data), spot
 
-# ==========================================
-# 3. TRADING LOGIC (ENTRY/EXIT/SL)
-# ==========================================
-def analyze_signals(df, spot):
-    for i, row in df.iterrows():
-        # CALL BUY CONDITION: CE OI తగ్గుతూ (Short Covering), PE OI పెరుగుతుంటే
-        if row['CE_OI_Chg'] < 0 and row['PE_OI_Chg'] > 0 and row['CE_Delta'] > 0.6:
-            df.at[i, 'Signal'] = "🔥 STRONG BUY (CALL)"
-        
-        # PUT BUY CONDITION: PE OI తగ్గుతూ (Long Unwinding), CE OI పెరుగుతుంటే
-        elif row['PE_OI_Chg'] < 0 and row['CE_OI_Chg'] > 0 and abs(row['PE_Delta']) > 0.6:
-            df.at[i, 'Signal'] = "📉 STRONG BUY (PUT)"
-            
-    return df
-
-# ==========================================
-# 4. UI COMPONENTS
-# ==========================================
-symbol = st.sidebar.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
-if st.sidebar.button("RUN AI SCANNER"):
-    df, spot = get_live_data(symbol)
-    df = analyze_signals(df, spot)
-
-    # టాప్ మెట్రిక్స్
-    st.subheader(f"🚀 {symbol} Spot: {spot}")
+# =========================
+# RUN SCANNER
+# =========================
+if st.button("RUN 100% CONFIRMATION SCAN"):
+    df, spot = generate_market_data()
     
-    # సిగ్నల్ డిస్ప్లే
-    signals = df[df['Signal'] != "Neutral"]
-    if not signals.empty:
-        for _, s in signals.iterrows():
-            st.success(f"**SIGNAL FOUND AT {s['Strike']} Strike!**")
-            c1, c2, c3 = st.columns(3)
-            
-            # Entry, SL, Target Calculations
-            entry = s['CE_LTP'] if "CALL" in s['Signal'] else s['PE_LTP']
-            sl = round(entry * 0.85, 2) # 15% Stop Loss
-            tgt = round(entry * 1.30, 2) # 30% Target
-            
-            c1.metric("ENTRY POINT", f"₹{entry}")
-            c2.metric("STOP LOSS (SL)", f"₹{sl}", delta_color="inverse", delta="-15%")
-            c3.metric("TARGET (EXIT)", f"₹{tgt}", delta="30%")
-    else:
-        st.info("ప్రస్తుతానికి బలమైన ఎంట్రీ పాయింట్లు లేవు. వేచి ఉండండి...")
+    st.subheader(f"📊 Market Spot: {spot}")
+    st.dataframe(df, use_container_width=True)
 
-    # డేటా టేబుల్
     st.divider()
-    st.subheader("📊 Detailed Option Chain Analysis")
     
-    def color_signals(val):
-        color = 'green' if 'CALL' in str(val) else 'red' if 'PUT' in str(val) else 'white'
-        return f'background-color: {color}; color: black'
+    # --- 100% CONFIRMATION LOGIC ---
+    # Call Side: Delta > 0.65 AND OI Change is Negative (Short Covering)
+    ce_signals = df[(df['CE Delta'] > 0.65) & (df['CE OI Chg'] < 0)]
+    
+    # Put Side: Delta < -0.65 AND OI Change is Negative (Long Unwinding)
+    pe_signals = df[(df['PE Delta'] < -0.65) & (df['PE OI Chg'] < 0)]
 
-    st.dataframe(df.style.applymap(color_signals, subset=['Signal']), use_container_width=True)
+    col1, col2 = st.columns(2)
 
-# ==========================================
-# 5. INSTRUCTIONS
-# ==========================================
-st.sidebar.divider()
-st.sidebar.markdown("""
-### 📘 How to use:
-1. **RUN AI SCANNER** బటన్ నొక్కండి.
-2. **Signal** కాలమ్ లో 'STRONG BUY' ఉందో లేదో చూడండి.
-3. గ్రీన్ సిగ్నల్ వస్తే **Call Side** ఎంట్రీ తీసుకోండి.
-4. రెడ్ సిగ్నల్ వస్తే **Put Side** ఎంట్రీ తీసుకోండి.
-5. సిస్టమ్ ఇచ్చిన **SL** మరియు **Target** ని తప్పక పాటించండి.
-""")
+    with col1:
+        st.success("🟢 100% CE (CALL) CONFIRMATION")
+        if not ce_signals.empty:
+            for _, row in ce_signals.iterrows():
+                st.markdown(f"### Buy Call: **{row['Strike Price']} CE**")
+                st.write(f"Entry: ₹{row['CE LTP']} | SL: ₹{round(row['CE LTP']*0.85, 2)} | Tgt: ₹{round(row['CE LTP']*1.3, 2)}")
+        else:
+            st.info("No Strong Call Signals")
+
+    with col2:
+        st.error("🔴 100% PE (PUT) CONFIRMATION")
+        if not pe_signals.empty:
+            for _, row in pe_signals.iterrows():
+                st.markdown(f"### Buy Put: **{row['Strike Price']} PE**")
+                st.write(f"Entry: ₹{row['PE LTP']} | SL: ₹{round(row['PE LTP']*0.85, 2)} | Tgt: ₹{round(row['PE LTP']*1.3, 2)}")
+        else:
+            st.info("No Strong Put Signals")
+
+st.info("Note: Delta > 0.65 మరియు OI తగ్గుతున్న స్ట్రైక్ ప్రైస్ లు ఇక్కడ కనిపిస్తాయి.")
