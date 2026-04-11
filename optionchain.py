@@ -200,3 +200,88 @@ st.dataframe(df.set_index("Strike"), use_container_width=True)
 st.sidebar.markdown(
     f"⏰ Last Refresh: {pd.Timestamp.now().strftime('%H:%M:%S')}"
 )
+# ===============================
+# ADD THIS BELOW YOUR EXISTING CODE
+# ===============================
+
+st.divider()
+st.subheader("📈 LIVE MARKET TREND")
+
+# ==========================================
+# LIVE CHART
+# ==========================================
+def get_chart(symbol):
+    data = yf.Ticker(symbol).history(period="1d", interval="5m")
+    return data
+
+symbol_map = {
+    "NIFTY": "^NSEI",
+    "BANKNIFTY": "^NSEBANK",
+    "FINNIFTY": "^CNXFINANCE",
+    "MIDCAPNIFTY": "^NSEMDCP50"
+}
+
+chart_data = get_chart(symbol_map[selected_idx])
+
+if not chart_data.empty:
+    st.line_chart(chart_data["Close"])
+
+# ==========================================
+# SUPPORT & RESISTANCE
+# ==========================================
+st.subheader("🎯 SUPPORT & RESISTANCE")
+
+if not chart_data.empty:
+    support = round(chart_data["Low"].min(), 2)
+    resistance = round(chart_data["High"].max(), 2)
+    
+    c1, c2 = st.columns(2)
+    c1.metric("SUPPORT", support)
+    c2.metric("RESISTANCE", resistance)
+
+# ==========================================
+# STRONG SIGNAL FILTER
+# ==========================================
+st.subheader("🔥 STRONG AI SIGNALS ONLY")
+
+strong_signals = []
+
+for _, row in df.iterrows():
+    
+    if row["CE_OI"] > row["PE_OI"] * 2:
+        strong_signals.append(("PE", row))
+    elif row["PE_OI"] > row["CE_OI"] * 2:
+        strong_signals.append(("CE", row))
+
+if strong_signals:
+    for sig_type, row in strong_signals:
+        
+        if sig_type == "CE":
+            entry = row["CE_LTP"]
+            st.success(f"🚀 STRONG BUY CE - {selected_idx} {row['Strike']}")
+        else:
+            entry = row["PE_LTP"]
+            st.error(f"📉 STRONG BUY PE - {selected_idx} {row['Strike']}")
+        
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("ENTRY", entry)
+        c2.metric("SL", round(entry*0.8, 2))
+        c3.metric("TG1", round(entry*1.3, 2))
+        c4.metric("TG2", round(entry*1.6, 2))
+
+else:
+    st.info("No strong signals right now")
+
+# ==========================================
+# ALERT SYSTEM
+# ==========================================
+st.subheader("🚨 MARKET ALERT")
+
+price = idx_data[selected_idx]["price"]
+
+if price > resistance:
+    st.success("🔥 BREAKOUT DETECTED (BUY)")
+elif price < support:
+    st.error("💥 BREAKDOWN DETECTED (SELL)")
+else:
+    st.warning("Market inside range")
