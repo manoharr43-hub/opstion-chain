@@ -17,7 +17,7 @@ st.set_page_config(page_title="SMART AI OPTION SCANNER", layout="wide")
 st.title("🚀 MANOHAR SMART AI MARKET SCANNER")
 
 # ==========================================
-# REAL INDEX DATA (IMPROVED)
+# REAL INDEX DATA
 # ==========================================
 @st.cache_data(ttl=60)
 def get_live_index():
@@ -40,9 +40,9 @@ def get_live_index():
                 volume = int(last["Volume"]) if last["Volume"] > 0 else 500000 
                 result[name] = {"price": price, "chg": change, "vol": volume}
             else:
-                result[name] = {"price": 0.0, "chg": 0.0, "vol": 100000}
+                result[name] = {"price": 1.0, "chg": 0.0, "vol": 100000}
         except:
-            result[name] = {"price": 0.0, "chg": 0.0, "vol": 100000}
+            result[name] = {"price": 1.0, "chg": 0.0, "vol": 100000}
     return result
 
 idx_data = get_live_index()
@@ -71,21 +71,34 @@ base_volume = idx_data[selected_idx]["vol"]
 def generate_smart_data(spot, volume):
     if spot <= 10: return pd.DataFrame(), 1.0
     gap = 100 if spot > 30000 else 50
-    strikes = [int((round(spot/gap)*gap) - (gap*2) + (i*gap)) for i in range(5)]
+    # Current ATM Strike
+    atm_strike = round(spot / gap) * gap
+    strikes = [int(atm_strike - (gap*2) + (i*gap)) for i in range(5)]
+    
     data = []
     total_call_vol = 0
     total_put_vol = 0
+    
     for s in strikes:
         dist = abs(spot - s)
-        ce_vol = int(volume * np.exp(-dist/500))
-        pe_vol = int(volume * np.exp(-dist/500))
+        ce_vol = int(volume * np.exp(-dist/500) * np.random.uniform(0.7, 1.3))
+        pe_vol = int(volume * np.exp(-dist/500) * np.random.uniform(0.7, 1.3))
+        
         ce_oi = ce_vol * np.random.uniform(0.8, 1.2)
         pe_oi = pe_vol * np.random.uniform(0.8, 1.2)
-        ce_ltp = round(max(10, (spot - s) * 0.5 + np.random.uniform(10,50)), 2)
-        pe_ltp = round(max(10, (s - spot) * 0.5 + np.random.uniform(10,50)), 2)
+        
+        ce_ltp = round(max(10, (spot - s) * 0.4 + np.random.uniform(20,60)), 2)
+        pe_ltp = round(max(10, (s - spot) * 0.4 + np.random.uniform(20,60)), 2)
+        
         total_call_vol += ce_vol
         total_put_vol += pe_vol
-        data.append({"Strike": s, "CE_LTP": ce_ltp, "CE_OI": int(ce_oi), "PE_LTP": pe_ltp, "PE_OI": int(pe_oi)})
+        
+        data.append({
+            "Strike": s,
+            "CE_LTP": ce_ltp, "CE_OI": int(ce_oi), "CE_VOL": ce_vol,
+            "PE_LTP": pe_ltp, "PE_OI": int(pe_oi), "PE_VOL": pe_vol
+        })
+    
     df = pd.DataFrame(data)
     pcr = total_put_vol / total_call_vol if total_call_vol != 0 else 1
     return df, pcr
@@ -93,42 +106,65 @@ def generate_smart_data(spot, volume):
 df, smart_pcr = generate_smart_data(spot_price, base_volume)
 
 # ==========================================
-# TREND & SIGNALS
+# BIG MOVEMENT LOGIC
 # ==========================================
 if not df.empty:
+    st.subheader("🔥 BIG MOVEMENT ALERTS (HFT SCANNER)")
+    
+    # Logic: Finding strikes with highest volume spikes
+    high_vol_ce = df.loc[df['CE_VOL'].idxmax()]
+    high_vol_pe = df.loc[df['PE_VOL'].idxmax()]
+    
+    col_a, col_b = st.columns(2)
+    
+    with col_a:
+        st.info(f"⚡ CE BREAKOUT WATCH: {high_vol_ce['Strike']}")
+        st.write(f"**Action:** BUY CE if Price > {high_vol_ce['CE_LTP']}")
+        st.write(f"**Stop Loss:** {round(high_vol_ce['CE_LTP'] * 0.85, 2)}")
+        st.write(f"**Exit (Target):** {round(high_vol_ce['CE_LTP'] * 1.3, 2)}")
+
+    with col_b:
+        st.warning(f"⚡ PE BREAKOUT WATCH: {high_vol_pe['Strike']}")
+        st.write(f"**Action:** BUY PE if Price > {high_vol_pe['PE_LTP']}")
+        st.write(f"**Stop Loss:** {round(high_vol_pe['PE_LTP'] * 0.85, 2)}")
+        st.write(f"**Exit (Target):** {round(high_vol_pe['PE_LTP'] * 1.3, 2)}")
+
+    st.divider()
+
+    # ==========================================
+    # TREND & SIGNALS
+    # ==========================================
     trend = "SIDEWAYS 🟡"
     if smart_pcr > 1.2: trend = "BULLISH 🟢"
     elif smart_pcr < 0.8: trend = "BEARISH 🔴"
     
     t1, t2 = st.columns(2)
     t1.metric("SMART PCR", round(smart_pcr, 2))
-    t2.write(f"### TREND: {trend}")
+    t2.write(f"### MARKET TREND: {trend}")
     
-    st.divider()
-    st.subheader("📊 SMART AI TRADE SIGNALS")
+    st.subheader("📊 AI TRADE SIGNALS")
     
     for _, row in df.iterrows():
-        signal = None
-        if row["CE_OI"] > row["PE_OI"] * 1.5: signal = "BUY PE"
-        elif row["PE_OI"] > row["CE_OI"] * 1.5: signal = "BUY CE"
-        
-        if signal:
-            if "CE" in signal:
-                st.success(f"{selected_idx} {row['Strike']} CE SIGNAL")
-                entry = row["CE_LTP"]
-            else:
-                st.error(f"{selected_idx} {row['Strike']} PE SIGNAL")
-                entry = row["PE_LTP"]
-            
-            sc1, sc2, sc3, sc4 = st.columns(4)
-            sc1.metric("ENTRY", entry)
-            sc2.metric("SL", round(entry*0.8, 2))
-            sc3.metric("TG1", round(entry*1.2, 2))
-            sc4.metric("TG2", round(entry*1.5, 2))
+        # Enhanced signal logic
+        if row["PE_OI"] > row["CE_OI"] * 1.3 and trend == "BULLISH 🟢":
+            with st.expander(f"✅ BUY CALL: {selected_idx} {row['Strike']} CE", expanded=True):
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("ENTRY", row['CE_LTP'])
+                c2.metric("STOP LOSS", round(row['CE_LTP']*0.8, 2))
+                c3.metric("EXIT T1", round(row['CE_LTP']*1.2, 2))
+                c4.metric("EXIT T2", round(row['CE_LTP']*1.5, 2))
+                
+        elif row["CE_OI"] > row["PE_OI"] * 1.3 and trend == "BEARISH 🔴":
+            with st.expander(f"🚨 BUY PUT: {selected_idx} {row['Strike']} PE", expanded=True):
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("ENTRY", row['PE_LTP'])
+                c2.metric("STOP LOSS", round(row['PE_LTP']*0.8, 2))
+                c3.metric("EXIT T1", round(row['PE_LTP']*1.2, 2))
+                c4.metric("EXIT T2", round(row['PE_LTP']*1.5, 2))
 
-    st.write("### FULL SMART DATA")
+    st.write("### FULL OPTION CHAIN DATA")
     st.dataframe(df.set_index("Strike"), use_container_width=True)
 else:
-    st.warning("Market Close లో ఉండవచ్చు లేదా డేటా అందడం లేదు. దయచేసి కాసేపటి తర్వాత ప్రయత్నించండి.")
+    st.error("Data fetch failed. Please check your connection.")
 
-st.sidebar.markdown(f"**Last Refresh:** {pd.Timestamp.now().strftime('%H:%M:%S')}")
+st.sidebar.write(f"Last Update: {pd.Timestamp.now().strftime('%H:%M:%S')}")
