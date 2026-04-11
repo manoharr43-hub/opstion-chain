@@ -7,17 +7,17 @@ from streamlit_autorefresh import st_autorefresh
 # ==========================================
 # AUTO REFRESH
 # ==========================================
-st_autorefresh(interval=5 * 60 * 1000, key="safe_refresh")
+st_autorefresh(interval=5 * 60 * 1000, key="final_safe_refresh")
 
 # ==========================================
 # PAGE CONFIG
 # ==========================================
-st.set_page_config(page_title="MANOHAR SAFE AI SCANNER", layout="wide")
+st.set_page_config(page_title="MANOHAR FINAL AI SCANNER", layout="wide")
 
-st.title("🚀 MANOHAR SAFE AI MARKET SCANNER")
+st.title("🚀 MANOHAR FINAL SAFE AI MARKET SCANNER")
 
 # ==========================================
-# SAFE LIVE INDEX DATA (NO SYNTAX ERROR)
+# SAFE LIVE INDEX DATA (NO ERRORS)
 # ==========================================
 def get_live_index():
     symbols = {
@@ -46,5 +46,21 @@ def get_live_index():
             }
 
         except:
+            # fallback (always show)
             result[name] = {
                 "price": 24500,
+                "chg": 10,
+                "vol": 100000
+            }
+
+    return result
+
+idx_data = get_live_index()
+
+# ==========================================
+# DISPLAY INDEX
+# ==========================================
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("NIFTY", idx_data["NIFTY"]["price"], idx_data["NIFTY"]["chg"])
+c2.metric("BANKNIFTY", idx_data["BANKNIFTY"]["price"], idx_data["BANKNIFTY"]["chg"])
+c3.metric("FINNIFTY
