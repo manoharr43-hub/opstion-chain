@@ -9,17 +9,18 @@ from streamlit_autorefresh import st_autorefresh
 # =========================
 st_autorefresh(interval=120000, key="refresh")
 
-st.set_page_config(page_title="STABLE AI OPTION SCANNER", layout="wide")
-st.title("🚀 MANOHAR STABLE AI OPTION SCANNER (NO NSE BLOCK)")
+st.set_page_config(page_title="SMART AI SCANNER PRO", layout="wide")
+st.title("🚀 MANOHAR AI OPTION SCANNER PRO")
 
 # =========================
-# LIVE INDEX DATA
+# GET LIVE DATA (INDEX + VIX)
 # =========================
 @st.cache_data(ttl=60)
 def get_data():
     symbols = {
         "NIFTY": "^NSEI",
-        "BANKNIFTY": "^NSEBANK"
+        "BANKNIFTY": "^NSEBANK",
+        "VIX": "^INDIAVIX"
     }
     data = {}
     for k,v in symbols.items():
@@ -34,9 +35,15 @@ def get_data():
 
 idx = get_data()
 
-c1,c2 = st.columns(2)
+# =========================
+# TOP METRICS
+# =========================
+c1,c2,c3 = st.columns(3)
 c1.metric("NIFTY", round(idx["NIFTY"]["price"],2), round(idx["NIFTY"]["change"],2))
 c2.metric("BANKNIFTY", round(idx["BANKNIFTY"]["price"],2), round(idx["BANKNIFTY"]["change"],2))
+c3.metric("INDIA VIX", round(idx["VIX"]["price"],2), round(idx["VIX"]["change"],2))
+
+st.divider()
 
 # =========================
 # SELECT INDEX
@@ -46,13 +53,12 @@ spot = idx[symbol]["price"]
 volume = idx[symbol]["vol"]
 
 # =========================
-# SMART OPTION SIMULATION
+# SMART DATA
 # =========================
 def generate_data(spot, vol):
     gap = 100 if spot > 30000 else 50
     atm = round(spot/gap)*gap
-
-    strikes = [atm + i*gap for i in range(-3,4)]
+    strikes = [atm + i*gap for i in range(-4,5)]
 
     rows = []
     total_ce = 0
@@ -78,7 +84,9 @@ def generate_data(spot, vol):
             "CE_LTP": round(ce_price,2),
             "PE_LTP": round(pe_price,2),
             "CE_OI": int(ce_oi),
-            "PE_OI": int(pe_oi)
+            "PE_OI": int(pe_oi),
+            "CE_VOL": ce_vol,
+            "PE_VOL": pe_vol
         })
 
     df = pd.DataFrame(rows)
@@ -98,29 +106,35 @@ else:
     trend = "SIDEWAYS 🟡"
 
 st.metric("PCR", round(pcr,2))
-st.subheader(f"Trend: {trend}")
+st.subheader(f"Market Trend: {trend}")
 
 # =========================
-# ATM SIGNAL
+# 🔥 BIG MOVE DETECTION
 # =========================
-atm = min(df["Strike"], key=lambda x: abs(x-spot))
-row = df[df["Strike"]==atm].iloc[0]
+st.subheader("🔥 BIG MOVE STRIKES")
 
-st.subheader("🔥 ATM TRADE")
+big_ce = df.loc[df["CE_VOL"].idxmax()]
+big_pe = df.loc[df["PE_VOL"].idxmax()]
 
-col1,col2 = st.columns(2)
+col1, col2 = st.columns(2)
 
 with col1:
-    st.success(f"BUY CE {atm}")
-    st.write(f"Entry: {row['CE_LTP']}")
-    st.write(f"SL: {round(row['CE_LTP']*0.9,2)}")
-    st.write(f"Target: {round(row['CE_LTP']*1.2,2)}")
+    st.success(f"CE BIG MOVE: {big_ce['Strike']}")
+    entry = big_ce["CE_LTP"]
+    st.write(f"Entry: {entry}")
+    st.write(f"SL: {round(entry*0.85,2)}")
+    st.write(f"TG1: {round(entry*1.2,2)}")
+    st.write(f"TG2: {round(entry*1.4,2)}")
 
 with col2:
-    st.error(f"BUY PE {atm}")
-    st.write(f"Entry: {row['PE_LTP']}")
-    st.write(f"SL: {round(row['PE_LTP']*0.9,2)}")
-    st.write(f"Target: {round(row['PE_LTP']*1.2,2)}")
+    st.error(f"PE BIG MOVE: {big_pe['Strike']}")
+    entry = big_pe["PE_LTP"]
+    st.write(f"Entry: {entry}")
+    st.write(f"SL: {round(entry*0.85,2)}")
+    st.write(f"TG1: {round(entry*1.2,2)}")
+    st.write(f"TG2: {round(entry*1.4,2)}")
+
+st.divider()
 
 # =========================
 # TABLE
