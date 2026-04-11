@@ -10,10 +10,10 @@ from streamlit_autorefresh import st_autorefresh
 st_autorefresh(interval=120000, key="refresh")
 
 st.set_page_config(page_title="SMART AI SCANNER PRO", layout="wide")
-st.title("🚀 MANOHAR AI OPTION SCANNER PRO")
+st.title("🚀 MANOHAR AI OPTION SCANNER + MANUAL CONFIRM")
 
 # =========================
-# GET LIVE DATA (INDEX + VIX)
+# LIVE DATA
 # =========================
 @st.cache_data(ttl=60)
 def get_data():
@@ -53,7 +53,32 @@ spot = idx[symbol]["price"]
 volume = idx[symbol]["vol"]
 
 # =========================
-# SMART DATA
+# 🔗 QUICK LINKS (NEW)
+# =========================
+st.subheader("🔗 QUICK VERIFY LINKS")
+
+colA, colB = st.columns(2)
+
+with colA:
+    if st.button("Open NSE Option Chain"):
+        if symbol == "NIFTY":
+            st.markdown("https://www.nseindia.com/option-chain")
+        else:
+            st.markdown("https://www.nseindia.com/option-chain")
+
+with colB:
+    if st.button("Open TradingView Chart"):
+        if symbol == "NIFTY":
+            st.markdown("https://www.tradingview.com/chart/")
+        else:
+            st.markdown("https://www.tradingview.com/chart/")
+
+st.info("👉 First check NSE Option Chain + Chart → Then take trade")
+
+st.divider()
+
+# =========================
+# SMART DATA (OLD SAME)
 # =========================
 def generate_data(spot, vol):
     gap = 100 if spot > 30000 else 50
@@ -109,7 +134,7 @@ st.metric("PCR", round(pcr,2))
 st.subheader(f"Market Trend: {trend}")
 
 # =========================
-# 🔥 BIG MOVE DETECTION
+# 🔥 BIG MOVE
 # =========================
 st.subheader("🔥 BIG MOVE STRIKES")
 
@@ -119,22 +144,37 @@ big_pe = df.loc[df["PE_VOL"].idxmax()]
 col1, col2 = st.columns(2)
 
 with col1:
-    st.success(f"CE BIG MOVE: {big_ce['Strike']}")
     entry = big_ce["CE_LTP"]
+    st.success(f"CE: {big_ce['Strike']}")
     st.write(f"Entry: {entry}")
     st.write(f"SL: {round(entry*0.85,2)}")
     st.write(f"TG1: {round(entry*1.2,2)}")
     st.write(f"TG2: {round(entry*1.4,2)}")
 
 with col2:
-    st.error(f"PE BIG MOVE: {big_pe['Strike']}")
     entry = big_pe["PE_LTP"]
+    st.error(f"PE: {big_pe['Strike']}")
     st.write(f"Entry: {entry}")
     st.write(f"SL: {round(entry*0.85,2)}")
     st.write(f"TG1: {round(entry*1.2,2)}")
     st.write(f"TG2: {round(entry*1.4,2)}")
 
 st.divider()
+
+# =========================
+# ✅ MANUAL CHECKLIST (NEW)
+# =========================
+st.subheader("✅ BEFORE TRADE CHECKLIST")
+
+st.write("""
+✔ NSE lo same strike verify chesava?  
+✔ TradingView lo breakout confirm ayinda?  
+✔ Trend (Bullish/Bearish) match ayinda?  
+✔ Volume support unda?  
+✔ Stop loss ready ga unda?  
+""")
+
+st.warning("⚠️ Confirmation lekunda trade cheyyakandi")
 
 # =========================
 # TABLE
