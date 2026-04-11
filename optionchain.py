@@ -5,15 +5,18 @@ import yfinance as yf
 from streamlit_autorefresh import st_autorefresh
 
 # ===============================
+# ✅ MUST BE FIRST
+# ===============================
+st.set_page_config(page_title="MANOHAR AI SCANNER", layout="wide")
+
+# ===============================
 # AUTO REFRESH
 # ===============================
 st_autorefresh(interval=5 * 60 * 1000, key="final_refresh")
 
 # ===============================
-# PAGE CONFIG
+# TITLE
 # ===============================
-st.set_page_config(page_title="MANOHAR AI SCANNER", layout="wide")
-
 st.title("🚀 MANOHAR FINAL AI MARKET SCANNER")
 
 # ===============================
@@ -54,4 +57,31 @@ def get_live_index():
 
     return result
 
-idx_data = get_live_index
+idx_data = get_live_index()
+
+# ===============================
+# DISPLAY INDEX
+# ===============================
+try:
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric("NIFTY", idx_data["NIFTY"]["price"], idx_data["NIFTY"]["chg"])
+    c2.metric("BANKNIFTY", idx_data["BANKNIFTY"]["price"], idx_data["BANKNIFTY"]["chg"])
+    c3.metric("FINNIFTY", idx_data["FINNIFTY"]["price"], idx_data["FINNIFTY"]["chg"])
+    c4.metric("MIDCAPNIFTY", idx_data["MIDCAPNIFTY"]["price"], idx_data["MIDCAPNIFTY"]["chg"])
+
+except:
+    st.error("Index display error")
+
+st.divider()
+
+# ===============================
+# SELECT INDEX
+# ===============================
+selected_idx = st.sidebar.selectbox(
+    "SELECT INDEX",
+    ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCAPNIFTY"]
+)
+
+spot = idx_data.get(selected_idx, {}).get("price", 24500)
+volume = idx_data.get(selected_idx, {}).get("vol", 100000)
