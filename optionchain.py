@@ -76,4 +76,80 @@ selected_idx = st.sidebar.selectbox(
     ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCAPNIFTY"]
 )
 
-# ✅ Correct assignment (no stray
+spot = idx_data[selected_idx]["price"]
+volume = idx_data[selected_idx]["vol"]
+
+# ===============================
+# DATA GENERATOR
+# ===============================
+def generate_data(spot, volume):
+
+    if spot == 0:
+        spot = 24500
+    if volume == 0:
+        volume = 100000
+
+    gap = 100 if spot > 50000 else 50
+    strikes = [int(spot - (gap*2) + (i*gap)) for i in range(5)]
+
+    data = []
+    total_call = 1
+    total_put = 1
+
+    for s in strikes:
+        ce_vol = max(1000, int(volume * 0.2))
+        pe_vol = max(1000, int(volume * 0.2))
+
+        ce_oi = int(ce_vol * np.random.uniform(0.8, 1.2))
+        pe_oi = int(pe_vol * np.random.uniform(0.8, 1.2))
+
+        ce_ltp = round(np.random.uniform(50, 150), 2)
+        pe_ltp = round(np.random.uniform(50, 150), 2)
+
+        total_call += ce_vol
+        total_put += pe_vol
+
+        data.append({
+            "Strike": s,
+            "CE_LTP": ce_ltp,
+            "PE_LTP": pe_ltp,
+            "CE_OI": ce_oi,
+            "PE_OI": pe_oi
+        })
+
+    df = pd.DataFrame(data)
+    pcr = total_put / total_call
+
+    return df, pcr
+
+df, pcr = generate_data(spot, volume)
+
+# ===============================
+# TREND
+# ===============================
+trend = "SIDEWAYS 🟡"
+if pcr > 1.2:
+    trend = "BULLISH 🟢"
+elif pcr < 0.8:
+    trend = "BEARISH 🔴"
+
+t1, t2 = st.columns(2)
+t1.metric("SMART PCR", round(pcr, 2))
+t2.write(f"### TREND: {trend}")
+
+st.divider()
+
+# ===============================
+# SIGNALS (FIXED)
+# ===============================
+st.subheader("🔥 AI SIGNALS")
+
+signals_found = False
+
+if df.empty:
+    st.error("⚠️ No Data Available")
+
+else:
+    for _, row in df.iterrows():
+
+        if
