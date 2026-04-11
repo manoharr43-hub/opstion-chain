@@ -1,96 +1,80 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from streamlit_autorefresh import st_autorefresh
 
 # =========================
-# 1. PAGE CONFIG
+# 1. AUTO REFRESH (5 MINUTES)
 # =========================
-st.set_page_config(page_title="Manohar Big Move AI", layout="wide")
+# 5 నిమిషాలు అంటే 5 * 60 * 1000 మిల్లీ సెకన్లు
+st_autorefresh(interval=5 * 60 * 1000, key="datarefresh")
 
 # =========================
-# 2. TOP MARKET DASHBOARD
+# 2. PAGE CONFIG
 # =========================
-st.title("🚀 MANOHAR NSE PRO - BIG MOVE IDENTIFIER")
-
-# Simulated VIX and PCR
-vix_val = round(np.random.uniform(11, 19), 2)
-pcr_val = round(np.random.uniform(0.6, 1.4), 2)
-
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("INDIA VIX", vix_val, delta="Big Move Soon!" if vix_val < 13 else "")
-c2.metric("PCR RATIO", pcr_val)
-c3.metric("NIFTY SPOT", "24,510", "15.20")
-c4.metric("BANKNIFTY", "52,480", "-40.10")
-
-st.divider()
+st.set_page_config(page_title="Manohar AI Auto-Scanner", layout="wide")
+st.title("🚀 MANOHAR AI PRO - AUTO REFRESH SCANNER (5 Min)")
 
 # =========================
-# 3. SMART DATA GENERATOR
+# 3. AI OBSERVATION LOGIC (బిగ్ మూవ్ ఎలా గుర్తించాలి?)
 # =========================
-def get_big_move_data():
-    indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCAPNIFTY"]
-    all_data = []
-    for name in indices:
-        spot = 24500 if name == "NIFTY" else 52500
-        strikes = [spot - 100, spot - 50, spot, spot + 50, spot + 100]
+def ai_observation(df, name):
+    observation = []
+    
+    # కాల్ సైడ్ అబ్జర్వేషన్ (Short Covering)
+    ce_move = df[(df['CE_OI_Chg'] < -2000) & (df['CE_Delta'] > 0.6)]
+    if not ce_move.empty:
+        observation.append(f"🟢 AI Alert: {name} లో కాల్ రైటర్లు పారిపోతున్నారు. భారీ పెరుగుదల రావచ్చు!")
+    
+    # పుట్ సైడ్ అబ్జర్వేషన్ (Long Unwinding)
+    pe_move = df[(df['PE_OI_Chg'] < -2000) & (abs(df['PE_Delta']) > 0.6)]
+    if not pe_move.empty:
+        observation.append(f"🔴 AI Alert: {name} లో పుట్ రైటర్లు పారిపోతున్నారు. మార్కెట్ పడిపోయే అవకాశం ఉంది!")
         
-        for s in strikes:
-            # Big Move Logic: OI తగ్గుతూ Volume పెరగడం
-            ce_oi_chg = np.random.randint(-5000, 5000)
-            ce_vol = np.random.randint(10000, 50000)
-            ce_delta = round(np.random.uniform(0.4, 0.9), 2)
-            
-            # సిగ్నల్ ఐడెంటిఫికేషన్
-            signal = "Neutral"
-            if ce_oi_chg < -3000 and ce_vol > 35000: # Short Covering
-                signal = "⚠️ BIG MOVE (CALL)"
-            elif np.random.randint(0, 10) > 8: # Random Put Shock for Example
-                signal = "⚠️ BIG MOVE (PUT)"
-                
-            all_data.append({
-                "Index": name,
-                "Strike": s,
-                "LTP": round(np.random.uniform(50, 300), 2),
-                "OI_Chg": ce_oi_chg,
-                "Volume": ce_vol,
-                "Delta": ce_delta,
-                "Alert": signal
-            })
-    return pd.DataFrame(all_data)
+    return observation
 
 # =========================
-# 4. MAIN SCANNER RUN
+# 4. DATA GENERATOR (INDEX SPECIFIC)
 # =========================
-if st.button("🔍 START BIG MOVE SCANNING"):
-    df = get_big_move_data()
+def get_data(index_name):
+    base_prices = {"NIFTY": 24500, "BANKNIFTY": 52500, "FINNIFTY": 23100, "MIDCAPNIFTY": 12400}
+    spot = base_prices[index_name]
+    gap = 50 if index_name == "NIFTY" else 100
     
-    # ఎక్కడైనా బిగ్ మూవ్ అలర్ట్ ఉంటే పైన చూపించు
-    alerts = df[df['Alert'] != "Neutral"]
-    
-    if not alerts.empty:
-        st.warning("🔥 PRE-BREAKOUT ALERTS FOUND!")
-        for _, alert in alerts.iterrows():
-            with st.expander(f"ACTION REQUIRED: {alert['Index']} {alert['Strike']} {alert['Alert']}"):
-                col_a, col_b = st.columns(2)
-                col_a.write(f"**Reason:** OI Shock ({alert['OI_Chg']}) + High Volume ({alert['Volume']})")
-                col_b.write(f"**Target Move:** 20% - 50% Quick Gains Possible")
-    else:
-        st.info("ప్రస్తుతానికి మార్కెట్ ప్రశాంతంగా ఉంది. పెద్ద కదలిక కోసం వేచి చూస్తున్నాం...")
-
-    # ఇండెక్స్ వారీగా టేబుల్స్
-    st.divider()
-    tabs = st.tabs(["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCAPNIFTY"])
-    for i, name in enumerate(["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCAPNIFTY"]):
-        with tabs[i]:
-            idx_df = df[df['Index'] == name].drop(columns=['Index'])
-            st.dataframe(idx_df.set_index('Strike'), use_container_width=True)
+    strikes = [spot - (gap*2) + (i*gap) for i in range(5)]
+    data = []
+    for s in strikes:
+        data.append({
+            "Strike": s,
+            "CE_LTP": round(np.random.uniform(50, 300), 2),
+            "CE_Delta": round(np.random.uniform(0.4, 0.9), 2),
+            "CE_OI_Chg": np.random.randint(-4000, 4000),
+            "PE_LTP": round(np.random.uniform(50, 300), 2),
+            "PE_Delta": round(np.random.uniform(-0.9, -0.4), 2),
+            "PE_OI_Chg": np.random.randint(-4000, 4000)
+        })
+    return pd.DataFrame(data)
 
 # =========================
-# 5. SIDEBAR GUIDE
+# 5. DISPLAY & AI ANALYSIS
 # =========================
-st.sidebar.markdown("""
-### 🧠 How to Identify Big Moves:
-1. **OI Shock:** OI Change నెగటివ్ (Minus) లో భారీగా ఉంటే ఆప్షన్ సెల్లర్స్ పారిపోతున్నారని అర్థం.
-2. **Volume Spike:** వాల్యూమ్ అకస్మాత్తుగా పెరిగితే పెద్ద ప్లేయర్స్ ఎంటర్ అయ్యారని అర్థం.
-3. **VIX Watch:** VIX 12 లోపు ఉంటే పెద్ద బ్లాస్ట్ వచ్చే అవకాశం 90% ఉంటుంది.
-""")
+indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCAPNIFTY"]
+tabs = st.tabs(indices)
+
+for i, name in enumerate(indices):
+    with tabs[i]:
+        df = get_data(name)
+        
+        # AI అబ్జర్వేషన్ చూపించడం
+        obs_list = ai_observation(df, name)
+        if obs_list:
+            for obs in obs_list:
+                st.warning(obs)
+        else:
+            st.info(f"AI Observation: {name} ప్రస్తుతానికి స్థిరంగా ఉంది.")
+
+        # డేటా టేబుల్
+        st.dataframe(df.set_index('Strike'), use_container_width=True)
+
+st.sidebar.write(f"చివరిగా రిఫ్రెష్ అయిన సమయం: {pd.Timestamp.now().strftime('%H:%M:%S')}")
+st.sidebar.info("ఈ పేజీ ప్రతి 5 నిమిషాలకు ఆటోమేటిక్ గా అప్‌డేట్ అవుతుంది.")
