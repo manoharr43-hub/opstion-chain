@@ -5,18 +5,34 @@ import numpy as np
 # =========================
 # 1. PAGE CONFIG
 # =========================
-st.set_page_config(page_title="Manohar NSE Pro Fixed", layout="wide")
+st.set_page_config(page_title="Manohar NSE Pro Dashboard", layout="wide")
 
 # =========================
-# 2. MARKET DASHBOARD (FIXED WITHOUT HTML ERRORS)
+# 2. LIVE INDEX PRICES (TOP SECTION)
 # =========================
 st.title("🚀 MANOHAR NSE PRO SMART SCANNER")
 
-# Simulated Data
+# Simulated Live Prices (రియల్ టైమ్ లో ఇవి మారుతూ ఉంటాయి)
+nifty_spot = 24510.50
+bnk_nifty_spot = 52480.20
+fin_nifty_spot = 23150.75
+mid_nifty_spot = 12420.30
+
+# పైన ఇండెక్స్ ధరలను చూపించే కాలమ్స్
+cp1, cp2, cp3, cp4 = st.columns(4)
+cp1.metric("NIFTY 50", f"{nifty_spot}", "12.50")
+cp2.metric("BANK NIFTY", f"{bnk_nifty_spot}", "-45.30")
+cp3.metric("FIN NIFTY", f"{fin_nifty_spot}", "5.10")
+cp4.metric("MIDCAP NIFTY", f"{mid_nifty_spot}", "22.40")
+
+st.divider()
+
+# =========================
+# 3. MARKET INDICATORS (TREND, VIX, PCR)
+# =========================
 vix_val = round(np.random.uniform(12, 18), 2)
 pcr_val = round(np.random.uniform(0.6, 1.4), 2)
 
-# Trend Logic - Plain Text with Status
 if pcr_val > 1.1:
     trend_status = "BULLISH 🟢"
 elif pcr_val < 0.8:
@@ -24,17 +40,15 @@ elif pcr_val < 0.8:
 else:
     trend_status = "SIDEWAYS 🟡"
 
-# Metrics Bar using native Streamlit columns
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("MARKET TREND", trend_status)
-c2.metric("INDIA VIX", f"{vix_val}")
-c3.metric("PCR RATIO", f"{pcr_val}")
-c4.subheader("💻 LIVE STATUS")
+m1, m2, m3 = st.columns(3)
+m1.metric("MARKET TREND", trend_status)
+m2.metric("INDIA VIX", f"{vix_val}")
+m3.metric("PCR RATIO", f"{pcr_val}")
 
 st.divider()
 
 # =========================
-# 3. DATA GENERATOR
+# 4. DATA GENERATOR
 # =========================
 def get_all_indices_data():
     indices = {"NIFTY": 24500, "BANKNIFTY": 52500, "FINNIFTY": 23200, "MIDCAPNIFTY": 12500}
@@ -55,7 +69,7 @@ def get_all_indices_data():
     return pd.DataFrame(all_data)
 
 # =========================
-# 4. MAIN SCANNER
+# 5. MAIN SCANNER
 # =========================
 if st.button("🔍 RUN FULL SCANNER"):
     full_df = get_all_indices_data()
