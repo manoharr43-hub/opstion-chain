@@ -4,21 +4,21 @@ import numpy as np
 import yfinance as yf
 from streamlit_autorefresh import st_autorefresh
 
-# ==========================================
+# ===============================
 # AUTO REFRESH
-# ==========================================
-st_autorefresh(interval=5 * 60 * 1000, key="final_safe_refresh")
+# ===============================
+st_autorefresh(interval=5 * 60 * 1000, key="safe_refresh")
 
-# ==========================================
+# ===============================
 # PAGE CONFIG
-# ==========================================
-st.set_page_config(page_title="MANOHAR FINAL AI SCANNER", layout="wide")
+# ===============================
+st.set_page_config(page_title="MANOHAR AI SCANNER", layout="wide")
 
-st.title("🚀 MANOHAR FINAL SAFE AI MARKET SCANNER")
+st.title("🚀 MANOHAR AI MARKET SCANNER")
 
-# ==========================================
-# SAFE LIVE INDEX DATA (NO ERRORS)
-# ==========================================
+# ===============================
+# SAFE LIVE INDEX DATA
+# ===============================
 def get_live_index():
     symbols = {
         "NIFTY": "^NSEI",
@@ -46,7 +46,6 @@ def get_live_index():
             }
 
         except:
-            # fallback (always show)
             result[name] = {
                 "price": 24500,
                 "chg": 10,
@@ -57,10 +56,24 @@ def get_live_index():
 
 idx_data = get_live_index()
 
-# ==========================================
+# ===============================
 # DISPLAY INDEX
-# ==========================================
+# ===============================
 c1, c2, c3, c4 = st.columns(4)
+
 c1.metric("NIFTY", idx_data["NIFTY"]["price"], idx_data["NIFTY"]["chg"])
 c2.metric("BANKNIFTY", idx_data["BANKNIFTY"]["price"], idx_data["BANKNIFTY"]["chg"])
-c3.metric("FINNIFTY
+c3.metric("FINNIFTY", idx_data["FINNIFTY"]["price"], idx_data["FINNIFTY"]["chg"])
+c4.metric("MIDCAPNIFTY", idx_data["MIDCAPNIFTY"]["price"], idx_data["MIDCAPNIFTY"]["chg"])
+
+st.divider()
+
+# ===============================
+# SELECT INDEX
+# ===============================
+selected_idx = st.sidebar.selectbox(
+    "SELECT INDEX",
+    ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCAPNIFTY"]
+)
+
+spot
