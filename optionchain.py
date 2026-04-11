@@ -7,14 +7,14 @@ from streamlit_autorefresh import st_autorefresh
 # ===============================
 # AUTO REFRESH
 # ===============================
-st_autorefresh(interval=5 * 60 * 1000, key="safe_refresh")
+st_autorefresh(interval=5 * 60 * 1000, key="final_refresh")
 
 # ===============================
 # PAGE CONFIG
 # ===============================
-st.set_page_config(page_title="MANOHAR AI SCANNER", layout="wide")
+st.set_page_config(page_title="MANOHAR FINAL AI SCANNER", layout="wide")
 
-st.title("🚀 MANOHAR AI MARKET SCANNER")
+st.title("🚀 MANOHAR FINAL STABLE AI MARKET SCANNER")
 
 # ===============================
 # SAFE LIVE INDEX DATA
@@ -76,4 +76,4 @@ selected_idx = st.sidebar.selectbox(
     ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCAPNIFTY"]
 )
 
-spot
+# ✅ Correct assignment (no stray
