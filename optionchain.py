@@ -7,7 +7,7 @@ from streamlit_autorefresh import st_autorefresh
 # =============================
 # 1. CONFIG
 # =============================
-st.set_page_config(page_title="🔥 MANOHAR AI TERMINAL PRO", layout="wide")
+st.set_page_config(page_title="🔥 MANOHAR NSE AI PRO", layout="wide")
 st_autorefresh(interval=60000, key="refresh") 
 
 st.title("🚀 MANOHAR NSE AI PRO TERMINAL")
@@ -39,12 +39,17 @@ def analyze_data(df):
     return cp_strength, observation, big_player
 
 # =============================
-# 3. SECTORS
+# 3. MORE NSE SECTORS ADDED
 # =============================
 all_sectors = {
-    "Nifty 50": ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN", "ITC", "LT"],
-    "Banking": ["SBIN", "AXISBANK", "KOTAKBANK", "HDFCBANK", "ICICIBANK", "PNB"],
-    "Auto": ["TATAMOTORS", "MARUTI", "M&M", "HEROMOTOCO", "ASHOKLEY"]
+    "Nifty 50": ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN", "ITC", "LT", "AXISBANK", "BHARTIARTL"],
+    "Banking": ["SBIN", "AXISBANK", "KOTAKBANK", "HDFCBANK", "ICICIBANK", "PNB", "CANBK", "FEDERALBNK"],
+    "IT Sector": ["TCS", "INFY", "WIPRO", "HCLTECH", "TECHM", "LTIM", "COFORGE", "PERSISTENT"],
+    "Auto": ["TATAMOTORS", "MARUTI", "M&M", "HEROMOTOCO", "EICHERMOT", "ASHOKLEY", "TVSMOTOR", "BALAMUL"],
+    "Pharma": ["SUNPHARMA", "DRREDDY", "CIPLA", "APOLLOHOSP", "DIVISLAB", "LUPIN", "AUROPHARMA"],
+    "Metal": ["TATASTEEL", "JINDALSTEL", "HINDALCO", "JSWSTEEL", "NATIONALUM", "SAIL", "VEDL"],
+    "Energy & Infra": ["NTPC", "POWERGRID", "ONGC", "BPCL", "TATAPOWER", "ADANIPOWER", "ADANIGREEN", "RELIANCE"],
+    "FMCG": ["ITC", "HINDUNILVR", "NESTLEIND", "BRITANNIA", "TATACONSUM", "DABUR", "VBL"]
 }
 
 # =============================
@@ -52,64 +57,70 @@ all_sectors = {
 # =============================
 st.sidebar.title("📂 Backtest Folder")
 bt_date = st.sidebar.date_input("Select History Date", datetime.now() - timedelta(days=1))
-bt_stock = st.sidebar.text_input("Search Stock (Optional)", "").upper()
+bt_stock_input = st.sidebar.text_input("Search Stock (Optional)", "").upper()
 
 # =============================
 # 5. MAIN DASHBOARD (LIVE)
 # =============================
-selected_sector = st.selectbox("📂 Select Sector", list(all_sectors.keys()))
+selected_sector = st.selectbox("📂 Select Sector to Scan", list(all_sectors.keys()))
 stocks = all_sectors[selected_sector]
 
 if st.button("🔍 START LIVE SCANNER", use_container_width=True):
     results = []
-    for s in stocks:
-        t = yf.Ticker(s + ".NS")
-        df = t.history(period="2d", interval="15m")
-        res = analyze_data(df)
-        if res:
-            cp = df['Close'].iloc[-1]
-            results.append({
-                "Stock": s, "Call/Put Strength": res[0], "Price": round(cp, 2),
-                "Observation": res[1], "Big Players": res[2], "Time": df.index[-1].strftime('%H:%M')
-            })
+    with st.spinner(f"Scanning {selected_sector}..."):
+        for s in stocks:
+            try:
+                t = yf.Ticker(s + ".NS")
+                df = t.history(period="2d", interval="15m")
+                res = analyze_data(df)
+                if res:
+                    cp = df['Close'].iloc[-1]
+                    results.append({
+                        "Stock": s, "Call/Put Strength": res[0], "Price": round(cp, 2),
+                        "Observation": res[1], "Big Players": res[2], "Time": df.index[-1].strftime('%H:%M')
+                    })
+            except: continue
+            
     if results:
         st.dataframe(pd.DataFrame(results), use_container_width=True)
+    else:
+        st.error("No Data Found. Market might be closed or API Limit reached.")
 
 # =============================
-# 6. FULL DAY BACKTEST REPORT (FIXED TIME ISSUE)
+# 6. FULL DAY BACKTEST REPORT (ERROR FIXED)
 # =============================
 st.markdown("---")
 st.subheader(f"📅 Backtest Report for {bt_date} (Full Day Signals)")
 
 if st.sidebar.button("📊 Run Full Day Backtest"):
     bt_results = []
-    target_list = [bt_stock] if bt_stock else stocks
+    # FIX: Corrected target stocks logic
+    target_list = [bt_stock_input] if bt_stock_input else stocks
     
-    with st.spinner("Searching through past data..."):
-        for s in target_stocks:
-            t = yf.Ticker(s + ".NS")
-            # ఆ రోజు మొత్తం డేటా తీసుకుంటుంది
-            start_bt = bt_date
-            end_bt = bt_date + timedelta(days=1)
-            df_hist = t.history(start=start_bt, end=end_bt, interval="15m")
-            
-            if not df_hist.empty:
-                # ప్రతి 15 నిమిషాల క్యాండిల్ ని చెక్ చేస్తుంది
-                for i in range(20, len(df_hist)):
-                    sub_df = df_hist.iloc[:i+1]
-                    res = analyze_data(sub_df)
-                    if res and res[1] != "WAIT": # Strong Buy/Sell ఉంటేనే
-                        bt_results.append({
-                            "Time": sub_df.index[-1].strftime('%H:%M'),
-                            "Stock": s,
-                            "Signal": res[1],
-                            "Price": round(sub_df['Close'].iloc[-1], 2),
-                            "Volume Status": res[2]
-                        })
+    with st.spinner("Analyzing past data... This may take a minute."):
+        for s in target_list:
+            try:
+                t = yf.Ticker(s + ".NS")
+                start_bt = bt_date
+                end_bt = bt_date + timedelta(days=1)
+                df_hist = t.history(start=start_bt, end=end_bt, interval="15m")
+                
+                if not df_hist.empty:
+                    for i in range(20, len(df_hist)):
+                        sub_df = df_hist.iloc[:i+1]
+                        res = analyze_data(sub_df)
+                        if res and res[1] != "WAIT":
+                            bt_results.append({
+                                "Time": sub_df.index[-1].strftime('%H:%M'),
+                                "Stock": s,
+                                "Signal": res[1],
+                                "Price": round(sub_df['Close'].iloc[-1], 2),
+                                "Volume": res[2]
+                            })
+            except: continue
     
     if bt_results:
         bt_df = pd.DataFrame(bt_results)
-        # టైమ్ ప్రకారం సార్ట్ చేస్తుంది
         st.table(bt_df.sort_values(by="Time"))
     else:
-        st.warning("ఆ రోజు ఎటువంటి 'Strong' సిగ్నల్స్ రాలేదు.")
+        st.warning(f"{bt_date} నాడు ఎటువంటి 'Strong' సిగ్నల్స్ రాలేదు లేదా సెలవు దినం అయ్యుండవచ్చు.")
