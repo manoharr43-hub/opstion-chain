@@ -4,7 +4,7 @@ import pandas as pd
 from streamlit_autorefresh import st_autorefresh
 
 # =============================
-# PAGE CONFIG (UNCHANGED)
+# CONFIG
 # =============================
 st.set_page_config(page_title="🔥 PRO NSE AI DASHBOARD", layout="wide")
 st_autorefresh(interval=15000, key="refresh")
@@ -13,23 +13,22 @@ st.title("🔥 PRO NSE AI DASHBOARD + SCANNER")
 st.markdown("---")
 
 # =============================
-# TABS (NEW ADD - SAFE)
+# TABS (SAFE ADD)
 # =============================
 tab1, tab2 = st.tabs(["📊 Dashboard", "🔥 Scanner"])
 
 # =============================
-# 📊 DASHBOARD (FIXED VERSION)
+# 📊 DASHBOARD (FIXED)
 # =============================
 with tab1:
     st.subheader("📊 Simple Dashboard")
 
     stock = st.text_input("Enter Stock (Example: RELIANCE)", "RELIANCE")
 
-    # 🔥 AUTO FIX SYMBOL
+    # AUTO FIX SYMBOL
     if not stock.endswith(".NS"):
         stock = stock + ".NS"
 
-    # 🔥 SAFE DATA FETCH
     @st.cache_data(ttl=60)
     def get_data(symbol):
         try:
@@ -43,25 +42,35 @@ with tab1:
     df = get_data(stock)
 
     if df is not None and not df.empty:
+
         st.line_chart(df['Close'])
 
         df['SMA20'] = df['Close'].rolling(20).mean()
         df['SMA50'] = df['Close'].rolling(50).mean()
 
-        latest = df.iloc[-1]
+        # SAFE DROP NA
+        df_clean = df.dropna()
 
-        col1, col2 = st.columns(2)
-        col1.metric("Price", round(latest['Close'], 2))
-        col2.metric("Trend", "UP" if latest['SMA20'] > latest['SMA50'] else "DOWN")
+        if len(df_clean) > 0:
+            latest = df_clean.iloc[-1]
+
+            col1, col2 = st.columns(2)
+            col1.metric("Price", round(latest['Close'], 2))
+
+            trend = "UP" if latest['SMA20'] > latest['SMA50'] else "DOWN"
+            col2.metric("Trend", trend)
+
+        else:
+            st.warning("⚠️ Not enough data for SMA trend")
 
     else:
         st.error("❌ Data Not Loading (Check symbol / network)")
 
 # =============================
-# 🔥 SCANNER (UNCHANGED SAFE)
+# 🔥 SCANNER (FAST + SAFE)
 # =============================
 with tab2:
-    st.subheader("🔥 NSE SCANNER (FAST)")
+    st.subheader("🔥 NSE SCANNER")
 
     sectors = {
         "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS"],
@@ -71,9 +80,8 @@ with tab2:
     }
 
     sector = st.selectbox("Select Sector", list(sectors.keys()))
-    stocks = sectors[sector][:3]   # speed limit
+    stocks = sectors[sector][:3]
 
-    # 🔥 FAST DATA FETCH
     @st.cache_data(ttl=60)
     def get_multi_data(tickers):
         try:
@@ -86,6 +94,7 @@ with tab2:
     results = []
 
     if data is not None:
+
         for stock in stocks:
             try:
                 df = data[stock].dropna()
@@ -115,7 +124,11 @@ with tab2:
 
                 try:
                     df1h = df.resample("1h").last().dropna()
-                    t1h = "UP" if df1h['Close'].iloc[-1] > df1h['Close'].rolling(20).mean().iloc[-1] else "DOWN"
+
+                    if len(df1h) > 20:
+                        t1h = "UP" if df1h['Close'].iloc[-1] > df1h['Close'].rolling(20).mean().iloc[-1] else "DOWN"
+                    else:
+                        t1h = "N/A"
                 except:
                     t1h = "N/A"
 
@@ -136,7 +149,7 @@ with tab2:
     df_res = pd.DataFrame(results)
 
     if df_res.empty:
-        st.warning("⚠️ No Data (Try different sector)")
+        st.warning("⚠️ No Data (Try another sector)")
     else:
         st.dataframe(df_res, use_container_width=True)
 
