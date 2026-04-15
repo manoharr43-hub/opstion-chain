@@ -18,9 +18,11 @@ st.markdown("---")
 # =============================
 def get_detailed_analysis(symbol, target_date=None):
     try:
-        t = yf.Ticker(symbol + ".NS" if not symbol.endswith(".NS") else symbol)
+        # Stock symbol check
+        ticker_sym = symbol + ".NS" if not symbol.endswith(".NS") else symbol
+        t = yf.Ticker(ticker_sym)
         
-        # History/Backtest logic
+        # History logic for Backtest
         if target_date and target_date < datetime.now().date():
             end_dt = datetime.combine(target_date, datetime.max.time())
             start_dt = end_dt - timedelta(days=5)
@@ -34,16 +36,13 @@ def get_detailed_analysis(symbol, target_date=None):
         e20 = df['Close'].ewm(span=20).mean().iloc[-1]
         e50 = df['Close'].ewm(span=50).mean().iloc[-1]
         
-        # Call/Put Strength based on Trend & Volume
+        # Call/Put Strength
         avg_vol = df['Volume'].mean()
         curr_vol = df['Volume'].iloc[-1]
-        
         cp_strength = "🔵 CALL STRONG" if e20 > e50 else "🔴 PUT STRONG"
         
-        # Big Players Logic
+        # Big Players & Observation
         big_player = "🔥 ACTIVE" if curr_vol > (avg_vol * 1.5) else "💤 NORMAL"
-
-        # Observation (Multi-timeframe logic remains same)
         observation = "WAIT"
         if e20 > e50 and curr_vol > avg_vol: observation = "🚀 STRONG BUY"
         elif e20 < e50 and curr_vol > avg_vol: observation = "💀 STRONG SELL"
@@ -72,53 +71,67 @@ def get_detailed_analysis(symbol, target_date=None):
     except: return None
 
 # =============================
-# 3. SIDEBAR (BACKTEST & SEARCH)
+# 3. SECTOR DEFINITIONS (Added Back)
+# =============================
+all_sectors = {
+    "Nifty 50": ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN", "ITC", "LT", "AXISBANK", "BHARTIARTL"],
+    "Banking": ["SBIN", "AXISBANK", "KOTAKBANK", "HDFCBANK", "ICICIBANK", "BAJFINANCE", "PNB", "CANBK"],
+    "IT Sector": ["TCS", "INFY", "WIPRO", "HCLTECH", "TECHM", "LTIM", "COFORGE"],
+    "Auto": ["TATAMOTORS", "MARUTI", "M&M", "HEROMOTOCO", "EICHERMOT", "ASHOKLEY", "TVSMOTOR"],
+    "Pharma": ["SUNPHARMA", "DRREDDY", "CIPLA", "APOLLOHOSP", "DIVISLAB"],
+    "Energy": ["NTPC", "POWERGRID", "ONGC", "BPCL", "TATAPOWER", "ADANIGREEN"]
+}
+
+# =============================
+# 4. SIDEBAR & SEARCH
 # =============================
 st.sidebar.title("📂 History & Search")
-search_date = st.sidebar.date_input("Select Date", datetime.now())
-search_stock = st.sidebar.text_input("Search Stock (Ex: TCS)", "").upper()
+search_date = st.sidebar.date_input("Select Date for History", datetime.now())
+search_stock = st.sidebar.text_input("Search Specific Stock (Ex: TCS)", "").upper()
 
 # =============================
-# 4. MAIN DASHBOARD
+# 5. MAIN DASHBOARD UI
 # =============================
-sectors = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "SBIN", "ICICIBANK", "AXISBANK", "TATAMOTORS", "MARUTI", "ITC"]
+# Sector selection dropdown
+selected_sector_name = st.selectbox("📂 Select Sector to Scan", list(all_sectors.keys()))
+stocks_to_scan = all_sectors[selected_sector_name]
 
-st.subheader("📊 Live Market Scanner")
-results = []
-for s in sectors:
-    res = get_detailed_analysis(s)
-    if res: results.append(res)
+if st.button("🔍 START SCANNER", use_container_width=True):
+    with st.spinner(f"AI Analyzing {selected_sector_name}..."):
+        results = [res for s in stocks_to_scan if (res := get_detailed_analysis(s))]
+        
+        if results:
+            df_res = pd.DataFrame(results)
+            # మెయిన్ కాలమ్ Call/Put Strength
+            st.dataframe(df_res[["Stock", "Call/Put Strength", "Price", "Observation", "Big Players", "Entry", "StopLoss", "Target", "Time"]], use_container_width=True)
 
-if results:
-    df_res = pd.DataFrame(results)
-    # మెయిన్ కాలమ్ కాల్/పుట్ స్ట్రెంగ్త్
-    st.dataframe(df_res, use_container_width=True)
+            # --- BOTTOM SUMMARY LISTS ---
+            st.markdown("---")
+            st.subheader("🏁 Live Signal Summary")
+            col1, col2, col3 = st.columns(3)
 
-    # --- BOTTOM SUMMARY LISTS ---
-    st.markdown("---")
-    st.subheader("🏁 Live Signal Summary")
-    col1, col2, col3 = st.columns(3)
+            with col1:
+                st.success("🚀 **STRONG BUY LIST**")
+                for r in results:
+                    if r['Observation'] == "🚀 STRONG BUY": st.write(f"✅ {r['Stock']} @ {r['Time']}")
 
-    with col1:
-        st.success("🚀 **STRONG BUY LIST**")
-        for r in results:
-            if r['Observation'] == "🚀 STRONG BUY": st.write(f"✅ {r['Stock']} @ {r['Time']}")
+            with col2:
+                st.error("💀 **STRONG SELL LIST**")
+                for r in results:
+                    if r['Observation'] == "💀 STRONG SELL": st.write(f"❌ {r['Stock']} @ {r['Time']}")
 
-    with col2:
-        st.error("💀 **STRONG SELL LIST**")
-        for r in results:
-            if r['Observation'] == "💀 STRONG SELL": st.write(f"❌ {r['Stock']} @ {r['Time']}")
-
-    with col3:
-        st.warning("🔥 **BIG PLAYERS ACTIVE**")
-        for r in results:
-            if r['Big Players'] == "🔥 ACTIVE": st.write(f"⚡ {r['Stock']}")
+            with col3:
+                st.warning("🔥 **BIG PLAYERS ACTIVE**")
+                for r in results:
+                    if r['Big Players'] == "🔥 ACTIVE": st.write(f"⚡ {r['Stock']}")
+        else:
+            st.error("No data found for this sector. Please try again.")
 
 # --- HISTORY SECTION ---
 if search_stock or (search_date < datetime.now().date()):
     st.markdown("---")
     st.subheader(f"📅 Backtest Results: {search_date}")
-    h_list = [search_stock] if search_stock else sectors
+    h_list = [search_stock] if search_stock else stocks_to_scan
     h_results = [res for s in h_list if (res := get_detailed_analysis(s, target_date=search_date))]
     if h_results:
         st.table(pd.DataFrame(h_results))
