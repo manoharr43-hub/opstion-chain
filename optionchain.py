@@ -1,190 +1,127 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from streamlit_autorefresh import st_autorefresh
+from nsepython import nse_quote_meta, nse_get_top_gainers_losers, nse_get_fno_lot_size
+import time
+from datetime import datetime, timedelta
 
 # =============================
 # PAGE CONFIG
 # =============================
-st.set_page_config(page_title="🔥 PRO NSE AI SCANNER V7", layout="wide")
-st_autorefresh(interval=10000, key="refresh")
+st.set_page_config(page_title="🔥 PRO NSE AI SCANNER V7 (NSEPYTHON)", layout="wide")
+st_autorefresh(interval=10000, key="refresh") # 10 seconds refresh
 
-st.title("🔥 PRO NSE AI SCANNER V7 (OPTIMIZED ENGINE)")
+st.title("🔥 PRO NSE AI SCANNER (NSEPYTHON EDITION - ULTIMATE)")
 st.markdown("---")
 
 # =============================
-# SECTORS
+# SECTORS (NSE Symbols)
 # =============================
 sectors = {
-    "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS"],
-    "Banking": ["SBIN.NS","AXISBANK.NS","KOTAKBANK.NS","PNB.NS"],
-    "IT": ["WIPRO.NS","HCLTECH.NS","TECHM.NS","INFY.NS","TCS.NS"],
-    "Auto": ["MARUTI.NS","M&M.NS","TATAMOTORS.NS"],
-    "Pharma": ["SUNPHARMA.NS","DRREDDY.NS","CIPLA.NS"],
+    "Nifty 50 Gainers/Losers": "gainers_losers", # SPECIAL CASE
+    "Banking": ["SBIN","AXISBANK","KOTAKBANK","PNB","HDFCBANK","ICICIBANK"],
+    "IT": ["WIPRO","HCLTECH","TECHM","INFY","TCS"],
+    "Auto": ["MARUTI","M&M","TATAMOTORS","HEROMOTOCO","BAJAJ-AUTO"],
+    "Pharma": ["SUNPHARMA","DRREDDY","CIPLA","APOLLOHOSP","DIVISLAB"],
+    "Energy": ["ONGC","IOC","BPCL","GAIL","RELIANCE"],
+    "FMCG": ["ITC","NESTLEIND","HINDUNILVR","BRITANNIA"],
+    "Metals": ["TATASTEEL","JSWSTEEL","HINDALCO","VEDL"],
+    "Power": ["NTPC","POWERGRID","TATAPOWER","ADANIGREEN"],
+    "Finance": ["BAJFINANCE","BAJAJFINSV","CHOLAFIN","M&MFIN"]
 }
 
-selected_sector = st.selectbox("📊 Select Sector", list(sectors.keys()))
-stocks_to_scan = sectors[selected_sector]
+selected_sector = st.selectbox("📊 Select Sector to Scan", list(sectors.keys()))
 
 # =============================
-# DATA FETCH (FAST + SAFE)
+# DATA FETCH (NSEPYTHON BASED)
 # =============================
-@st.cache_data(ttl=120)
-def get_data(tickers):
-    return yf.download(
-        tickers,
-        period="60d",
-        interval="15m",
-        group_by="ticker",
-        threads=True
-    )
+@st.cache_data(ttl=60) # Short TTL for live data
+def get_live_data(symbol):
+    try:
+        meta = nse_quote_meta(symbol)
+        if meta and 'data' in meta:
+            data = meta['data'][0]
+            # NSE data structure construct
+            return {
+                "Symbol": symbol,
+                "LTP": data['lastPrice'],
+                "Change%": data['pChange'],
+                "Open": data['open'],
+                "High": data['dayHigh'],
+                "Low": data['dayLow'],
+                "PrevClose": data['previousClose'],
+                "Volume": data['totalTradedVolume'],
+                "Value": data['totalTradedValue'],
+                "VWAP": data['basePrice'] # Base price as proxy if VWAP not direct
+            }
+    except Exception as e:
+        return None
+    return None
+
+def get_sector_symbols(sector_key):
+    if sector_key == "gainers_losers":
+        try:
+            gainers = nse_get_top_gainers_losers("gainers")
+            losers = nse_get_top_gainers_losers("losers")
+            symbols = [d['symbol'] for d in gainers['data']] + [d['symbol'] for d in losers['data']]
+            return list(set(symbols)) # Unique symbols
+        except:
+            return []
+    else:
+        return sectors[sector_key]
+
+stocks_to_scan = get_sector_symbols(selected_sector)
 
 # =============================
-# GLOBAL MODEL (TRAIN ONCE)
+# MODEL TRAINING (Constructed from metadata)
 # =============================
 @st.cache_resource
 def train_model(X, y):
-    model = RandomForestClassifier(
-        n_estimators=120,
-        max_depth=10,
-        random_state=42
-    )
+    # Mimicking original params
+    model = RandomForestClassifier(n_estimators=100, max_depth=8, random_state=42)
     model.fit(X, y)
     return model
 
 # =============================
-# INDICATORS
+# ADVANCED ANALYZERS (NEW FEATURES using NSE Data)
 # =============================
-def add_indicators(df):
-    df = df.copy()
 
-    df['EMA20'] = df['Close'].ewm(span=20).mean()
-    df['EMA50'] = df['Close'].ewm(span=50).mean()
+# 1. Pivot Points S/R (Mimicked Daily Pivots from NSE data)
+def get_pivot_points(live_data):
+    high = live_data['High']
+    low = live_data['Low']
+    close = live_data['LTP']
+    
+    pivot = (high + low + close) / 3
+    r1 = (2 * pivot) - low
+    s1 = (2 * pivot) - high
+    
+    return round(s1, 2), round(r1, 2)
 
-    delta = df['Close'].diff()
-    gain = delta.clip(lower=0).rolling(14).mean()
-    loss = -delta.clip(upper=0).rolling(14).mean()
-    rs = gain / (loss + 1e-9)
-    df['RSI'] = 100 - (100 / (1 + rs))
+# 2. Volume Strength Analyzer (Mimics VSA logic)
+def get_volume_strength(live_data):
+    # Volume constructed from metadata
+    recent_vol = live_data['Volume']
+    
+    # Heuristic average volume check
+    # In live trading, we'd need historical average. 
+    # nsepython doesn't easily provide average vol without iteration.
+    # Mimicking logic with high threshold on raw vol (simplified)
+    if recent_vol >= 5000000: return "🐋 WHALE ENTRY", "Blue", 25
+    elif recent_vol >= 2000000: return "👔 INSTITUTIONAL", "Green", 15
+    elif recent_vol >= 500000: return "⚖️ NORMAL", "White", 0
+    else: return "⚠️ WEAK PARTICIPATION", "Red", -5
 
-    df['MACD'] = df['Close'].ewm(span=12).mean() - df['Close'].ewm(span=26).mean()
-    df['Signal'] = df['MACD'].ewm(span=9).mean()
-
-    return df.dropna()
-
-# =============================
-# PIVOT
-# =============================
-def pivots(df):
-    h, l, c = df['High'].iloc[-10:].max(), df['Low'].iloc[-10:].min(), df['Close'].iloc[-1]
-    p = (h + l + c) / 3
-    return (2*p - h), (2*p - l)
-
-# =============================
-# SHORT COVERING
-# =============================
-def short_cover(df):
-    if len(df) < 20:
-        return "NA", 0
-
-    vol_ratio = df['Volume'].iloc[-1] / (df['Volume'].rolling(20).mean().iloc[-1] + 1e-9)
-    price_change = df['Close'].pct_change().iloc[-1] * 100
-
-    if price_change > 1 and vol_ratio > 2:
-        return "⚡ SHORT COVERING", 30
-    elif vol_ratio > 1.5:
-        return "⚖️ BREAKOUT VOL", 10
-    return "NORMAL", 0
-
-# =============================
-# ANALYZE ENGINE
-# =============================
-def analyze(df):
-
-    if len(df) < 120:
-        return None
-
-    df = add_indicators(df)
-
-    s1, r1 = pivots(df)
-    cover, boost = short_cover(df)
-
-    price = df['Close'].iloc[-1]
-
-    # ML TARGET
-    df['Target'] = (df['Close'].shift(-1) > df['Close']).astype(int)
-
-    features = ['EMA20','EMA50','RSI','MACD']
-    X = df[features].tail(80)
-    y = df['Target'].tail(80)
-
-    if len(X) < 30:
-        return None
-
-    model = train_model(X, y)
-    pred = model.predict(X.iloc[[-1]])[0]
-
-    confidence = 0
-
-    if price > df['EMA50'].iloc[-1]:
-        confidence += 20
-    if pred == 1:
-        confidence += 25
-    if cover == "⚡ SHORT COVERING":
-        confidence += 30
-    if df['MACD'].iloc[-1] > df['Signal'].iloc[-1]:
-        confidence += 15
-
-    signal = "🟢 BUY" if pred == 1 else "🔴 SELL"
-
-    sl = s1 if pred == 1 else r1
-    risk = abs(price - sl)
-    target = price + (risk * 2) if pred == 1 else price - (risk * 2)
-
-    return {
-        "Price": round(price,2),
-        "Signal": signal,
-        "Confidence": confidence,
-        "Cover": cover,
-        "SL": round(sl,2),
-        "Target": round(target,2)
-    }
-
-# =============================
-# RUN SCANNER
-# =============================
-with st.spinner("Scanning market..."):
-    data = get_data(stocks_to_scan)
-    results = []
-
-    for stock in stocks_to_scan:
-        try:
-            if stock not in data.columns.levels[0]:
-                continue
-
-            df = data[stock].dropna()
-            out = analyze(df)
-
-            if out:
-                out["Stock"] = stock
-                results.append(out)
-
-        except:
-            continue
-
-# =============================
-# UI
-# =============================
-if results:
-    df = pd.DataFrame(results).sort_values("Confidence", ascending=False)
-
-    st.subheader("📊 Results")
-    st.dataframe(df, use_container_width=True)
-
-    st.subheader("🔥 Top Picks")
-    st.dataframe(df.head(5), use_container_width=True)
-
-else:
-    st.warning("No signals found")
+# 3. Short Covering Detector (Mimics Price-Vol Spike logic)
+def get_short_covering_status(live_data):
+    current_price = live_data['LTP']
+    prev_close = live_data['PrevClose']
+    current_vol = live_data['Volume']
+    
+    price_change_pct = live_data['Change%']
+    
+    # Short covering condition: Sudden price spike + Sudden volume spike
+    # Heuristic check
+    if price_change_pct > 1.5
