@@ -10,13 +10,41 @@ from streamlit_autorefresh import st_autorefresh
 # =============================
 # PAGE CONFIG
 # =============================
-st.set_page_config(page_title="🔥 PRO NSE AI SCANNER AUTO ALERT", layout="wide")
+st.set_page_config(page_title="🔥 PRO NSE AI SCANNER PRO UI", layout="wide")
 st_autorefresh(interval=5000, key="refresh")
 
-st.title("🔥 PRO NSE AI SCANNER (AUTO ALERT SYSTEM)")
+st.title("🔥 PRO NSE AI SCANNER (SMART UI)")
 st.markdown("---")
 
 headers = {"User-Agent": "Mozilla/5.0"}
+
+# =============================
+# NSE SECTORS (EXPANDED)
+# =============================
+sectors = {
+    "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS"],
+    "Banking": ["SBIN.NS","AXISBANK.NS","KOTAKBANK.NS","PNB.NS"],
+    "IT": ["WIPRO.NS","HCLTECH.NS","TECHM.NS"],
+    "Auto": ["MARUTI.NS","TATAMOTORS.NS","M&M.NS"],
+    "Pharma": ["SUNPHARMA.NS","CIPLA.NS","DRREDDY.NS"],
+    "Energy": ["ONGC.NS","IOC.NS","BPCL.NS"],
+    "FMCG": ["ITC.NS","HINDUNILVR.NS","NESTLEIND.NS"],
+    "Metals": ["TATASTEEL.NS","JSWSTEEL.NS","HINDALCO.NS"],
+    "Power": ["NTPC.NS","POWERGRID.NS","ADANIPOWER.NS"],
+    "Infra": ["LT.NS","IRCTC.NS","NBCC.NS"],
+    "Telecom": ["BHARTIARTL.NS","IDEA.NS"],
+    "Finance": ["BAJFINANCE.NS","BAJAJFINSV.NS","HDFCLIFE.NS"]
+}
+
+selected_sector = st.selectbox("📊 Select Sector", list(sectors.keys()))
+stocks = sectors[selected_sector]
+
+# =============================
+# DATA FETCH
+# =============================
+@st.cache_data(ttl=120)
+def get_data(tickers):
+    return yf.download(tickers, period="60d", interval="15m", group_by="ticker")
 
 # =============================
 # LIVE PRICE
@@ -29,6 +57,14 @@ def get_live_price(symbol):
         return s.get(url, headers=headers).json()['priceInfo']['lastPrice']
     except:
         return None
+
+# =============================
+# TREND FUNCTION
+# =============================
+def get_trend(df):
+    df['EMA20'] = df['Close'].ewm(span=20).mean()
+    df['EMA50'] = df['Close'].ewm(span=50).mean()
+    return "UP" if df['EMA20'].iloc[-1] > df['EMA50'].iloc[-1] else "DOWN"
 
 # =============================
 # ENTRY LOGIC
@@ -46,61 +82,6 @@ def get_entry_point(df, signal):
         target = round(entry - (sl - entry)*1.5, 2)
 
     return entry, sl, target
-
-# =============================
-# SCALPING
-# =============================
-def scalping_signal(df):
-    df['EMA9'] = df['Close'].ewm(span=9).mean()
-    df['EMA21'] = df['Close'].ewm(span=21).mean()
-    last = df.iloc[-1]
-
-    if last['EMA9'] > last['EMA21']:
-        return "⚡ BUY"
-    else:
-        return "⚡ SELL"
-
-# =============================
-# OPTION CHAIN
-# =============================
-def get_option_chain():
-    try:
-        s = requests.Session()
-        s.get("https://www.nseindia.com", headers=headers)
-        url = "https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY"
-        data = s.get(url, headers=headers).json()
-
-        ce, pe = 0, 0
-        for i in data['records']['data']:
-            if 'CE' in i and 'PE' in i:
-                ce += i['CE']['openInterest']
-                pe += i['PE']['openInterest']
-
-        pcr = pe/(ce+1e-9)
-
-        if pcr > 1.2:
-            return "🔥 BULLISH"
-        elif pcr < 0.8:
-            return "🔻 BEARISH"
-        else:
-            return "⚖️ SIDEWAYS"
-    except:
-        return "N/A"
-
-# =============================
-# DATA
-# =============================
-sectors = {
-    "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS"],
-    "Banking": ["SBIN.NS","AXISBANK.NS","KOTAKBANK.NS"]
-}
-
-selected_sector = st.selectbox("📊 Sector", list(sectors.keys()))
-stocks = sectors[selected_sector]
-
-@st.cache_data(ttl=120)
-def get_data(tickers):
-    return yf.download(tickers, period="30d", interval="15m", group_by="ticker")
 
 # =============================
 # MODEL
@@ -140,17 +121,22 @@ def analyze(df, stock):
 
     entry, sl, target = get_entry_point(df, signal)
 
-    scalp = scalping_signal(df)
+    # MULTI TF
+    df5 = yf.download(stock, period="10d", interval="5m")
+    df1h = yf.download(stock, period="60d", interval="1h")
 
-    return signal, price, entry, sl, target, scalp
+    t5 = get_trend(df5)
+    t15 = get_trend(df)
+    t1h = get_trend(df1h)
+
+    return signal, price, entry, sl, target, t5, t15, t1h
 
 # =============================
 # RUN
 # =============================
 data = get_data(stocks)
-results = []
 
-st.subheader("🔔 LIVE ENTRY ALERTS")
+results = []
 
 for stock in stocks:
     try:
@@ -158,18 +144,7 @@ for stock in stocks:
         out = analyze(df, stock)
         if out is None: continue
 
-        signal, price, entry, sl, target, scalp = out
-
-        # ALERT LOGIC
-        alert = ""
-        if "BUY" in signal and price >= entry:
-            alert = "🚀 ENTRY BUY HIT"
-            st.success(f"{stock} BUY ENTRY HIT at {price}")
-            st.balloons()
-
-        elif "SELL" in signal and price <= entry:
-            alert = "🔻 ENTRY SELL HIT"
-            st.error(f"{stock} SELL ENTRY HIT at {price}")
+        signal, price, entry, sl, target, t5, t15, t1h = out
 
         results.append({
             "Stock": stock,
@@ -178,20 +153,41 @@ for stock in stocks:
             "Entry": entry,
             "Stoploss": sl,
             "Target": target,
-            "Scalping": scalp,
-            "Alert": alert
+            "5M": t5,
+            "15M": t15,
+            "1H": t1h
         })
 
-        time.sleep(0.5)
+        time.sleep(0.3)
 
     except:
         continue
 
-df = pd.DataFrame(results)
+df_res = pd.DataFrame(results)
 
-st.subheader("🔥 AUTO ALERT TRADING TABLE")
-st.dataframe(df, use_container_width=True)
+st.subheader("🔥 TRADING TABLE")
+st.dataframe(df_res, use_container_width=True)
 
-# OPTION MARKET
-st.subheader("📊 OPTION MARKET")
-st.write(get_option_chain())
+# =============================
+# MULTI TF 3 BOX UI
+# =============================
+st.subheader("📦 Multi Timeframe View")
+
+if not df_res.empty:
+    stock_sel = st.selectbox("Select Stock", df_res["Stock"])
+    row = df_res[df_res["Stock"] == stock_sel].iloc[0]
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("5 MIN", row["5M"])
+    col2.metric("15 MIN", row["15M"])
+    col3.metric("1 HOUR", row["1H"])
+
+# =============================
+# CHART
+# =============================
+st.subheader("📈 Chart")
+
+if not df_res.empty:
+    stock_chart = st.selectbox("Select Stock for Chart", df_res["Stock"], key="chart")
+    chart_data = data[stock_chart]["Close"].resample("1D").last()
+    st.line_chart(chart_data)
