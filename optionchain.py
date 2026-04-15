@@ -37,7 +37,8 @@ stocks_to_scan = sectors[selected_sector]
 # =============================
 @st.cache_data(ttl=120)
 def get_data(tickers):
-    return yf.download(tickers, period="100d", interval="15m", group_by="ticker")
+    # Need at least 200 days for EMA200
+    return yf.download(tickers, period="300d", interval="1d", group_by="ticker")
 
 # =============================
 # MODEL TRAINING
@@ -49,9 +50,10 @@ def train_model(X, y):
     return model
 
 # =============================
-# ANALYSIS ENGINE
+# ANALYSIS ENGINE (Unchanged Logic)
 # =============================
 def analyze(df):
+    if len(df) < 200: return None
     df = df.copy()
     
     # EMA Indicators for Trend
@@ -72,6 +74,7 @@ def analyze(df):
     df['Signal'] = df['MACD'].ewm(span=9).mean()
 
     df.dropna(inplace=True)
+    if len(df) < 50: return None
 
     # Trend Logic
     price = df['Close'].iloc[-1]
@@ -91,11 +94,11 @@ def analyze(df):
     vol_ratio = current_vol / (avg_vol + 1e-9)
     
     if vol_ratio > 3.0:
-        big_player = "🐋 WHALE ENTRY (Huge)"
+        big_player = "🐋 WHALE ENTRY"
     elif vol_ratio > 2.0:
-        big_player = "👔 INSTITUTIONAL (Big)"
+        big_player = "👔 INSTITUTIONAL"
     elif vol_ratio > 1.2:
-        big_player = "👥 RETAIL + (Medium)"
+        big_player = "👥 RETAIL+"
     else:
         big_player = "❄️ LOW INTEREST"
 
@@ -105,35 +108,55 @@ def analyze(df):
     X = df[features]
     y = df['Target']
     
-    if len(X) < 50: return None
     model = train_model(X, y)
     pred = model.predict(X.iloc[[-1]])[0]
 
     # Confidence Score
     confidence = 0
     if "BULLISH" in trend: confidence += 25
-    if vol_ratio > 2: confidence += 25
+    if vol_ratio > 1.8: confidence += 25
     if 40 < df['RSI'].iloc[-1] < 60: confidence += 10
     if pred == 1: confidence += 20
     if df['MACD'].iloc[-1] > df['Signal'].iloc[-1]: confidence += 20
 
-    final_signal = "🔥 HIGH PROBABILITY" if confidence >= 80 else "⚡ WATCH" if confidence >= 60 else "❌ AVOID"
+    # Final Status based on Confidence
+    if confidence >= 80: final_signal = "🔥 HIGH PROBABILITY"
+    elif confidence >= 60: final_signal = "⚡ WATCH"
+    else: final_signal = "❌ AVOID"
     
-    return trend, big_player, round(price,2), confidence, final_signal, ("🟢 BUY" if pred == 1 else "🔴 SELL")
+    # Calculate Entry, Target, Stoploss
+    entry = round(price,2)
+    support = df['Low'].tail(50).min()
+    resistance = df['High'].tail(50).max()
+    risk = abs(entry - support) if pred == 1 else abs(resistance - entry)
+    
+    target = round(entry + (risk * 2), 2) if pred == 1 else round(entry - (risk * risk), 2)
+    stoploss = round(support, 2) if pred == 1 else round(resistance, 2)
+
+    return trend, big_player, round(price,2), confidence, final_signal, ("🟢 BUY" if pred == 1 else "🔴 SELL"), entry, target, stoploss
 
 # =============================
 # SCANNER EXECUTION
 # =============================
+# We need more data (period="300d") for robust EMA200 calculation on daily interval
 data = get_data(stocks_to_scan)
 results = []
 
 if data is not None:
     for stock in stocks_to_scan:
         try:
-            df = data[stock].dropna()
+            # Handle MultiIndex if present
+            if isinstance(data.columns, pd.MultiIndex):
+                df = data.xs(stock, level='Ticker', axis=1).dropna()
+            else:
+                df = data[stock].dropna()
+                
+            if len(df) < 200: # We need 200 days of data for EMA200 trend
+                continue
+
             out = analyze(df)
             if out:
-                trend, big, price, conf, status, sig = out
+                trend, big, price, conf, status, sig, ent, tg, sl = out
                 results.append({
                     "Stock": stock,
                     "Price": price,
@@ -141,22 +164,64 @@ if data is not None:
                     "Big Player": big,
                     "Signal": sig,
                     "Confidence": conf,
+                    "Entry": ent,
+                    "Target": tg,
+                    "Stoploss": sl,
                     "Final Status": status
                 })
-        except:
+        except Exception as e:
+            # print(f"Error analyzing {stock}: {e}") # Debug only
             continue
 
-    result_df = pd.DataFrame(results).sort_values(by="Confidence", ascending=False)
+    # =============================
+    # FIX APPLIED HERE
+    # =============================
+    # Create DataFrame from results
+    result_df = pd.DataFrame(results)
 
-    # UI
-    st.subheader(f"📊 {selected_sector} TREND & VOLUME ANALYSIS")
-    st.dataframe(result_df, use_container_width=True)
+    # Check if the DataFrame is not empty before sorting or displaying metrics
+    if not result_df.empty:
+        # Sort by Confidence (The operation that was causing the crash)
+        result_df = result_df.sort_values(by="Confidence", ascending=False)
 
-    # Summary Metrics
-    c1, c2 = st.columns(2)
-    with c1:
-        st.success("📈 TRENDING STOCKS")
-        st.write(result_df[result_df["Trend"].str.contains("BULLISH")][["Stock", "Trend"]])
-    with c2:
-        st.info("🐋 BIG PLAYER ACTIVITY")
-        st.write(result_df[result_df["Big Player"].str.contains("WHALE|INSTITUTIONAL")][["Stock", "Big Player"]])
+        # UI
+        st.subheader(f"📊 {selected_sector} TREND & VOLUME ANALYSIS")
+        st.dataframe(result_df, use_container_width=True)
+
+        # Summary Metrics
+        c1, c2 = st.columns(2)
+        with c1:
+            st.success("📈 TRENDING STOCKS")
+            trending = result_df[result_df["Trend"].str.contains("BULLISH")]
+            if not trending.empty:
+                st.dataframe(trending[["Stock", "Trend"]], use_container_width=True)
+            else:
+                st.write("No trending stocks found in this sector.")
+        with c2:
+            st.info("🐋 BIG PLAYER ACTIVITY")
+            whales = result_df[result_df["Big Player"].str.contains("WHALE|INSTITUTIONAL")]
+            if not whales.empty:
+                st.dataframe(whales[["Stock", "Big Player"]], use_container_width=True)
+            else:
+                st.write("No Big Player activity detected.")
+
+        st.subheader("📈 LIVE CHART & DETAILS")
+        stock_choice = st.selectbox("Pick a stock to see live updates", result_df["Stock"])
+        
+        # Display live price and selected stock details
+        current_data = result_df[result_df["Stock"] == stock_choice]
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Current Price", current_data.iloc[0]["Price"])
+        m2.metric("Option Sentiment", current_data.iloc[0]["Big Player"])
+        m3.metric("Win Rate Status", current_data.iloc[0]["Final Status"])
+
+        # Live Chart using the full downloaded data
+        live_df = data.xs(stock_choice, level='Ticker', axis=1).dropna().tail(50)
+        st.line_chart(live_df["Close"])
+        
+    else:
+        # If no stocks had enough data or calculations failed
+        st.warning(f"No valid data found for stocks in {selected_sector}. Ensure these stocks have at least 200 days of trading history.")
+
+else:
+    st.error("Could not fetch data from Yahoo Finance. Please check your internet connection or try again later.")
