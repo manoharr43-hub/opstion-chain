@@ -8,10 +8,10 @@ from streamlit_autorefresh import st_autorefresh
 # =============================
 # PAGE CONFIG
 # =============================
-st.set_page_config(page_title="🔥 PRO NSE AI SCANNER V2", layout="wide")
+st.set_page_config(page_title="🔥 PRO NSE AI SCANNER V3", layout="wide")
 st_autorefresh(interval=8000, key="refresh")
 
-st.title("🔥 PRO NSE AI SCANNER (AI + OPTIONS + VOLUME STRENGTH)")
+st.title("🔥 PRO NSE AI SCANNER (TREND + BIG PLAYER EDITION)")
 
 # =============================
 # SECTORS
@@ -37,7 +37,7 @@ stocks_to_scan = sectors[selected_sector]
 # =============================
 @st.cache_data(ttl=120)
 def get_data(tickers):
-    return yf.download(tickers, period="60d", interval="15m", group_by="ticker")
+    return yf.download(tickers, period="100d", interval="15m", group_by="ticker")
 
 # =============================
 # MODEL TRAINING
@@ -49,54 +49,23 @@ def train_model(X, y):
     return model
 
 # =============================
-# VOLUME STRENGTH ANALYZER (NEW)
-# =============================
-def get_volume_strength(df):
-    recent_vol = df['Volume'].iloc[-1]
-    avg_vol_20 = df['Volume'].rolling(20).mean().iloc[-1]
-    
-    vol_ratio = recent_vol / (avg_vol_20 + 1e-9)
-    
-    if vol_ratio >= 2.5:
-        return "🚀 EXTRA STRONG", "Blue"
-    elif vol_ratio >= 1.5:
-        return "💪 STRONG", "Green"
-    elif vol_ratio >= 0.8:
-        return "⚖️ NORMAL", "White"
-    else:
-        return "⚠️ WEAK", "Red"
-
-# =============================
-# OPTIONS SENTIMENT
-# =============================
-def get_options_sentiment(df):
-    recent = df.tail(10)
-    vol_bullish = recent[recent['Close'] > recent['Open']]['Volume'].sum()
-    vol_bearish = recent[recent['Close'] < recent['Open']]['Volume'].sum()
-    pcr_ratio = round(vol_bullish / (vol_bearish + 1e-9), 2)
-    
-    if pcr_ratio > 1.5: return "🟢 CALLS STRONG", pcr_ratio
-    elif pcr_ratio < 0.6: return "🔴 PUTS STRONG", pcr_ratio
-    else: return "⚖️ NEUTRAL", pcr_ratio
-
-# =============================
 # ANALYSIS ENGINE
 # =============================
 def analyze(df):
     df = df.copy()
     
-    # Indicators
+    # EMA Indicators for Trend
     df['EMA20'] = df['Close'].ewm(span=20).mean()
     df['EMA50'] = df['Close'].ewm(span=50).mean()
+    df['EMA200'] = df['Close'].ewm(span=200).mean() # Long term trend
     
-    # RSI
+    # RSI & MACD
     delta = df['Close'].diff()
     gain = delta.clip(lower=0).rolling(14).mean()
     loss = -delta.clip(upper=0).rolling(14).mean()
     rs = gain / (loss + 1e-9)
     df['RSI'] = 100 - (100 / (1 + rs))
-
-    # MACD
+    
     df['EMA12'] = df['Close'].ewm(span=12).mean()
     df['EMA26'] = df['Close'].ewm(span=26).mean()
     df['MACD'] = df['EMA12'] - df['EMA26']
@@ -104,46 +73,53 @@ def analyze(df):
 
     df.dropna(inplace=True)
 
-    # AI Prediction Logic
+    # Trend Logic
+    price = df['Close'].iloc[-1]
+    ema50 = df['EMA50'].iloc[-1]
+    ema200 = df['EMA200'].iloc[-1]
+    
+    if price > ema50 > ema200:
+        trend = "🚀 STRONG BULLISH"
+    elif price < ema50 < ema200:
+        trend = "🔻 STRONG BEARISH"
+    else:
+        trend = "⚖️ SIDEWAYS"
+
+    # Big Player Logic (Volume Analysis)
+    avg_vol = df['Volume'].rolling(20).mean().iloc[-1]
+    current_vol = df['Volume'].iloc[-1]
+    vol_ratio = current_vol / (avg_vol + 1e-9)
+    
+    if vol_ratio > 3.0:
+        big_player = "🐋 WHALE ENTRY (Huge)"
+    elif vol_ratio > 2.0:
+        big_player = "👔 INSTITUTIONAL (Big)"
+    elif vol_ratio > 1.2:
+        big_player = "👥 RETAIL + (Medium)"
+    else:
+        big_player = "❄️ LOW INTEREST"
+
+    # AI Target
     df['Target'] = (df['Close'].shift(-1) > df['Close']).astype(int)
     features = ['EMA20','EMA50','RSI','MACD']
     X = df[features]
     y = df['Target']
     
     if len(X) < 50: return None
-
     model = train_model(X, y)
     pred = model.predict(X.iloc[[-1]])[0]
 
-    # Current Values
-    price = df['Close'].iloc[-1]
-    vol_status, vol_color = get_volume_strength(df)
-    opt_sentiment, pcr_val = get_options_sentiment(df)
-    
-    support = df['Low'].tail(40).min()
-    resistance = df['High'].tail(40).max()
-
-    # CONFIDENCE SCORING
+    # Confidence Score
     confidence = 0
-    if price > df['EMA20'].iloc[-1] > df['EMA50'].iloc[-1]: confidence += 20
+    if "BULLISH" in trend: confidence += 25
+    if vol_ratio > 2: confidence += 25
     if 40 < df['RSI'].iloc[-1] < 60: confidence += 10
-    if df['MACD'].iloc[-1] > df['Signal'].iloc[-1]: confidence += 15
     if pred == 1: confidence += 20
-    if "STRONG" in vol_status: confidence += 20  # Added Volume Weightage
-    if opt_sentiment == "🟢 CALLS STRONG": confidence += 15
+    if df['MACD'].iloc[-1] > df['Signal'].iloc[-1]: confidence += 20
 
-    # Final Label
-    if confidence >= 85: final = "🔥 HIGH PROBABILITY"
-    elif confidence >= 65: final = "⚡ WATCH"
-    else: final = "❌ AVOID"
-
-    signal_text = "🟢 BUY" if pred == 1 else "🔴 SELL"
-    entry = round(price, 2)
-    risk = abs(price - (support if pred == 1 else resistance))
-    target = round(entry + (risk * 2), 2) if pred == 1 else round(entry - (risk * 2), 2)
-    stoploss = round(support, 2) if pred == 1 else round(resistance, 2)
-
-    return final, signal_text, confidence, entry, stoploss, target, vol_status, opt_sentiment
+    final_signal = "🔥 HIGH PROBABILITY" if confidence >= 80 else "⚡ WATCH" if confidence >= 60 else "❌ AVOID"
+    
+    return trend, big_player, round(price,2), confidence, final_signal, ("🟢 BUY" if pred == 1 else "🔴 SELL")
 
 # =============================
 # SCANNER EXECUTION
@@ -157,40 +133,30 @@ if data is not None:
             df = data[stock].dropna()
             out = analyze(df)
             if out:
-                final, sig, conf, ent, sl, tg, vol, opt = out
+                trend, big, price, conf, status, sig = out
                 results.append({
                     "Stock": stock,
-                    "Price": ent,
+                    "Price": price,
+                    "Trend": trend,
+                    "Big Player": big,
                     "Signal": sig,
                     "Confidence": conf,
-                    "Volume": vol,
-                    "Option": opt,
-                    "Entry": ent,
-                    "Target": tg,
-                    "Stoploss": sl,
-                    "Status": final
+                    "Final Status": status
                 })
         except:
             continue
 
     result_df = pd.DataFrame(results).sort_values(by="Confidence", ascending=False)
 
-    # UI DISPLAY
-    st.subheader(f"📊 {selected_sector} Live Analysis")
+    # UI
+    st.subheader(f"📊 {selected_sector} TREND & VOLUME ANALYSIS")
     st.dataframe(result_df, use_container_width=True)
 
-    # Metrics for quick view
-    c1, c2, c3 = st.columns(3)
+    # Summary Metrics
+    c1, c2 = st.columns(2)
     with c1:
-        st.success("🚀 HIGH VOLUME STOCKS")
-        st.write(result_df[result_df["Volume"].str.contains("STRONG")][["Stock", "Volume"]])
+        st.success("📈 TRENDING STOCKS")
+        st.write(result_df[result_df["Trend"].str.contains("BULLISH")][["Stock", "Trend"]])
     with c2:
-        st.info("🟢 CALL POWER (BULLISH)")
-        st.write(result_df[result_df["Option"] == "🟢 CALLS STRONG"][["Stock", "Option"]])
-    with c3:
-        st.error("⚠️ WEAK VOLUME (BE CAREFUL)")
-        st.write(result_df[result_df["Volume"] == "⚠️ WEAK"][["Stock", "Volume"]])
-
-    st.subheader("📈 Chart & Technicals")
-    s_stock = st.selectbox("Pick a stock to see details", result_df["Stock"])
-    st.line_chart(data[s_stock]["Close"])
+        st.info("🐋 BIG PLAYER ACTIVITY")
+        st.write(result_df[result_df["Big Player"].str.contains("WHALE|INSTITUTIONAL")][["Stock", "Big Player"]])
