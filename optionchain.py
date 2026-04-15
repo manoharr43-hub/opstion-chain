@@ -1,85 +1,146 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
 
 # =============================
-# CONFIG
+# 1. CONFIG
 # =============================
-st.set_page_config(page_title="🔥 NSE AI DEBUG TERMINAL", layout="wide")
-st_autorefresh(interval=60000, key="refresh")
+st.set_page_config(page_title="🔥 MANOHAR NSE AI PRO", layout="wide")
+st_autorefresh(interval=60000, key="refresh") 
 
-st.title("🧪 NSE AI DEBUG MODE TERMINAL")
+st.title("🚀 MANOHAR NSE AI PRO TERMINAL")
 st.markdown("---")
 
 # =============================
-# DEBUG LOG CONTAINER
-# =============================
-log_box = st.empty()
-
-def log(msg):
-    log_box.text(msg)
-
-# =============================
-# SAFE ANALYSIS
+# 2. ANALYSIS LOGIC (With Entry, SL, Target)
 # =============================
 def analyze_data(df):
-    if df is None or df.empty:
-        return None
+    if df is None or len(df) < 20: return None
+    
+    e20 = df['Close'].ewm(span=20).mean()
+    e50 = df['Close'].ewm(span=50).mean()
+    vol = df['Volume']
+    avg_vol = vol.rolling(window=20).mean()
+    
+    curr_price = df['Close'].iloc[-1]
+    curr_e20 = e20.iloc[-1]
+    curr_e50 = e50.iloc[-1]
+    curr_vol = vol.iloc[-1]
+    curr_avg_vol = avg_vol.iloc[-1]
+    
+    # Trend Strength
+    cp_strength = "🔵 CALL STRONG" if curr_e20 > curr_e50 else "🔴 PUT STRONG"
+    big_player = "🔥 ACTIVE" if curr_vol > (curr_avg_vol * 1.5) else "💤 NORMAL"
+    
+    observation = "WAIT"
+    entry, sl, target = 0, 0, 0
+    
+    # ATR లాంటి వోలటైలిటీ ఆధారంగా SL/Target లెక్కించడం (Basic Method)
+    recent_high = df['High'].iloc[-10:].max()
+    recent_low = df['Low'].iloc[-10:].min()
+    risk = (recent_high - recent_low) if (recent_high - recent_low) > 0 else curr_price * 0.01
 
-    if len(df) < 20:
-        return None
-
-    df = df.copy()
-
-    df["EMA20"] = df["Close"].ewm(span=20).mean()
-    df["EMA50"] = df["Close"].ewm(span=50).mean()
-    df["VOL_AVG"] = df["Volume"].rolling(20).mean()
-
-    curr_price = df["Close"].iloc[-1]
-    curr_e20 = df["EMA20"].iloc[-1]
-    curr_e50 = df["EMA50"].iloc[-1]
-    curr_vol = df["Volume"].iloc[-1]
-    curr_avg_vol = df["VOL_AVG"].iloc[-1]
-
-    if np.isnan(curr_avg_vol):
-        return None
-
-    signal = "WAIT"
-    entry = sl = target = 0
-
-    recent_high = df["High"].iloc[-10:].max()
-    recent_low = df["Low"].iloc[-10:].min()
-    risk = max((recent_high - recent_low), curr_price * 0.01)
-
-    if curr_e20 > curr_e50 and curr_vol > curr_avg_vol:
-        signal = "BUY"
+    if curr_e20 > curr_e50 and curr_vol > curr_avg_vol: 
+        observation = "🚀 STRONG BUY"
         entry = curr_price
-        sl = curr_price - risk * 0.5
+        sl = curr_price - (risk * 0.5)
         target = curr_price + risk
-
-    elif curr_e20 < curr_e50 and curr_vol > curr_avg_vol:
-        signal = "SELL"
+    elif curr_e20 < curr_e50 and curr_vol > curr_avg_vol: 
+        observation = "💀 STRONG SELL"
         entry = curr_price
-        sl = curr_price + risk * 0.5
+        sl = curr_price + (risk * 0.5)
         target = curr_price - risk
-
-    return signal, round(entry, 2), round(sl, 2), round(target, 2)
-
-# =============================
-# STOCK LIST
-# =============================
-stocks = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN"]
+    
+    return cp_strength, observation, big_player, round(entry, 2), round(sl, 2), round(target, 2)
 
 # =============================
-# DEBUG SCANNER
+# 3. NSE SECTORS
 # =============================
-if st.button("🧪 RUN DEBUG SCANNER"):
+all_sectors = {
+    "Nifty 50": ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN", "ITC", "LT", "AXISBANK", "BHARTIARTL"],
+    "Banking": ["SBIN", "AXISBANK", "KOTAKBANK", "HDFCBANK", "ICICIBANK", "PNB", "CANBK", "FEDERALBNK"],
+    "Auto": ["TATAMOTORS", "MARUTI", "M&M", "HEROMOTOCO", "EICHERMOT", "ASHOKLEY", "TVSMOTOR"],
+    "Metal": ["TATASTEEL", "JINDALSTEL", "HINDALCO", "JSWSTEEL", "NATIONALUM", "SAIL", "VEDL"],
+    "IT Sector": ["TCS", "INFY", "WIPRO", "HCLTECH", "TECHM", "LTIM", "COFORGE"],
+    "Pharma": ["SUNPHARMA", "DRREDDY", "CIPLA", "APOLLOHOSP", "DIVISLAB"]
+}
 
+# =============================
+# 4. SIDEBAR
+# =============================
+st.sidebar.title("📂 Backtest Folder")
+bt_date = st.sidebar.date_input("Select History Date", datetime.now() - timedelta(days=1))
+bt_stock_input = st.sidebar.text_input("Search Stock (Optional)", "").upper()
+
+# =============================
+# 5. MAIN DASHBOARD (LIVE SCANNER)
+# =============================
+selected_sector = st.selectbox("📂 Select Sector to Scan", list(all_sectors.keys()))
+stocks = all_sectors[selected_sector]
+
+if st.button("🔍 START LIVE SCANNER", use_container_width=True):
     results = []
-    debug_logs = []
+    with st.spinner(f"AI Analyzing {selected_sector}..."):
+        for s in stocks:
+            try:
+                t = yf.Ticker(s + ".NS")
+                df = t.history(period="2d", interval="15m")
+                res = analyze_data(df)
+                if res:
+                    results.append({
+                        "Stock": s, 
+                        "Price": round(df['Close'].iloc[-1], 2),
+                        "Call/Put Strength": res[0], 
+                        "Observation": res[1], 
+                        "Entry": res[3],
+                        "StopLoss": res[4],
+                        "Target": res[5],
+                        "Big Players": res[2], 
+                        "Time": df.index[-1].strftime('%H:%M')
+                    })
+            except: continue
+            
+    if results:
+        df_res = pd.DataFrame(results)
+        # Entry, SL, Target కాలమ్స్ మెయిన్ టేబుల్‌లో యాడ్ చేశాను
+        st.dataframe(df_res, use_container_width=True)
+    else:
+        st.error("Data Not Found. Market Closed?")
 
-    for s in stocks:
-        try
+# =============================
+# 6. BACKTEST SECTION (FIXED)
+# =============================
+st.markdown("---")
+st.subheader(f"📅 Backtest Report for {bt_date}")
+
+if st.sidebar.button("📊 Run Full Day Backtest"):
+    bt_results = []
+    target_list = [bt_stock_input] if bt_stock_input else stocks
+    
+    with st.spinner("Analyzing past data..."):
+        for s in target_list:
+            try:
+                t = yf.Ticker(s + ".NS")
+                df_hist = t.history(start=bt_date, end=bt_date + timedelta(days=1), interval="15m")
+                
+                if not df_hist.empty:
+                    for i in range(20, len(df_hist)):
+                        sub_df = df_hist.iloc[:i+1]
+                        res = analyze_data(sub_df)
+                        if res and res[1] != "WAIT":
+                            bt_results.append({
+                                "Time": sub_df.index[-1].strftime('%H:%M'),
+                                "Stock": s,
+                                "Signal": res[1],
+                                "Entry": res[3],
+                                "StopLoss": res[4],
+                                "Target": res[5]
+                            })
+            except: continue
+    
+    if bt_results:
+        st.table(pd.DataFrame(bt_results).sort_values(by="Time"))
+    else:
+        st.warning("No Strong Signals found for this date.")
