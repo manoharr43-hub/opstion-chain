@@ -85,3 +85,9 @@ def get_option_strength(df):
     recent = df.tail(10)
     vol_bullish = recent[recent['Close'] >= recent['Open']]['Volume'].sum()
     vol_
+# get_data function lo ee change cheyandi
+@st.cache_data(ttl=60) # cache time thagginchandi
+def get_data(tickers):
+    # 'threads=True' ni remove chesi chudandi, konnisarlu adhi issue avthundhi
+    return yf.download(tickers, period="60d", interval="15m", group_by="ticker", progress=False)
+    
