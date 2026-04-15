@@ -4,16 +4,16 @@ import pandas as pd
 import numpy as np
 import requests
 import time
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.ensemble import RandomForestClassifier
 from streamlit_autorefresh import st_autorefresh
 
 # =============================
 # PAGE CONFIG
 # =============================
-st.set_page_config(page_title="🔥 PRO NSE AI SCANNER HEDGE FUND", layout="wide")
-st_autorefresh(interval=8000, key="refresh")
+st.set_page_config(page_title="🔥 PRO NSE AI SCANNER AUTO ALERT", layout="wide")
+st_autorefresh(interval=5000, key="refresh")
 
-st.title("🔥 PRO NSE AI SCANNER (AUTO BOT + AI)")
+st.title("🔥 PRO NSE AI SCANNER (AUTO ALERT SYSTEM)")
 st.markdown("---")
 
 headers = {"User-Agent": "Mozilla/5.0"}
@@ -31,54 +31,92 @@ def get_live_price(symbol):
         return None
 
 # =============================
-# MULTI TIMEFRAME DATA
+# ENTRY LOGIC
 # =============================
-def get_multi_tf(stock):
-    df15 = yf.download(stock, period="30d", interval="15m")
-    df5 = yf.download(stock, period="10d", interval="5m")
-    df1h = yf.download(stock, period="60d", interval="1h")
-    return df15, df5, df1h
+def get_entry_point(df, signal):
+    prev = df.iloc[-2]
+
+    if "BUY" in signal:
+        entry = round(prev['High'], 2)
+        sl = round(prev['Low'], 2)
+        target = round(entry + (entry - sl)*1.5, 2)
+    else:
+        entry = round(prev['Low'], 2)
+        sl = round(prev['High'], 2)
+        target = round(entry - (sl - entry)*1.5, 2)
+
+    return entry, sl, target
 
 # =============================
-# TREND CHECK
+# SCALPING
 # =============================
-def trend_check(df):
-    df['EMA20'] = df['Close'].ewm(span=20).mean()
-    df['EMA50'] = df['Close'].ewm(span=50).mean()
-    return "UP" if df['EMA20'].iloc[-1] > df['EMA50'].iloc[-1] else "DOWN"
+def scalping_signal(df):
+    df['EMA9'] = df['Close'].ewm(span=9).mean()
+    df['EMA21'] = df['Close'].ewm(span=21).mean()
+    last = df.iloc[-1]
+
+    if last['EMA9'] > last['EMA21']:
+        return "⚡ BUY"
+    else:
+        return "⚡ SELL"
 
 # =============================
-# ATM OPTION
+# OPTION CHAIN
 # =============================
-def get_atm(price, step=50):
-    return int(round(price/step)*step)
+def get_option_chain():
+    try:
+        s = requests.Session()
+        s.get("https://www.nseindia.com", headers=headers)
+        url = "https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY"
+        data = s.get(url, headers=headers).json()
+
+        ce, pe = 0, 0
+        for i in data['records']['data']:
+            if 'CE' in i and 'PE' in i:
+                ce += i['CE']['openInterest']
+                pe += i['PE']['openInterest']
+
+        pcr = pe/(ce+1e-9)
+
+        if pcr > 1.2:
+            return "🔥 BULLISH"
+        elif pcr < 0.8:
+            return "🔻 BEARISH"
+        else:
+            return "⚖️ SIDEWAYS"
+    except:
+        return "N/A"
 
 # =============================
-# AUTO BOT (ENTRY EXIT)
+# DATA
 # =============================
-def auto_trade(price, signal):
-    target = round(price * 1.01,2) if "BUY" in signal else round(price * 0.99,2)
-    sl = round(price * 0.99,2) if "BUY" in signal else round(price * 1.01,2)
-    return target, sl
+sectors = {
+    "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS"],
+    "Banking": ["SBIN.NS","AXISBANK.NS","KOTAKBANK.NS"]
+}
+
+selected_sector = st.selectbox("📊 Sector", list(sectors.keys()))
+stocks = sectors[selected_sector]
+
+@st.cache_data(ttl=120)
+def get_data(tickers):
+    return yf.download(tickers, period="30d", interval="15m", group_by="ticker")
 
 # =============================
-# MODEL (ENSEMBLE)
+# MODEL
 # =============================
 @st.cache_resource
-def train_models(X, y):
-    rf = RandomForestClassifier(n_estimators=100)
-    gb = GradientBoostingClassifier()
-    rf.fit(X,y)
-    gb.fit(X,y)
-    return rf, gb
+def train(X,y):
+    model = RandomForestClassifier(n_estimators=80)
+    model.fit(X,y)
+    return model
 
 # =============================
 # ANALYZE
 # =============================
-def analyze(stock):
-    df15, df5, df1h = get_multi_tf(stock)
+def analyze(df, stock):
+    df = df.copy()
 
-    df = df15.copy()
     df['EMA20'] = df['Close'].ewm(span=20).mean()
     df['EMA50'] = df['Close'].ewm(span=50).mean()
 
@@ -91,70 +129,69 @@ def analyze(stock):
     if len(X) < 50:
         return None
 
-    rf, gb = train_models(X,y)
-
-    pred1 = rf.predict(X.iloc[[-1]])[0]
-    pred2 = gb.predict(X.iloc[[-1]])[0]
-
-    pred = 1 if (pred1 + pred2) >= 1 else 0
+    model = train(X,y)
+    pred = model.predict(X.iloc[[-1]])[0]
 
     signal = "🟢 BUY" if pred==1 else "🔴 SELL"
 
-    # MULTI TF CONFIRM
-    t15 = trend_check(df15)
-    t5 = trend_check(df5)
-    t1h = trend_check(df1h)
-
-    mtf = f"{t5}/{t15}/{t1h}"
-
-    # LIVE PRICE
     price = get_live_price(stock)
     if not price:
         price = df['Close'].iloc[-1]
 
-    # AUTO BOT
-    target, sl = auto_trade(price, signal)
+    entry, sl, target = get_entry_point(df, signal)
 
-    # ATM
-    atm = get_atm(price)
-    option = f"{atm} CE" if pred==1 else f"{atm} PE"
+    scalp = scalping_signal(df)
 
-    return signal, price, target, sl, option, mtf
+    return signal, price, entry, sl, target, scalp
 
 # =============================
-# SECTORS
+# RUN
 # =============================
-sectors = {
-    "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS"],
-    "Banking": ["SBIN.NS","AXISBANK.NS","KOTAKBANK.NS"]
-}
-
-sec = st.selectbox("Select Sector", list(sectors.keys()))
-
+data = get_data(stocks)
 results = []
 
-for stock in sectors[sec]:
+st.subheader("🔔 LIVE ENTRY ALERTS")
+
+for stock in stocks:
     try:
-        out = analyze(stock)
+        df = data[stock].dropna()
+        out = analyze(df, stock)
         if out is None: continue
 
-        signal, price, target, sl, option, mtf = out
+        signal, price, entry, sl, target, scalp = out
+
+        # ALERT LOGIC
+        alert = ""
+        if "BUY" in signal and price >= entry:
+            alert = "🚀 ENTRY BUY HIT"
+            st.success(f"{stock} BUY ENTRY HIT at {price}")
+            st.balloons()
+
+        elif "SELL" in signal and price <= entry:
+            alert = "🔻 ENTRY SELL HIT"
+            st.error(f"{stock} SELL ENTRY HIT at {price}")
 
         results.append({
             "Stock": stock,
             "Signal": signal,
             "Price": round(price,2),
-            "Target": target,
+            "Entry": entry,
             "Stoploss": sl,
-            "ATM Option": option,
-            "Multi TF Trend": mtf
+            "Target": target,
+            "Scalping": scalp,
+            "Alert": alert
         })
 
         time.sleep(0.5)
+
     except:
         continue
 
 df = pd.DataFrame(results)
 
-st.subheader("🔥 AUTO TRADING SIGNALS")
+st.subheader("🔥 AUTO ALERT TRADING TABLE")
 st.dataframe(df, use_container_width=True)
+
+# OPTION MARKET
+st.subheader("📊 OPTION MARKET")
+st.write(get_option_chain())
