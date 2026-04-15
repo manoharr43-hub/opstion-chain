@@ -16,11 +16,6 @@ st.title("🔥 PRO NSE AI SCANNER (ULTIMATE VERSION)")
 st.markdown("---")
 
 # =============================
-# FAST MODE
-# =============================
-fast_mode = st.checkbox("⚡ Fast Mode", value=True)
-
-# =============================
 # SECTORS
 # =============================
 sectors = {
@@ -34,31 +29,12 @@ selected_sector = st.selectbox("📊 Select Sector", list(sectors.keys()))
 stocks_to_scan = sectors[selected_sector]
 
 # =============================
-# TELEGRAM (OPTIONAL)
+# DATA FETCH & INDICATORS
 # =============================
-TELEGRAM_TOKEN = ""
-CHAT_ID = ""
-
-def send_telegram(msg):
-    if TELEGRAM_TOKEN == "" or CHAT_ID == "":
-        return
-    try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
-    except:
-        pass
-
-# =============================
-# DATA FETCH
-# =============================
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=60)
 def get_data(tickers):
-    # తాజా డేటాను డౌన్‌లోడ్ చేస్తుంది
     return yf.download(tickers, period="30d", interval="15m", group_by="ticker", threads=True)
 
-# =============================
-# INDICATORS
-# =============================
 def calculate_indicators(df):
     df = df.copy()
     df['EMA20'] = df['Close'].ewm(span=20).mean()
@@ -66,8 +42,7 @@ def calculate_indicators(df):
     df['EMA12'] = df['Close'].ewm(span=12).mean()
     df['EMA26'] = df['Close'].ewm(span=26).mean()
     df['MACD'] = df['EMA12'] - df['EMA26']
-    df['Signal'] = df['MACD'].ewm(span=9).mean()
-
+    
     delta = df['Close'].diff()
     gain = delta.clip(lower=0).rolling(14).mean()
     loss = -delta.clip(upper=0).rolling(14).mean()
@@ -76,44 +51,30 @@ def calculate_indicators(df):
     return df
 
 # =============================
-# BACKTEST (Symmetry fixed here)
-# =============================
-def backtest(df):
-    correct = 0
-    total = 0
-    # కనీసం 50 క్యాండిల్స్ ఉంటేనే బ్యాక్ టెస్ట్ చేస్తుంది
-    if len(df) > 50:
-        for i in range(50, len(df)-1):
-            if df['Close'].iloc[i] > df['EMA50'].iloc[i]:
-                if df['Close'].iloc[i+1] > df['Close'].iloc[i]:
-                    correct += 1
-                total += 1
-    # ఇక్కడ 'else 0' యాడ్ చేసి ఎర్రర్ సరిచేసాను
-    return round((correct/total)*100, 2) if total > 0 else 0
-
-# =============================
-# AI PREDICTION LOGIC
+# AI & BACKTEST LOGIC
 # =============================
 def ai_predict(df):
     df = df.dropna()
-    if len(df) < 50:
-        return "N/A", 0
-    
-    # Target: ధర పెరిగితే 1, తగ్గితే 0
+    if len(df) < 30: return "N/A", 0
     df['Target'] = np.where(df['Close'].shift(-1) > df['Close'], 1, 0)
     features = ['RSI', 'MACD', 'EMA20']
     X = df[features].iloc[:-1]
     y = df['Target'].iloc[:-1]
-    
-    clf = RandomForestClassifier(n_estimators=100, random_state=42)
-    clf.fit(X, y)
-    
+    model = RandomForestClassifier(n_estimators=50, random_state=42)
+    model.fit(X, y)
     last_row = df[features].tail(1)
-    prediction = clf.predict(last_row)[0]
-    prob = clf.predict_proba(last_row).max()
-    
-    signal = "BUY 🚀" if prediction == 1 else "SELL 📉"
-    return signal, round(prob * 100, 2)
+    pred = model.predict(last_row)[0]
+    prob = model.predict_proba(last_row).max()
+    return ("BUY 🚀" if pred == 1 else "SELL 📉"), round(prob * 100, 2)
+
+def backtest(df):
+    correct, total = 0, 0
+    if len(df) > 50:
+        for i in range(len(df)-11, len(df)-1):
+            if df['Close'].iloc[i] > df['EMA50'].iloc[i]:
+                if df['Close'].iloc[i+1] > df['Close'].iloc[i]: correct += 1
+                total += 1
+    return round((correct/total)*100, 2) if total > 0 else 0
 
 # =============================
 # MAIN EXECUTION
@@ -125,39 +86,48 @@ scan_results = []
 
 for ticker in stocks_to_scan:
     try:
-        # సింగిల్ లేదా మల్టీ ఇండెక్స్ డేటా హ్యాండ్లింగ్
-        df_ticker = raw_data[ticker].copy() if len(stocks_to_scan) > 1 else raw_data.copy()
+        # మల్టీ-ఇండెక్స్ డేటా హ్యాండ్లింగ్
+        if len(stocks_to_scan) > 1:
+            df_ticker = raw_data[ticker].copy()
+        else:
+            df_ticker = raw_data.copy()
+            
+        if df_ticker.empty: continue
+            
         df_ticker = calculate_indicators(df_ticker)
-        
         signal, confidence = ai_predict(df_ticker)
         accuracy = backtest(df_ticker)
         
-        current_price = round(df_ticker['Close'].iloc[-1], 2)
-        price_change = round(((df_ticker['Close'].iloc[-1] - df_ticker['Close'].iloc[-2]) / df_ticker['Close'].iloc[-2]) * 100, 2)
+        curr_p = round(df_ticker['Close'].iloc[-1], 2)
+        prev_p = df_ticker['Close'].iloc[-2]
+        chg = round(((curr_p - prev_p) / prev_p) * 100, 2)
 
         scan_results.append({
             "Ticker": ticker,
-            "Price": current_price,
-            "Change %": price_change,
+            "Price": curr_p,
+            "Change %": chg,
             "RSI": round(df_ticker['RSI'].iloc[-1], 2),
             "AI Signal": signal,
-            "AI Conf.": f"{confidence}%",
-            "Strategy Acc.": f"{accuracy}%"
+            "Confidence": f"{confidence}%",
+            "Accuracy": f"{accuracy}%"
         })
-    except Exception as e:
+    except:
         continue
 
-# ఫలితాలను చూపించడం
+# DISPLAY TABLE
 if scan_results:
     final_df = pd.DataFrame(scan_results)
     
-    def highlight_signal(val):
-        color = 'background-color: #228B22; color: white' if 'BUY' in str(val) else 'background-color: #DC143C; color: white'
-        return color
+    # ఎర్రర్ రాకుండా ఇక్కడ మార్పులు చేశాను (Pandas Styler Fix)
+    def style_df(res_df):
+        def apply_color(val):
+            if 'BUY' in str(val): return 'background-color: #228B22; color: white'
+            if 'SELL' in str(val): return 'background-color: #DC143C; color: white'
+            return ''
+        
+        # applymap బదులుగా map వాడుతున్నాము (New Pandas Version)
+        return res_df.style.map(apply_color, subset=['AI Signal'])
 
-    st.table(final_df.style.applymap(highlight_signal, subset=['AI Signal']))
+    st.table(style_df(final_df))
 else:
-    st.warning("No data found or symbols are incorrect.")
-
-st.markdown("---")
-st.caption("AI Scanner v7.0 Max | Data updated every 30 seconds.")
+    st.error("No data found. Please refresh or check connection.")
