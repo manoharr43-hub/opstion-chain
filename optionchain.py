@@ -10,50 +10,47 @@ from streamlit_autorefresh import st_autorefresh
 # =============================
 # PAGE CONFIG
 # =============================
-st.set_page_config(page_title="🔥 PRO NSE AI SCANNER ULTIMATE", layout="wide")
+st.set_page_config(page_title="🔥 PRO NSE AI SCANNER ULTIMATE MAX", layout="wide")
 st_autorefresh(interval=8000, key="refresh")
 
-st.title("🔥 PRO NSE AI SCANNER (LIVE + OPTION CHAIN)")
+st.title("🔥 PRO NSE AI SCANNER (ULTIMATE MAX)")
 st.markdown("---")
 
-# =============================
-# NSE HEADERS
-# =============================
 headers = {"User-Agent": "Mozilla/5.0"}
 
 # =============================
-# LIVE PRICE FUNCTION
+# LIVE PRICE
 # =============================
 def get_live_price(symbol):
-    url = f"https://www.nseindia.com/api/quote-equity?symbol={symbol.replace('.NS','')}"
     try:
         session = requests.Session()
         session.get("https://www.nseindia.com", headers=headers)
+        url = f"https://www.nseindia.com/api/quote-equity?symbol={symbol.replace('.NS','')}"
         data = session.get(url, headers=headers).json()
         return data['priceInfo']['lastPrice']
     except:
         return None
 
 # =============================
-# OPTION CHAIN FUNCTIONS
+# OPTION CHAIN
 # =============================
 def get_option_chain(symbol="NIFTY"):
-    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
     try:
         session = requests.Session()
         session.get("https://www.nseindia.com", headers=headers)
+        url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
         return session.get(url, headers=headers).json()
     except:
         return None
 
 def get_pcr_signal(data):
     try:
-        ce_oi, pe_oi = 0, 0
-        for item in data['records']['data']:
-            if 'CE' in item and 'PE' in item:
-                ce_oi += item['CE']['openInterest']
-                pe_oi += item['PE']['openInterest']
-        pcr = pe_oi / (ce_oi + 1e-9)
+        ce, pe = 0, 0
+        for i in data['records']['data']:
+            if 'CE' in i and 'PE' in i:
+                ce += i['CE']['openInterest']
+                pe += i['PE']['openInterest']
+        pcr = pe / (ce + 1e-9)
 
         if pcr > 1.2:
             return "🔥 BULLISH"
@@ -63,6 +60,44 @@ def get_pcr_signal(data):
             return "⚖️ SIDEWAYS"
     except:
         return "N/A"
+
+# =============================
+# ATM STRIKE
+# =============================
+def get_atm_strike(price, step=50):
+    return int(round(price / step) * step)
+
+def get_option_trade(price, signal):
+    atm = get_atm_strike(price)
+    return f"{atm} CE" if "BUY" in signal else f"{atm} PE"
+
+# =============================
+# SCALPING ENGINE (5 MIN)
+# =============================
+def scalping_signal(df):
+    df = df.copy()
+
+    df['EMA9'] = df['Close'].ewm(span=9).mean()
+    df['EMA21'] = df['Close'].ewm(span=21).mean()
+
+    delta = df['Close'].diff()
+    gain = delta.clip(lower=0).rolling(7).mean()
+    loss = -delta.clip(upper=0).rolling(7).mean()
+    rs = gain / (loss + 1e-9)
+    df['RSI_FAST'] = 100 - (100 / (1 + rs))
+
+    df['MACD'] = df['Close'].ewm(span=6).mean() - df['Close'].ewm(span=13).mean()
+    df['Signal'] = df['MACD'].ewm(span=5).mean()
+
+    df.dropna(inplace=True)
+    last = df.iloc[-1]
+
+    if last['EMA9'] > last['EMA21'] and last['MACD'] > last['Signal'] and last['RSI_FAST'] > 50:
+        return "⚡ SCALPING BUY"
+    elif last['EMA9'] < last['EMA21'] and last['MACD'] < last['Signal'] and last['RSI_FAST'] < 50:
+        return "⚡ SCALPING SELL"
+    else:
+        return "⚖️ NO TRADE"
 
 # =============================
 # SECTORS
@@ -84,7 +119,7 @@ selected_sector = st.selectbox("📊 Select Sector", list(sectors.keys()))
 stocks_to_scan = sectors[selected_sector]
 
 # =============================
-# DATA FETCH
+# DATA
 # =============================
 @st.cache_data(ttl=120)
 def get_data(tickers):
@@ -100,23 +135,20 @@ def train_model(X, y):
     return model
 
 # =============================
-# ANALYSIS ENGINE
+# ANALYZE
 # =============================
 def analyze(df, stock):
     df = df.copy()
 
-    # EMA
     df['EMA20'] = df['Close'].ewm(span=20).mean()
     df['EMA50'] = df['Close'].ewm(span=50).mean()
 
-    # RSI
     delta = df['Close'].diff()
     gain = delta.clip(lower=0).rolling(14).mean()
     loss = -delta.clip(upper=0).rolling(14).mean()
     rs = gain / (loss + 1e-9)
     df['RSI'] = 100 - (100 / (1 + rs))
 
-    # MACD
     df['EMA12'] = df['Close'].ewm(span=12).mean()
     df['EMA26'] = df['Close'].ewm(span=26).mean()
     df['MACD'] = df['EMA12'] - df['EMA26']
@@ -124,7 +156,6 @@ def analyze(df, stock):
 
     df.dropna(inplace=True)
 
-    # TARGET
     df['Target'] = (df['Close'].shift(-1) > df['Close']).astype(int)
     df.dropna(inplace=True)
 
@@ -138,14 +169,12 @@ def analyze(df, stock):
     model = train_model(X, y)
     pred = model.predict(X.iloc[[-1]])[0]
 
-    # LIVE PRICE
     live_price = get_live_price(stock)
     price = live_price if live_price else df['Close'].iloc[-1]
 
     support = df['Low'].tail(40).min()
     resistance = df['High'].tail(40).max()
 
-    # BIG PLAYER
     avg_vol = df['Volume'].rolling(20).mean().iloc[-1]
     vol_ratio = df['Volume'].iloc[-1] / (avg_vol + 1e-9)
 
@@ -156,7 +185,6 @@ def analyze(df, stock):
     else:
         big = "⚖️ NORMAL"
 
-    # CONFIDENCE
     confidence = 0
     if price > df['EMA20'].iloc[-1] > df['EMA50'].iloc[-1]: confidence += 20
     if 40 < df['RSI'].iloc[-1] < 60: confidence += 15
@@ -165,20 +193,19 @@ def analyze(df, stock):
     if vol_ratio > 1.5: confidence += 15
     if price <= support*1.02 or price >= resistance*0.98: confidence += 10
 
-    if confidence >= 85:
-        final = "🔥 HIGH PROBABILITY"
-    elif confidence >= 60:
-        final = "⚡ WATCH"
-    else:
-        final = "❌ AVOID"
-
+    final = "🔥 HIGH PROBABILITY" if confidence >= 85 else "⚡ WATCH" if confidence >= 60 else "❌ AVOID"
     signal_text = "🟢 BUY" if pred == 1 else "🔴 SELL"
+
     entry = round(price,2)
     stoploss = round(support,2) if pred==1 else round(resistance,2)
 
     opt_sentiment = "CALL STRONG" if pred==1 else "PUT STRONG"
 
-    return final, signal_text, confidence, price, support, resistance, big, entry, stoploss, opt_sentiment
+    # NEW FEATURES
+    option_trade = get_option_trade(price, signal_text)
+    scalp = scalping_signal(df)
+
+    return final, signal_text, confidence, price, support, resistance, big, entry, stoploss, opt_sentiment, option_trade, scalp
 
 # =============================
 # BACKTEST
@@ -199,7 +226,7 @@ def backtest(df):
     return round((correct/total)*100,2) if total > 0 else 0
 
 # =============================
-# SCANNER EXECUTION
+# RUN
 # =============================
 data = get_data(stocks_to_scan)
 results = []
@@ -211,7 +238,7 @@ if data is not None:
             out = analyze(df, stock)
             if out is None: continue
 
-            final, signal_text, confidence, price, support, resistance, big, entry, stoploss, opt_sentiment = out
+            final, signal_text, confidence, price, support, resistance, big, entry, stoploss, opt_sentiment, option_trade, scalp = out
             winrate = backtest(df)
 
             results.append({
@@ -226,7 +253,9 @@ if data is not None:
                 "Entry": entry,
                 "Stoploss": stoploss,
                 "WinRate%": winrate,
-                "Option Sentiment": opt_sentiment
+                "Option Sentiment": opt_sentiment,
+                "ATM Option": option_trade,
+                "Scalping": scalp
             })
 
             time.sleep(0.5)
@@ -242,13 +271,10 @@ if data is not None:
     st.subheader("🔥 HIGH PROBABILITY ONLY")
     st.dataframe(result_df[result_df["Confidence"] >= 85], use_container_width=True)
 
-    # OPTION CHAIN DISPLAY
     st.subheader("📊 OPTION CHAIN SIGNAL")
     opt_data = get_option_chain("NIFTY")
-    signal = get_pcr_signal(opt_data)
-    st.write("Market Sentiment:", signal)
+    st.write("Market Sentiment:", get_pcr_signal(opt_data))
 
-    # STRONG BUY / SELL
     st.subheader("📊 NSE Strong BUY Stocks")
     st.dataframe(result_df[(result_df["Confidence"] >= 85) & (result_df["Signal"].str.contains("BUY"))])
 
