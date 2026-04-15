@@ -1,160 +1,122 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
 
 # =============================
-# 1. CONFIG & REFRESH
+# 1. CONFIG & UI
 # =============================
-st.set_page_config(page_title="🔥 MANOHAR NSE AI PRO", layout="wide")
-st_autorefresh(interval=60000, key="refresh") 
+st.set_page_config(page_title="🔥 MANOHAR AI TERMINAL", layout="wide")
+st_autorefresh(interval=60000, key="refresh")
 
-st.title("🚀 MANOHAR NSE AI PRO DASHBOARD")
-st.markdown("---")
+st.title("🚀 MANOHAR NSE AI PRO TERMINAL")
+
+# --- SIDEBAR: SEARCH & HISTORY ---
+st.sidebar.title("🔍 Backtest & Search")
+search_date = st.sidebar.date_input("Select Date for History", datetime.now())
+search_stock = st.sidebar.text_input("Search Specific Stock (Ex: TCS)", "").upper()
 
 # =============================
-# 2. OPTION CHAIN ANALYSIS (NEW)
+# 2. ANALYSIS ENGINE
 # =============================
-def get_option_data(symbol):
+def get_detailed_analysis(symbol, target_date=None):
     try:
-        t = yf.Ticker(symbol)
-        if not t.options:
-            return "⚖️ NEUTRAL", 0.0
+        t = yf.Ticker(symbol + ".NS" if not symbol.endswith(".NS") else symbol)
         
-        # ఇమ్మీడియట్ ఎక్స్‌పైరీ డేటా
-        expiry = t.options[0]
-        opt = t.option_chain(expiry)
-        
-        call_vol = opt.calls['volume'].sum()
-        put_vol = opt.puts['volume'].sum()
-        
-        if call_vol == 0: return "⚖️ NEUTRAL", 0.0
-        
-        pcr = put_vol / call_vol
-        
-        # Logic for Call/Put Strength
-        if pcr < 0.7:
-            strength = "🔵 CALL SIDE STRONG"
-        elif pcr > 1.3:
-            strength = "🔴 PUT SIDE STRONG"
+        # డేట్ సెలెక్ట్ చేస్తే బ్యాక్‌టెస్ట్ డేటా వస్తుంది
+        if target_date and target_date < datetime.now().date():
+            end_dt = datetime.combine(target_date, datetime.max.time())
+            start_dt = end_dt - timedelta(days=5)
+            df = t.history(start=start_dt, end=end_dt, interval="15m")
         else:
-            strength = "⚖️ NEUTRAL"
-            
-        return strength, round(pcr, 2)
-    except:
-        return "N/A", 0.0
+            df = t.history(period="5d", interval="15m")
 
-# =============================
-# 3. CORE ANALYSIS ENGINE
-# =============================
-def get_detailed_analysis(symbol):
-    try:
-        t = yf.Ticker(symbol)
-        df_5m = t.history(period="1d", interval="5m")
-        df_15m = t.history(period="5d", interval="15m")
-        df_1h = t.history(period="1mo", interval="1h")
+        if df.empty: return None
 
-        if df_15m.empty or len(df_15m) < 20: return None
-
-        # --- Trend Logic (EMA 20 vs 50) ---
-        def calc_trend(df):
-            e20 = df['Close'].ewm(span=20).mean().iloc[-1]
-            e50 = df['Close'].ewm(span=50).mean().iloc[-1]
-            return "UP" if e20 > e50 else "DOWN"
-
-        t5, t15, t1h = calc_trend(df_5m), calc_trend(df_15m), calc_trend(df_1h)
+        # Call/Put Strength Logic (Simulated based on Volume/Price for Backtest)
+        avg_vol = df['Volume'].mean()
+        curr_vol = df['Volume'].iloc[-1]
         
-        # --- Big Players (Volume Spike) ---
-        avg_vol = df_15m['Volume'].mean()
-        last_vol = df_15m['Volume'].iloc[-1]
-        big_player = "🔥 ACTIVE" if last_vol > (avg_vol * 1.8) else "💤 NORMAL"
+        # EMA Trend
+        e20 = df['Close'].ewm(span=20).mean().iloc[-1]
+        e50 = df['Close'].ewm(span=50).mean().iloc[-1]
+        
+        trend_status = "🔵 CALL STRONG" if e20 > e50 else "🔴 PUT STRONG"
+        observation = "🚀 STRONG BUY" if (e20 > e50 and curr_vol > avg_vol) else "💀 STRONG SELL" if (e20 < e50 and curr_vol > avg_vol) else "WAIT"
 
-        # --- Option Strength (NEW) ---
-        opt_obs, pcr_val = get_option_data(symbol)
-
-        # --- Price Metrics ---
-        cp = df_15m['Close'].iloc[-1]
-        high, low = df_15m['High'].iloc[-5:].max(), df_15m['Low'].iloc[-5:].min()
-        range_val = max(high - low, cp * 0.01)
-
-        # --- Entry, SL, Target Calculation ---
-        if t15 == "UP":
-            signal, entry = "🟢 BUY", high + (range_val * 0.1)
-            sl = low - (range_val * 0.2)
-            target = entry + (entry - sl) * 1.5
-        else:
-            signal, entry = "🔴 SELL", low - (range_val * 0.1)
-            sl = high + (range_val * 0.2)
-            target = entry - (sl - entry) * 1.5
-
-        # --- Strength Logic (Observation) ---
-        strength = "WAIT"
-        if t5 == "UP" and t15 == "UP" and t1h == "UP": strength = "🚀 STRONG BUY"
-        elif t5 == "DOWN" and t15 == "DOWN" and t1h == "DOWN": strength = "💀 STRONG SELL"
-
+        cp = df['Close'].iloc[-1]
         return {
+            "Time": df.index[-1].strftime('%H:%M'),
             "Stock": symbol.replace(".NS", ""),
             "Price": round(cp, 2),
-            "Signal": signal,
-            "Observation": strength,
-            "Option Strength": opt_obs,
-            "PCR": pcr_val,
-            "Big Players": big_player,
-            "Entry": round(entry, 2),
-            "StopLoss": round(sl, 2),
-            "Target": round(target, 2)
+            "Call/Put Strength": trend_status,
+            "Observation": observation,
+            "Entry": round(cp * 1.002, 2),
+            "SL": round(cp * 0.995, 2),
+            "Target": round(cp * 1.01, 2)
         }
     except: return None
 
 # =============================
-# 4. SECTOR SELECTION
+# 3. MAIN DASHBOARD LAYOUT
 # =============================
-sectors = {
-    "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS","SBIN.NS","ITC.NS","LT.NS","AXISBANK.NS","BHARTIARTL.NS"],
-    "Banking": ["SBIN.NS","AXISBANK.NS","KOTAKBANK.NS","HDFCBANK.NS","ICICIBANK.NS","BAJFINANCE.NS","PNB.NS","CANBK.NS"],
-    "IT": ["TCS.NS","INFY.NS","WIPRO.NS","HCLTECH.NS","TECHM.NS","LTIM.NS","COFORGE.NS"],
-    "Auto": ["TATAMOTORS.NS","MARUTI.NS","M&M.NS","HEROMOTOCO.NS","EICHERMOT.NS","ASHOKLEY.NS","TVSMOTOR.NS"],
-    "Pharma": ["SUNPHARMA.NS","DRREDDY.NS","CIPLA.NS","APOLLOHOSP.NS","DIVISLAB.NS"],
-    "Energy": ["NTPC.NS","POWERGRID.NS","ONGC.NS","BPCL.NS","TATAPOWER.NS","ADANIGREEN.NS"]
-}
+col_left, col_right = st.columns([2, 1])
 
-selected_sector = st.selectbox("📂 Select Market Sector", list(sectors.keys()))
+sectors = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "SBIN", "ICICIBANK", "AXISBANK", "TATAMOTORS", "MARUTI", "ITC"]
 
-if st.button("🔍 START SCANNER", use_container_width=True):
-    with st.spinner("AI analyzing Trends & Option Chain..."):
-        results = [res for s in sectors[selected_sector] if (res := get_detailed_analysis(s))]
-        
-        if results:
-            df = pd.DataFrame(results)
-            st.subheader(f"📊 {selected_sector} Live Signals")
-            st.dataframe(df, use_container_width=True)
+with col_left:
+    st.subheader("📊 Live Market Scanner")
+    results = []
+    for s in sectors:
+        res = get_detailed_analysis(s)
+        if res: results.append(res)
+    
+    if results:
+        df_res = pd.DataFrame(results)
+        # మీరు అడిగినట్లు మెయిన్ కాలమ్ Call/Put Strength
+        st.dataframe(df_res[["Stock", "Call/Put Strength", "Price", "Observation", "Entry", "SL", "Target"]], use_container_width=True)
+    
+    # --- BOTTOM LISTS ---
+    st.markdown("---")
+    l_col, r_col = st.columns(2)
+    with l_col:
+        st.success("✅ **STRONG BUY LIST**")
+        s_buy = [r['Stock'] for r in results if r['Observation'] == "🚀 STRONG BUY"]
+        for b in s_buy: st.write(f"🚀 {b}")
+    with r_col:
+        st.error("❌ **STRONG SELL LIST**")
+        s_sell = [r['Stock'] for r in results if r['Observation'] == "💀 STRONG SELL"]
+        for s in s_sell: st.write(f"💀 {s}")
 
-            # --- BOTTOM SUMMARY SECTION ---
-            st.markdown("---")
-            st.subheader("🏁 NSE Trend & Option Summary")
-            
-            s_buy_list = df[df['Observation'] == "🚀 STRONG BUY"]["Stock"].tolist()
-            s_sell_list = df[df['Observation'] == "💀 STRONG SELL"]["Stock"].tolist()
-            call_strong_list = df[df['Option Strength'] == "🔵 CALL SIDE STRONG"]["Stock"].tolist()
-            put_strong_list = df[df['Option Strength'] == "🔴 PUT SIDE STRONG"]["Stock"].tolist()
+with col_right:
+    st.subheader("📈 Time-wise Chart")
+    selected_chart = st.selectbox("Select Stock for Chart", sectors)
+    t_chart = yf.Ticker(selected_chart + ".NS")
+    df_chart = t_chart.history(period="1d", interval="5m")
+    
+    if not df_chart.empty:
+        fig = go.Figure(data=[go.Candlestick(x=df_chart.index,
+                open=df_chart['Open'], high=df_chart['High'],
+                low=df_chart['Low'], close=df_chart['Close'])])
+        fig.update_layout(height=400, margin=dict(l=0, r=0, t=0, b=0))
+        st.plotly_chart(fig, use_container_width=True)
 
-            col1, col2 = st.columns(2)
-
-            with col1:
-                st.success(f"📈 **BULLISH ZONE (Call Strong)**")
-                if call_strong_list:
-                    for s in call_strong_list: st.write(f"✅ {s} (PCR: {df[df['Stock']==s]['PCR'].values[0]})")
-                else: st.write("None")
-
-            with col2:
-                st.error(f"📉 **BEARISH ZONE (Put Strong)**")
-                if put_strong_list:
-                    for s in put_strong_list: st.write(f"❌ {s} (PCR: {df[df['Stock']==s]['PCR'].values[0]})")
-                else: st.write("None")
-                
-            st.markdown("---")
-            st.info(f"🚀 **TOTAL STRONG BUY:** {', '.join(s_buy_list) if s_buy_list else 'None'}")
-            st.warning(f"💀 **TOTAL STRONG SELL:** {', '.join(s_sell_list) if s_sell_list else 'None'}")
-
-        else:
-            st.error("Data Fetch Failed. Please try again.")
+# =============================
+# 4. PREVIOUS DATES / FOLDER SEARCH
+# =============================
+if search_stock or (search_date < datetime.now().date()):
+    st.markdown("---")
+    st.subheader(f"📅 History Results for {search_date}")
+    history_res = []
+    target_stocks = [search_stock] if search_stock else sectors
+    
+    for s in target_stocks:
+        h_res = get_detailed_analysis(s, target_date=search_date)
+        if h_res: history_res.append(h_res)
+    
+    if history_res:
+        st.table(pd.DataFrame(history_res))
+    else:
+        st.write("No historical data found for this selection.")
