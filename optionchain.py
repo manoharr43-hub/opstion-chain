@@ -14,7 +14,7 @@ st.title("🚀 MANOHAR NSE AI PRO TERMINAL")
 st.markdown("---")
 
 # =============================
-# 2. ANALYSIS LOGIC
+# 2. ANALYSIS LOGIC (With Entry, SL, Target)
 # =============================
 def analyze_data(df):
     if df is None or len(df) < 20: return None
@@ -24,86 +24,106 @@ def analyze_data(df):
     vol = df['Volume']
     avg_vol = vol.rolling(window=20).mean()
     
+    curr_price = df['Close'].iloc[-1]
     curr_e20 = e20.iloc[-1]
     curr_e50 = e50.iloc[-1]
     curr_vol = vol.iloc[-1]
     curr_avg_vol = avg_vol.iloc[-1]
     
+    # Trend Strength
     cp_strength = "🔵 CALL STRONG" if curr_e20 > curr_e50 else "🔴 PUT STRONG"
     big_player = "🔥 ACTIVE" if curr_vol > (curr_avg_vol * 1.5) else "💤 NORMAL"
     
     observation = "WAIT"
-    if curr_e20 > curr_e50 and curr_vol > curr_avg_vol: observation = "🚀 STRONG BUY"
-    elif curr_e20 < curr_e50 and curr_vol > curr_avg_vol: observation = "💀 STRONG SELL"
+    entry, sl, target = 0, 0, 0
     
-    return cp_strength, observation, big_player
+    # ATR లాంటి వోలటైలిటీ ఆధారంగా SL/Target లెక్కించడం (Basic Method)
+    recent_high = df['High'].iloc[-10:].max()
+    recent_low = df['Low'].iloc[-10:].min()
+    risk = (recent_high - recent_low) if (recent_high - recent_low) > 0 else curr_price * 0.01
+
+    if curr_e20 > curr_e50 and curr_vol > curr_avg_vol: 
+        observation = "🚀 STRONG BUY"
+        entry = curr_price
+        sl = curr_price - (risk * 0.5)
+        target = curr_price + risk
+    elif curr_e20 < curr_e50 and curr_vol > curr_avg_vol: 
+        observation = "💀 STRONG SELL"
+        entry = curr_price
+        sl = curr_price + (risk * 0.5)
+        target = curr_price - risk
+    
+    return cp_strength, observation, big_player, round(entry, 2), round(sl, 2), round(target, 2)
 
 # =============================
-# 3. MORE NSE SECTORS ADDED
+# 3. NSE SECTORS
 # =============================
 all_sectors = {
     "Nifty 50": ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN", "ITC", "LT", "AXISBANK", "BHARTIARTL"],
     "Banking": ["SBIN", "AXISBANK", "KOTAKBANK", "HDFCBANK", "ICICIBANK", "PNB", "CANBK", "FEDERALBNK"],
-    "IT Sector": ["TCS", "INFY", "WIPRO", "HCLTECH", "TECHM", "LTIM", "COFORGE", "PERSISTENT"],
-    "Auto": ["TATAMOTORS", "MARUTI", "M&M", "HEROMOTOCO", "EICHERMOT", "ASHOKLEY", "TVSMOTOR", "BALAMUL"],
-    "Pharma": ["SUNPHARMA", "DRREDDY", "CIPLA", "APOLLOHOSP", "DIVISLAB", "LUPIN", "AUROPHARMA"],
+    "Auto": ["TATAMOTORS", "MARUTI", "M&M", "HEROMOTOCO", "EICHERMOT", "ASHOKLEY", "TVSMOTOR"],
     "Metal": ["TATASTEEL", "JINDALSTEL", "HINDALCO", "JSWSTEEL", "NATIONALUM", "SAIL", "VEDL"],
-    "Energy & Infra": ["NTPC", "POWERGRID", "ONGC", "BPCL", "TATAPOWER", "ADANIPOWER", "ADANIGREEN", "RELIANCE"],
-    "FMCG": ["ITC", "HINDUNILVR", "NESTLEIND", "BRITANNIA", "TATACONSUM", "DABUR", "VBL"]
+    "IT Sector": ["TCS", "INFY", "WIPRO", "HCLTECH", "TECHM", "LTIM", "COFORGE"],
+    "Pharma": ["SUNPHARMA", "DRREDDY", "CIPLA", "APOLLOHOSP", "DIVISLAB"]
 }
 
 # =============================
-# 4. SIDEBAR - BACKTEST FOLDER
+# 4. SIDEBAR
 # =============================
 st.sidebar.title("📂 Backtest Folder")
 bt_date = st.sidebar.date_input("Select History Date", datetime.now() - timedelta(days=1))
 bt_stock_input = st.sidebar.text_input("Search Stock (Optional)", "").upper()
 
 # =============================
-# 5. MAIN DASHBOARD (LIVE)
+# 5. MAIN DASHBOARD (LIVE SCANNER)
 # =============================
 selected_sector = st.selectbox("📂 Select Sector to Scan", list(all_sectors.keys()))
 stocks = all_sectors[selected_sector]
 
 if st.button("🔍 START LIVE SCANNER", use_container_width=True):
     results = []
-    with st.spinner(f"Scanning {selected_sector}..."):
+    with st.spinner(f"AI Analyzing {selected_sector}..."):
         for s in stocks:
             try:
                 t = yf.Ticker(s + ".NS")
                 df = t.history(period="2d", interval="15m")
                 res = analyze_data(df)
                 if res:
-                    cp = df['Close'].iloc[-1]
                     results.append({
-                        "Stock": s, "Call/Put Strength": res[0], "Price": round(cp, 2),
-                        "Observation": res[1], "Big Players": res[2], "Time": df.index[-1].strftime('%H:%M')
+                        "Stock": s, 
+                        "Price": round(df['Close'].iloc[-1], 2),
+                        "Call/Put Strength": res[0], 
+                        "Observation": res[1], 
+                        "Entry": res[3],
+                        "StopLoss": res[4],
+                        "Target": res[5],
+                        "Big Players": res[2], 
+                        "Time": df.index[-1].strftime('%H:%M')
                     })
             except: continue
             
     if results:
-        st.dataframe(pd.DataFrame(results), use_container_width=True)
+        df_res = pd.DataFrame(results)
+        # Entry, SL, Target కాలమ్స్ మెయిన్ టేబుల్‌లో యాడ్ చేశాను
+        st.dataframe(df_res, use_container_width=True)
     else:
-        st.error("No Data Found. Market might be closed or API Limit reached.")
+        st.error("Data Not Found. Market Closed?")
 
 # =============================
-# 6. FULL DAY BACKTEST REPORT (ERROR FIXED)
+# 6. BACKTEST SECTION (FIXED)
 # =============================
 st.markdown("---")
-st.subheader(f"📅 Backtest Report for {bt_date} (Full Day Signals)")
+st.subheader(f"📅 Backtest Report for {bt_date}")
 
 if st.sidebar.button("📊 Run Full Day Backtest"):
     bt_results = []
-    # FIX: Corrected target stocks logic
     target_list = [bt_stock_input] if bt_stock_input else stocks
     
-    with st.spinner("Analyzing past data... This may take a minute."):
+    with st.spinner("Analyzing past data..."):
         for s in target_list:
             try:
                 t = yf.Ticker(s + ".NS")
-                start_bt = bt_date
-                end_bt = bt_date + timedelta(days=1)
-                df_hist = t.history(start=start_bt, end=end_bt, interval="15m")
+                df_hist = t.history(start=bt_date, end=bt_date + timedelta(days=1), interval="15m")
                 
                 if not df_hist.empty:
                     for i in range(20, len(df_hist)):
@@ -114,13 +134,13 @@ if st.sidebar.button("📊 Run Full Day Backtest"):
                                 "Time": sub_df.index[-1].strftime('%H:%M'),
                                 "Stock": s,
                                 "Signal": res[1],
-                                "Price": round(sub_df['Close'].iloc[-1], 2),
-                                "Volume": res[2]
+                                "Entry": res[3],
+                                "StopLoss": res[4],
+                                "Target": res[5]
                             })
             except: continue
     
     if bt_results:
-        bt_df = pd.DataFrame(bt_results)
-        st.table(bt_df.sort_values(by="Time"))
+        st.table(pd.DataFrame(bt_results).sort_values(by="Time"))
     else:
-        st.warning(f"{bt_date} నాడు ఎటువంటి 'Strong' సిగ్నల్స్ రాలేదు లేదా సెలవు దినం అయ్యుండవచ్చు.")
+        st.warning("No Strong Signals found for this date.")
