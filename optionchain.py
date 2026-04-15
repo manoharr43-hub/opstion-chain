@@ -6,168 +6,118 @@ from streamlit_autorefresh import st_autorefresh
 # =============================
 # CONFIG
 # =============================
-st.set_page_config(page_title="🔥 SAFE NSE AI DASHBOARD", layout="wide")
-st_autorefresh(interval=15000, key="refresh")
+st.set_page_config(page_title="🔥 PRO NSE AI DASHBOARD", layout="wide")
+st_autorefresh(interval=30000, key="refresh") # 30 Sec refresh to avoid rate limits
 
-st.title("🔥 SAFE NSE AI DASHBOARD (NO HANG VERSION)")
+st.title("🔥 PRO NSE AI DASHBOARD (Multi-Timeframe)")
 st.markdown("---")
 
-tab1, tab2 = st.tabs(["📊 Dashboard", "🔥 Scanner"])
+tab1, tab2 = st.tabs(["📊 Individual Analysis", "🔥 Multi-Timeframe Scanner"])
 
 # =============================
-# SAFE DATA LOADER (NO FREEZE FIX)
+# DATA LOADER FUNCTIONS
 # =============================
 @st.cache_data(ttl=60)
 def get_data(symbol):
     try:
         ticker = yf.Ticker(symbol)
-        df = ticker.history(period="3mo", interval="1d")
-
-        if df is None or df.empty:
-            return None
-
-        return df
-
+        df = ticker.history(period="5d", interval="15m")
+        return df if not df.empty else None
     except:
         return None
 
+def get_trend(df):
+    """EMA 20 vs EMA 50 ఆధారంగా ట్రెండ్ లెక్కిస్తుంది"""
+    if df is None or len(df) < 50:
+        return "N/A"
+    ema20 = df['Close'].ewm(span=20).mean().iloc[-1]
+    ema50 = df['Close'].ewm(span=50).mean().iloc[-1]
+    return "🟢 BULLISH" if ema20 > ema50 else "🔴 BEARISH"
 
 @st.cache_data(ttl=60)
-def get_multi_data(tickers):
+def get_scanner_data(tickers):
+    """అన్ని టైమ్ ఫ్రేమ్స్ డేటాను ఒకేసారి తెస్తుంది"""
     try:
-        data = yf.download(
-            tickers,
-            period="10d",
-            interval="15m",
-            group_by="ticker",
-            threads=True,
-            progress=False
-        )
-
-        if data is None or len(data) == 0:
-            return None
-
-        return data
-
+        # 5min, 15m, 1h డేటా కోసం 
+        data_5m = yf.download(tickers, period="2d", interval="5m", group_by='ticker', progress=False)
+        data_15m = yf.download(tickers, period="5d", interval="15m", group_by='ticker', progress=False)
+        data_1h = yf.download(tickers, period="1mo", interval="1h", group_by='ticker', progress=False)
+        return data_5m, data_15m, data_1h
     except:
-        return None
-
+        return None, None, None
 
 # =============================
-# 📊 DASHBOARD
+# 📊 TAB 1: DASHBOARD
 # =============================
 with tab1:
-    st.subheader("📊 Stock Dashboard (Stable)")
+    st.subheader("📊 Quick Chart Analysis")
+    stock = st.text_input("Enter Stock", "RELIANCE").upper()
+    if not stock.endswith(".NS"): stock += ".NS"
 
-    stock = st.text_input("Enter Stock (Example: RELIANCE)", "RELIANCE")
-
-    if not stock.endswith(".NS"):
-        stock = stock + ".NS"
-
-    with st.spinner("📡 Loading data..."):
-        df = get_data(stock)
-
-    if df is not None and not df.empty:
-
-        st.line_chart(df['Close'])
-
-        df['SMA20'] = df['Close'].rolling(20).mean()
-        df['SMA50'] = df['Close'].rolling(50).mean()
-
-        col1, col2 = st.columns(2)
-
-        price = df['Close'].iloc[-1]
-        col1.metric("Price", round(price, 2))
-
-        sma20 = df['SMA20'].dropna()
-        sma50 = df['SMA50'].dropna()
-
-        trend = "UP" if sma20.iloc[-1] > sma50.iloc[-1] else "DOWN" if len(sma20) > 0 else "N/A"
-
-        col2.metric("Trend", trend)
-
+    df_dash = get_data(stock)
+    if df_dash is not None:
+        st.line_chart(df_dash['Close'])
+        st.metric("Current Price", round(df_dash['Close'].iloc[-1], 2))
     else:
-        st.error("❌ Data Not Available")
-
+        st.error("Data Not Found")
 
 # =============================
-# 🔥 SCANNER (SAFE + SIMPLE)
+# 🔥 TAB 2: MULTI-TIMEFRAME SCANNER
 # =============================
 with tab2:
-    st.subheader("🔥 NSE SCANNER (NO CRASH VERSION)")
-
+    st.subheader("🔥 Smart Multi-Timeframe Scanner")
+    
     sectors = {
-        "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS"],
-        "Banking": ["SBIN.NS","AXISBANK.NS","KOTAKBANK.NS"],
-        "IT": ["WIPRO.NS","HCLTECH.NS","TECHM.NS"],
-        "Auto": ["MARUTI.NS","TATAMOTORS.NS","M&M.NS"],
-        "FMCG": ["HINDUNILVR.NS","ITC.NS","NESTLEIND.NS"],
-        "Pharma": ["SUNPHARMA.NS","DRREDDY.NS","CIPLA.NS"]
+        "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS","SBIN.NS","BHARTIARTL.NS"],
+        "Banking": ["SBIN.NS","AXISBANK.NS","KOTAKBANK.NS","ICICIBANK.NS","HDFCBANK.NS"],
+        "Auto": ["MARUTI.NS","TATAMOTORS.NS","M&M.NS","HEROMOTOCO.NS"]
     }
+    
+    selected_sector = st.selectbox("Select Sector", list(sectors.keys()))
+    stocks = sectors[selected_sector]
 
-    sector = st.selectbox("Select Sector", list(sectors.keys()))
-    stocks = sectors[sector]
-
-    data = get_multi_data(stocks)
-
-    results = []
-
-    if data is not None:
-
-        for stock in stocks:
-            try:
-
-                if stock not in data.columns.get_level_values(0):
+    if st.button("Run Scanner"):
+        with st.spinner("Scanning 5m, 15m, and 1h Trends..."):
+            d5, d15, d1h = get_scanner_data(stocks)
+            
+            results = []
+            for s in stocks:
+                try:
+                    # ట్రెండ్స్ లెక్కించడం
+                    t5 = get_trend(d5[s].dropna())
+                    t15 = get_trend(d15[s].dropna())
+                    t1h = get_trend(d1h[s].dropna())
+                    
+                    price = d15[s]['Close'].dropna().iloc[-1]
+                    
+                    # Recommendation logic
+                    action = "WAIT"
+                    if t5 == "🟢 BULLISH" and t15 == "🟢 BULLISH" and t1h == "🟢 BULLISH":
+                        action = "🚀 STRONG BUY"
+                    elif t5 == "🔴 BEARISH" and t15 == "🔴 BEARISH" and t1h == "🔴 BEARISH":
+                        action = "💀 STRONG SELL"
+                    
+                    results.append({
+                        "Stock": s,
+                        "Price": round(price, 2),
+                        "5 Min": t5,
+                        "15 Min": t15,
+                        "1 Hour": t1h,
+                        "Signal": action
+                    })
+                except:
                     continue
+            
+            if results:
+                df_res = pd.DataFrame(results)
+                
+                # స్టైలింగ్ - సిగ్నల్ ని బట్టి రంగులు మార్చడం
+                def color_signal(val):
+                    color = 'green' if 'BUY' in val else 'red' if 'SELL' in val else 'white'
+                    return f'color: {color}'
 
-                df = data[stock].dropna()
-
-                if df is None or len(df) < 20:
-                    continue
-
-                df['EMA20'] = df['Close'].ewm(span=20).mean()
-                df['EMA50'] = df['Close'].ewm(span=50).mean()
-
-                price = df['Close'].iloc[-1]
-
-                if df['EMA20'].iloc[-1] > df['EMA50'].iloc[-1]:
-                    signal = "🟢 BUY"
-                else:
-                    signal = "🔴 SELL"
-
-                prev = df.iloc[-2]
-
-                if signal == "🟢 BUY":
-                    entry = prev['High']
-                    sl = prev['Low']
-                    target = entry + (entry - sl) * 1.5
-                else:
-                    entry = prev['Low']
-                    sl = prev['High']
-                    target = entry - (sl - entry) * 1.5
-
-                results.append({
-                    "Stock": stock,
-                    "Signal": signal,
-                    "Price": round(price, 2),
-                    "Entry": round(entry, 2),
-                    "SL": round(sl, 2),
-                    "Target": round(target, 2)
-                })
-
-            except:
-                continue
-
-    df_res = pd.DataFrame(results)
-
-    if df_res.empty:
-        st.warning("⚠️ No Data Found")
-    else:
-        st.dataframe(df_res, use_container_width=True)
-
-        s = st.selectbox("Select Stock", df_res["Stock"])
-        row = df_res[df_res["Stock"] == s].iloc[0]
-
-        st.subheader("📊 Selected Stock")
-        st.metric("Signal", row["Signal"])
-        st.metric("Price", row["Price"])
+                st.dataframe(df_res.style.applymap(color_signal, subset=['Signal']), use_container_width=True)
+                
+                st.success("💡 సూచన: మూడు టైమ్ ఫ్రేమ్స్ (5m, 15m, 1h) ఒకే ట్రెండ్ చూపిస్తే ఆ ట్రేడ్ సక్సెస్ అయ్యే అవకాశం ఎక్కువ ఉంటుంది.")
+            else:
+                st.warning("No data found for the selected stocks.")
