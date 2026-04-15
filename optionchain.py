@@ -14,7 +14,7 @@ st.title("🚀 MANOHAR NSE AI PRO TERMINAL")
 st.markdown("---")
 
 # =============================
-# 2. ANALYSIS LOGIC (SAFE + OLD SAFE)
+# 2. ANALYSIS LOGIC (SAFE + OLD LOGIC SAME)
 # =============================
 def analyze_data(df):
     try:
@@ -35,11 +35,42 @@ def analyze_data(df):
         curr_vol = vol.iloc[-1]
         curr_avg_vol = avg_vol.iloc[-1]
 
-        # SAFE CHECK (NaN protection)
-        if pd.isna(curr_avg_vol) or pd.isna(curr_e20) or pd.isna(curr_e50):
+        # SAFE CHECK
+        if pd.isna(curr_e20) or pd.isna(curr_e50) or pd.isna(curr_avg_vol):
             return None
 
         # =============================
-        # TREND
+        # TREND (FIXED ERROR SAFE)
         # =============================
-        cp_strength = "🔵 CALL STRONG" if curr_e20 > curr_e50 else "🔴 PUT STR
+        if curr_e20 > curr_e50:
+            cp_strength = "🔵 CALL STRONG"
+        else:
+            cp_strength = "🔴 PUT STRONG"
+
+        # =============================
+        # BIG PLAYER (2 LEVEL ONLY)
+        # =============================
+        if curr_vol > curr_avg_vol * 1.5:
+            big_player = "🐋 BIG PLAYER ACTIVE"
+        else:
+            big_player = "💤 NORMAL"
+
+        # DEFAULT
+        observation = "WAIT"
+        entry, sl, target = 0, 0, 0
+
+        # RISK
+        recent_high = df['High'].iloc[-10:].max()
+        recent_low = df['Low'].iloc[-10:].min()
+
+        risk = recent_high - recent_low
+        if risk <= 0:
+            risk = curr_price * 0.01
+
+        # =============================
+        # SIGNAL LOGIC (OLD SAFE)
+        # =============================
+        if curr_e20 > curr_e50 and curr_vol > curr_avg_vol:
+            observation = "🚀 STRONG BUY"
+            entry = curr_price
+            sl = curr_price - (risk *
