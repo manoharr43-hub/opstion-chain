@@ -123,7 +123,10 @@ def analyze(df):
     entry = round(price,2)
     stoploss = round(support,2) if "BUY" in signal_text else round(resistance,2)
 
-    return final, signal_text, confidence, price, support, resistance, big, entry, stoploss
+    # Option Sentiment Column
+    opt_sentiment = "CALL STRONG" if "BUY" in signal_text else "PUT STRONG"
+
+    return final, signal_text, confidence, price, support, resistance, big, entry, stoploss, opt_sentiment
 
 # =============================
 # BACKTEST
@@ -155,7 +158,7 @@ if data is not None:
             df = data[stock].dropna()
             out = analyze(df)
             if out is None: continue
-            final, signal_text, confidence, price, support, resistance, big, entry, stoploss = out
+            final, signal_text, confidence, price, support, resistance, big, entry, stoploss, opt_sentiment = out
             winrate = backtest(df)
             results.append({
                 "Stock": stock,
@@ -168,7 +171,8 @@ if data is not None:
                 "Resistance": round(resistance,2),
                 "Entry": entry,
                 "Stoploss": stoploss,
-                "WinRate%": winrate
+                "WinRate%": winrate,
+                "Option Sentiment": opt_sentiment
             })
         except: continue
 
@@ -180,10 +184,19 @@ if data is not None:
     st.subheader("🔥 HIGH PROBABILITY ONLY")
     st.dataframe(result_df[result_df["Confidence"] >= 85], use_container_width=True)
 
-    st.subheader("📈 CHART")
+    # Day-wise Chart + Previous Day Comparison
+    st.subheader("📈 CHART (Day-wise + Previous Day)")
     stock = st.selectbox("Select Stock", result_df["Stock"])
-    st.line_chart(data[stock]["Close"])
+    daily_close = data[stock]["Close"].resample("1D").last()
+    st.line_chart(daily_close)
 
     st.subheader("📊 PERFORMANCE")
     st.write("Avg WinRate:", round(result_df["WinRate%"].mean(),2))
     st.write("Top Stock:", result_df.iloc[0]["Stock"])
+
+    # Screen Bottom Strong BUY / Strong SELL
+    st.subheader("📊 NSE Strong BUY Stocks")
+    st.dataframe(result_df[(result_df["Confidence"] >= 85) & (result_df["Signal"].str.contains("BUY"))])
+
+    st.subheader("📊 NSE Strong SELL Stocks")
+    st.dataframe(result_df[(result_df["Confidence"] >= 85) & (result_df["Signal"].str.contains("SELL"))])
