@@ -4,259 +4,187 @@ import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from streamlit_autorefresh import st_autorefresh
-import time
 
 # =============================
 # PAGE CONFIG
 # =============================
-st.set_page_config(page_title="🔥 PRO NSE AI SCANNER ULTIMATE V6", layout="wide")
-st_autorefresh(interval=10000, key="refresh") # 10 seconds refresh
+st.set_page_config(page_title="🔥 PRO NSE AI SCANNER V7", layout="wide")
+st_autorefresh(interval=10000, key="refresh")
 
-st.title("🔥 PRO NSE AI SCANNER (SHORT COVERING EDITION)")
+st.title("🔥 PRO NSE AI SCANNER V7 (OPTIMIZED ENGINE)")
 st.markdown("---")
 
 # =============================
 # SECTORS
 # =============================
 sectors = {
-    "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS","BHARTIARTL.NS","SBIN.NS"],
-    "Banking": ["SBIN.NS","AXISBANK.NS","KOTAKBANK.NS","PNB.NS","HDFCBANK.NS","ICICIBANK.NS"],
+    "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS"],
+    "Banking": ["SBIN.NS","AXISBANK.NS","KOTAKBANK.NS","PNB.NS"],
     "IT": ["WIPRO.NS","HCLTECH.NS","TECHM.NS","INFY.NS","TCS.NS"],
-    "Auto": ["MARUTI.NS","M&M.NS","TATAMOTORS.NS","HEROMOTOCO.NS"],
-    "Pharma": ["SUNPHARMA.NS","DRREDDY.NS","CIPLA.NS","APOLLOHOSP.NS"],
-    "Energy": ["ONGC.NS","IOC.NS","BPCL.NS","GAIL.NS"],
-    "FMCG": ["ITC.NS","NESTLEIND.NS","HINDUNILVR.NS"],
-    "Metals": ["TATASTEEL.NS","JSWSTEEL.NS","HINDALCO.NS"],
-    "Power": ["NTPC.NS","POWERGRID.NS","TATAPOWER.NS"],
-    "Finance": ["BAJFINANCE.NS","BAJAJFINSV.NS","CHOLAFIN.NS"]
+    "Auto": ["MARUTI.NS","M&M.NS","TATAMOTORS.NS"],
+    "Pharma": ["SUNPHARMA.NS","DRREDDY.NS","CIPLA.NS"],
 }
 
-selected_sector = st.selectbox("📊 Select Sector to Scan", list(sectors.keys()))
+selected_sector = st.selectbox("📊 Select Sector", list(sectors.keys()))
 stocks_to_scan = sectors[selected_sector]
 
 # =============================
-# DATA FETCH
+# DATA FETCH (FAST + SAFE)
 # =============================
 @st.cache_data(ttl=120)
 def get_data(tickers):
-    # Fetch 60d for indicators and volume averaging
-    return yf.download(tickers, period="60d", interval="15m", group_by="ticker", threads=True)
+    return yf.download(
+        tickers,
+        period="60d",
+        interval="15m",
+        group_by="ticker",
+        threads=True
+    )
 
 # =============================
-# MODEL TRAINING
+# GLOBAL MODEL (TRAIN ONCE)
 # =============================
 @st.cache_resource
 def train_model(X, y):
-    model = RandomForestClassifier(n_estimators=100, max_depth=8, random_state=42)
+    model = RandomForestClassifier(
+        n_estimators=120,
+        max_depth=10,
+        random_state=42
+    )
     model.fit(X, y)
     return model
 
 # =============================
-# ADVANCED ANALYZERS (NEW FEATURES)
+# INDICATORS
 # =============================
-
-# 1. Pivot Points Support & Resistance
-def get_pivot_points(df):
-    recent = df.tail(10) # Using recent 15m bars to estimate daily pivots
-    high = recent['High'].max()
-    low = recent['Low'].min()
-    close = recent['Close'].iloc[-1]
-    
-    pivot = (high + low + close) / 3
-    r1 = (2 * pivot) - low
-    s1 = (2 * pivot) - high
-    
-    return round(s1, 2), round(r1, 2)
-
-# 2. Short Covering Detector (Price-Volume based)
-def get_short_covering_status(df):
-    # need at least 20 periods for volume averaging
-    if len(df) < 20: return "NA", "White", 0
-    
-    current_price = df['Close'].iloc[-1]
-    avg_price_20 = df['Close'].rolling(20).mean().iloc[-1]
-    
-    current_vol = df['Volume'].iloc[-1]
-    avg_vol_20 = df['Volume'].rolling(20).mean().iloc[-1]
-    
-    vol_ratio = current_vol / (avg_vol_20 + 1e-9)
-    price_change_pct = ((current_price - df['Close'].iloc[-2]) / (df['Close'].iloc[-2] + 1e-9)) * 100
-
-    # Short covering condition: Sudden price spike + Sudden volume spike
-    # Visheshanga: Price peruguthu normal volume kante double range lo unte...
-    if price_change_pct > 1.0 and vol_ratio >= 2.0:
-        return "⚡ SHORT COVERING", "Cyan", 30 # high confidence boost
-    elif price_change_pct > 0.5 and vol_ratio >= 1.5:
-        return "⚖️ VOLUME BREAKOUT", "LightBlue", 10
-    else:
-        return "⚖️ NORMAL VOL", "White", 0
-
-# 3. Option Strength Analyzer (mimics PCR)
-def get_option_strength(df):
-    recent = df.tail(10)
-    vol_bullish = recent[recent['Close'] >= recent['Open']]['Volume'].sum()
-    vol_bearish = recent[recent['Close'] < recent['Open']]['Volume'].sum()
-    
-    pcr_ratio = round(vol_bullish / (vol_bearish + 1e-9), 2)
-    
-    if pcr_ratio > 1.8: return "🟢 CALLS STRONG", pcr_ratio
-    elif pcr_ratio < 0.5: return "🔴 PUTS STRONG", pcr_ratio
-    else: return "⚖️ NEUTRAL", pcr_ratio
-
-# 4. Genuine/Fake Breakout Detector
-def get_breakout_status(df, s1, r1):
-    price = df['Close'].iloc[-1]
-    prev_price = df['Close'].iloc[-2]
-    current_vol = df['Volume'].iloc[-1]
-    avg_vol_20 = df['Volume'].rolling(20).mean().iloc[-1]
-    
-    status = "NO BREAKOUT"
-    if price > r1 and prev_price <= r1:
-        status = "🚀 GENUINE BREAKOUT" if current_vol > avg_vol_20 * 1.5 else "⚠️ FAKE BREAKOUT"
-    elif price < s1 and prev_price >= s1:
-        status = "🔻 GENUINE BREAKDOWN" if current_vol > avg_vol_20 * 1.5 else "⚠️ FAKE BREAKDOWN"
-            
-    return status
-
-# =============================
-# CORE ANALYSIS ENGINE
-# =============================
-def analyze(df):
+def add_indicators(df):
     df = df.copy()
-    
-    # Need enough historical data for calculations
-    if len(df) < 100: return None
-    
-    # Main Indicators
+
     df['EMA20'] = df['Close'].ewm(span=20).mean()
     df['EMA50'] = df['Close'].ewm(span=50).mean()
-    df['EMA200'] = df['Close'].ewm(span=200).mean()
-    
-    # RSI & MACD
+
     delta = df['Close'].diff()
     gain = delta.clip(lower=0).rolling(14).mean()
     loss = -delta.clip(upper=0).rolling(14).mean()
     rs = gain / (loss + 1e-9)
     df['RSI'] = 100 - (100 / (1 + rs))
-    
-    df['EMA12'] = df['Close'].ewm(span=12).mean()
-    df['EMA26'] = df['Close'].ewm(span=26).mean()
-    df['MACD'] = df['EMA12'] - df['EMA26']
+
+    df['MACD'] = df['Close'].ewm(span=12).mean() - df['Close'].ewm(span=26).mean()
     df['Signal'] = df['MACD'].ewm(span=9).mean()
 
-    df.dropna(inplace=True)
+    return df.dropna()
 
-    # Current Values
+# =============================
+# PIVOT
+# =============================
+def pivots(df):
+    h, l, c = df['High'].iloc[-10:].max(), df['Low'].iloc[-10:].min(), df['Close'].iloc[-1]
+    p = (h + l + c) / 3
+    return (2*p - h), (2*p - l)
+
+# =============================
+# SHORT COVERING
+# =============================
+def short_cover(df):
+    if len(df) < 20:
+        return "NA", 0
+
+    vol_ratio = df['Volume'].iloc[-1] / (df['Volume'].rolling(20).mean().iloc[-1] + 1e-9)
+    price_change = df['Close'].pct_change().iloc[-1] * 100
+
+    if price_change > 1 and vol_ratio > 2:
+        return "⚡ SHORT COVERING", 30
+    elif vol_ratio > 1.5:
+        return "⚖️ BREAKOUT VOL", 10
+    return "NORMAL", 0
+
+# =============================
+# ANALYZE ENGINE
+# =============================
+def analyze(df):
+
+    if len(df) < 120:
+        return None
+
+    df = add_indicators(df)
+
+    s1, r1 = pivots(df)
+    cover, boost = short_cover(df)
+
     price = df['Close'].iloc[-1]
-    
-    # Call new advanced modules (Short Covering & PCR mimic)
-    s1, r1 = get_pivot_points(df)
-    covering_status, cov_color, cov_boost = get_short_covering_status(df)
-    opt_sentiment, pcr_val = get_option_strength(df)
-    breakout_status = get_breakout_status(df, s1, r1)
 
-    # AI Prediction Logic (disturbance minimized)
+    # ML TARGET
     df['Target'] = (df['Close'].shift(-1) > df['Close']).astype(int)
+
     features = ['EMA20','EMA50','RSI','MACD']
-    X = df[features].tail(60) # Train on recent 60 bars
-    y = df['Target'].tail(60)
-    
-    if len(X) < 30: return None
+    X = df[features].tail(80)
+    y = df['Target'].tail(80)
+
+    if len(X) < 30:
+        return None
+
     model = train_model(X, y)
     pred = model.predict(X.iloc[[-1]])[0]
 
-    # Confidence Score (Weighted)
     confidence = 0
-    if price > df['EMA50'].iloc[-1] > df['EMA200'].iloc[-1]: confidence += 25
-    if pred == 1: confidence += 20
-    if "CALLS STRONG" in opt_sentiment: confidence += 15
-    if "SHORT COVERING" in covering_status: confidence += 30 # high confidence weightage
-    if df['MACD'].iloc[-1] > df['Signal'].iloc[-1]: confidence += 10
 
-    # Final Probability Signal
-    if confidence >= 80: final = "🔥 HIGH PROBABILITY"
-    elif confidence >= 60: final = "⚡ WATCH"
-    else: final = "❌ AVOID"
+    if price > df['EMA50'].iloc[-1]:
+        confidence += 20
+    if pred == 1:
+        confidence += 25
+    if cover == "⚡ SHORT COVERING":
+        confidence += 30
+    if df['MACD'].iloc[-1] > df['Signal'].iloc[-1]:
+        confidence += 15
 
-    sig_text = "🟢 BUY" if pred == 1 else "🔴 SELL"
-    entry = round(price, 2)
-    # Target 1:2 RR based on S/R
-    risk = abs(price - (s1 if pred == 1 else r1))
-    target = round(entry + (risk * 2), 2) if pred == 1 else round(entry - (risk * 2), 2)
-    stoploss = round(s1, 2) if pred == 1 else round(r1, 2)
+    signal = "🟢 BUY" if pred == 1 else "🔴 SELL"
 
-    return final, sig_text, confidence, entry, stoploss, target, covering_status, opt_sentiment, breakout_status
+    sl = s1 if pred == 1 else r1
+    risk = abs(price - sl)
+    target = price + (risk * 2) if pred == 1 else price - (risk * 2)
+
+    return {
+        "Price": round(price,2),
+        "Signal": signal,
+        "Confidence": confidence,
+        "Cover": cover,
+        "SL": round(sl,2),
+        "Target": round(target,2)
+    }
 
 # =============================
-# SCANNER EXECUTION
+# RUN SCANNER
 # =============================
-with st.spinner(f"Scanning {selected_sector} stocks..."):
+with st.spinner("Scanning market..."):
     data = get_data(stocks_to_scan)
     results = []
 
-    if data is not None:
-        for stock in stocks_to_scan:
-            try:
-                # Fixed MultiIndex download logic
-                if isinstance(data.columns, pd.MultiIndex):
-                    df_stock = data[stock].dropna()
-                else:
-                    df_stock = data.dropna()
-
-                out = analyze(df_stock)
-                if out:
-                    final, sig, conf, ent, sl, tg, covering, opt, breakout = out
-                    results.append({
-                        "Stock": stock,
-                        "Price": ent,
-                        "Signal": sig,
-                        "Confidence": conf,
-                        "MOMENTUM": covering, # Changed column name for better visualization
-                        "Option": opt,
-                        "Final Signal": final,
-                        "Breakout Status": breakout,
-                        "Target": tg,
-                        "Stoploss": sl,
-                        "df": df_stock # Keep df for charting
-                    })
-            except Exception as e:
+    for stock in stocks_to_scan:
+        try:
+            if stock not in data.columns.levels[0]:
                 continue
 
-    # =============================
-    # UI DISPLAY (NEW V6 FIXED)
-    # =============================
-    if len(results) > 0:
-        result_df = pd.DataFrame(results).sort_values(by="Confidence", ascending=False)
+            df = data[stock].dropna()
+            out = analyze(df)
 
-        # 1. Main DataFrame
-        st.subheader(f"📊 {selected_sector} ULTIMATE Live Analysis (AI + Volume Sentiment)")
-        st.dataframe(result_df.drop(columns=['df']), use_container_width=True)
+            if out:
+                out["Stock"] = stock
+                results.append(out)
 
-        # 2. Key Volume Insights
-        st.markdown("---")
-        st.subheader("💡 KEY VOLUME INSIGHTS")
-        c1, c2 = st.columns(2)
-        
-        with c1:
-            st.info("⚡ SHORT COVERING CANDIDATES (Price-Vol Spike)")
-            sc_df = result_df[result_df["MOMENTUM"] == "⚡ SHORT COVERING"]
-            st.dataframe(sc_df[["Stock", "Price", "MOMENTUM", "Confidence"]], use_container_width=True)
-            
-        with c2:
-            st.success("🟢 CALL POWER (PCR MimicBullish)")
-            call_df = result_df[result_df["Option"] == "🟢 CALLS STRONG"]
-            st.dataframe(call_df[["Stock", "Price", "Option", "Final Signal"]], use_container_width=True)
+        except:
+            continue
 
-        # 3. Fast Charting Section
-        st.markdown("---")
-        st.subheader("📈 FAST CHART (Today's Movement)")
-        chart_stock = st.selectbox("Pick a stock to view today's movement", result_df["Stock"])
-        
-        # Filter for today's data only for speed
-        all_data = result_df[result_df["Stock"] == chart_stock].iloc[0]['df']
-        today_data = all_data[all_data.index.date == all_data.index[-1].date()]
-        st.line_chart(today_data['Close'])
+# =============================
+# UI
+# =============================
+if results:
+    df = pd.DataFrame(results).sort_values("Confidence", ascending=False)
 
-    else:
-        st.error(f"⚠️ **ERROR:** Could not analyze any stocks in the **{selected_sector}** sector right now.")
-        st.warning("Ensure enough historical data. Try changing period to '60d' and interval to '15m'.")
+    st.subheader("📊 Results")
+    st.dataframe(df, use_container_width=True)
+
+    st.subheader("🔥 Top Picks")
+    st.dataframe(df.head(5), use_container_width=True)
+
+else:
+    st.warning("No signals found")
