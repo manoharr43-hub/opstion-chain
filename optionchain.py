@@ -2,192 +2,135 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import requests
-import time
-from sklearn.ensemble import RandomForestClassifier
 from streamlit_autorefresh import st_autorefresh
 
 # =============================
-# PAGE CONFIG
+# PAGE CONFIG (ONLY ONCE)
 # =============================
-st.set_page_config(page_title="🔥 PRO NSE AI SCANNER PRO UI", layout="wide")
-st_autorefresh(interval=5000, key="refresh")
+st.set_page_config(page_title="🔥 PRO NSE AI DASHBOARD", layout="wide")
+st_autorefresh(interval=15000, key="refresh")
 
-st.title("🔥 PRO NSE AI SCANNER (SMART UI)")
+st.title("🔥 PRO NSE AI DASHBOARD + SCANNER")
 st.markdown("---")
 
-headers = {"User-Agent": "Mozilla/5.0"}
+# =============================
+# TABS (MAIN STRUCTURE)
+# =============================
+tab1, tab2 = st.tabs(["📊 Dashboard", "🔥 Scanner"])
 
 # =============================
-# NSE SECTORS (EXPANDED)
+# 📊 DASHBOARD (OLD SAFE)
 # =============================
-sectors = {
-    "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS"],
-    "Banking": ["SBIN.NS","AXISBANK.NS","KOTAKBANK.NS","PNB.NS"],
-    "IT": ["WIPRO.NS","HCLTECH.NS","TECHM.NS"],
-    "Auto": ["MARUTI.NS","TATAMOTORS.NS","M&M.NS"],
-    "Pharma": ["SUNPHARMA.NS","CIPLA.NS","DRREDDY.NS"],
-    "Energy": ["ONGC.NS","IOC.NS","BPCL.NS"],
-    "FMCG": ["ITC.NS","HINDUNILVR.NS","NESTLEIND.NS"],
-    "Metals": ["TATASTEEL.NS","JSWSTEEL.NS","HINDALCO.NS"],
-    "Power": ["NTPC.NS","POWERGRID.NS","ADANIPOWER.NS"],
-    "Infra": ["LT.NS","IRCTC.NS","NBCC.NS"],
-    "Telecom": ["BHARTIARTL.NS","IDEA.NS"],
-    "Finance": ["BAJFINANCE.NS","BAJAJFINSV.NS","HDFCLIFE.NS"]
-}
+with tab1:
+    st.subheader("📊 Simple Dashboard")
 
-selected_sector = st.selectbox("📊 Select Sector", list(sectors.keys()))
-stocks = sectors[selected_sector]
+    stock = st.text_input("Enter Stock (Example: RELIANCE.NS)", "RELIANCE.NS")
 
-# =============================
-# DATA FETCH
-# =============================
-@st.cache_data(ttl=120)
-def get_data(tickers):
-    return yf.download(tickers, period="60d", interval="15m", group_by="ticker")
+    @st.cache_data(ttl=60)
+    def get_data(symbol):
+        return yf.download(symbol, period="3mo", interval="1d")
 
-# =============================
-# LIVE PRICE
-# =============================
-def get_live_price(symbol):
-    try:
-        s = requests.Session()
-        s.get("https://www.nseindia.com", headers=headers)
-        url = f"https://www.nseindia.com/api/quote-equity?symbol={symbol.replace('.NS','')}"
-        return s.get(url, headers=headers).json()['priceInfo']['lastPrice']
-    except:
-        return None
+    df = get_data(stock)
 
-# =============================
-# TREND FUNCTION
-# =============================
-def get_trend(df):
-    df['EMA20'] = df['Close'].ewm(span=20).mean()
-    df['EMA50'] = df['Close'].ewm(span=50).mean()
-    return "UP" if df['EMA20'].iloc[-1] > df['EMA50'].iloc[-1] else "DOWN"
+    if not df.empty:
+        st.line_chart(df['Close'])
 
-# =============================
-# ENTRY LOGIC
-# =============================
-def get_entry_point(df, signal):
-    prev = df.iloc[-2]
+        df['SMA20'] = df['Close'].rolling(20).mean()
+        df['SMA50'] = df['Close'].rolling(50).mean()
 
-    if "BUY" in signal:
-        entry = round(prev['High'], 2)
-        sl = round(prev['Low'], 2)
-        target = round(entry + (entry - sl)*1.5, 2)
+        latest = df.iloc[-1]
+
+        col1, col2 = st.columns(2)
+        col1.metric("Price", round(latest['Close'],2))
+        col2.metric("Trend", "UP" if latest['SMA20'] > latest['SMA50'] else "DOWN")
+
     else:
-        entry = round(prev['Low'], 2)
-        sl = round(prev['High'], 2)
-        target = round(entry - (sl - entry)*1.5, 2)
-
-    return entry, sl, target
+        st.warning("No Data")
 
 # =============================
-# MODEL
+# 🔥 SCANNER (NEW FAST)
 # =============================
-@st.cache_resource
-def train(X,y):
-    model = RandomForestClassifier(n_estimators=80)
-    model.fit(X,y)
-    return model
+with tab2:
+    st.subheader("🔥 NSE SCANNER (FAST VERSION)")
 
-# =============================
-# ANALYZE
-# =============================
-def analyze(df, stock):
-    df = df.copy()
+    sectors = {
+        "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS"],
+        "Banking": ["SBIN.NS","AXISBANK.NS","KOTAKBANK.NS","PNB.NS"],
+        "IT": ["WIPRO.NS","HCLTECH.NS","TECHM.NS"],
+        "Auto": ["MARUTI.NS","TATAMOTORS.NS","M&M.NS"]
+    }
 
-    df['EMA20'] = df['Close'].ewm(span=20).mean()
-    df['EMA50'] = df['Close'].ewm(span=50).mean()
+    sector = st.selectbox("Select Sector", list(sectors.keys()))
+    stocks = sectors[sector][:3]   # limit for speed
 
-    df['Target'] = (df['Close'].shift(-1) > df['Close']).astype(int)
-    df.dropna(inplace=True)
+    @st.cache_data(ttl=60)
+    def get_multi_data(tickers):
+        return yf.download(tickers, period="15d", interval="15m", group_by="ticker")
 
-    X = df[['EMA20','EMA50']]
-    y = df['Target']
+    data = get_multi_data(stocks)
 
-    if len(X) < 50:
-        return None
+    results = []
 
-    model = train(X,y)
-    pred = model.predict(X.iloc[[-1]])[0]
+    for stock in stocks:
+        try:
+            df = data[stock].dropna()
 
-    signal = "🟢 BUY" if pred==1 else "🔴 SELL"
+            if len(df) < 20:
+                continue
 
-    price = get_live_price(stock)
-    if not price:
-        price = df['Close'].iloc[-1]
+            df['EMA20'] = df['Close'].ewm(span=20).mean()
+            df['EMA50'] = df['Close'].ewm(span=50).mean()
 
-    entry, sl, target = get_entry_point(df, signal)
+            signal = "🟢 BUY" if df['EMA20'].iloc[-1] > df['EMA50'].iloc[-1] else "🔴 SELL"
 
-    # MULTI TF
-    df5 = yf.download(stock, period="10d", interval="5m")
-    df1h = yf.download(stock, period="60d", interval="1h")
+            price = df['Close'].iloc[-1]
 
-    t5 = get_trend(df5)
-    t15 = get_trend(df)
-    t1h = get_trend(df1h)
+            prev = df.iloc[-2]
 
-    return signal, price, entry, sl, target, t5, t15, t1h
+            if "BUY" in signal:
+                entry = prev['High']
+                sl = prev['Low']
+                target = entry + (entry - sl)*1.5
+            else:
+                entry = prev['Low']
+                sl = prev['High']
+                target = entry - (sl - entry)*1.5
 
-# =============================
-# RUN
-# =============================
-data = get_data(stocks)
+            # LIGHT MULTI TF
+            t5 = "UP" if df['EMA20'].iloc[-1] > df['EMA50'].iloc[-1] else "DOWN"
 
-results = []
+            df1h = df.resample("1h").last().dropna()
+            t1h = "UP" if df1h['Close'].iloc[-1] > df1h['Close'].rolling(20).mean().iloc[-1] else "DOWN"
 
-for stock in stocks:
-    try:
-        df = data[stock].dropna()
-        out = analyze(df, stock)
-        if out is None: continue
+            results.append({
+                "Stock": stock,
+                "Signal": signal,
+                "Price": round(price,2),
+                "Entry": round(entry,2),
+                "SL": round(sl,2),
+                "Target": round(target,2),
+                "5M": t5,
+                "1H": t1h
+            })
 
-        signal, price, entry, sl, target, t5, t15, t1h = out
+        except:
+            continue
 
-        results.append({
-            "Stock": stock,
-            "Signal": signal,
-            "Price": round(price,2),
-            "Entry": entry,
-            "Stoploss": sl,
-            "Target": target,
-            "5M": t5,
-            "15M": t15,
-            "1H": t1h
-        })
+    df_res = pd.DataFrame(results)
 
-        time.sleep(0.3)
+    if df_res.empty:
+        st.warning("⚠️ No Data")
+    else:
+        st.dataframe(df_res, use_container_width=True)
 
-    except:
-        continue
+        st.subheader("📦 Multi Timeframe")
 
-df_res = pd.DataFrame(results)
+        s = st.selectbox("Select Stock", df_res["Stock"])
+        row = df_res[df_res["Stock"] == s].iloc[0]
 
-st.subheader("🔥 TRADING TABLE")
-st.dataframe(df_res, use_container_width=True)
+        c1, c2 = st.columns(2)
+        c1.metric("5M Trend", row["5M"])
+        c2.metric("1H Trend", row["1H"])
 
-# =============================
-# MULTI TF 3 BOX UI
-# =============================
-st.subheader("📦 Multi Timeframe View")
-
-if not df_res.empty:
-    stock_sel = st.selectbox("Select Stock", df_res["Stock"])
-    row = df_res[df_res["Stock"] == stock_sel].iloc[0]
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("5 MIN", row["5M"])
-    col2.metric("15 MIN", row["15M"])
-    col3.metric("1 HOUR", row["1H"])
-
-# =============================
-# CHART
-# =============================
-st.subheader("📈 Chart")
-
-if not df_res.empty:
-    stock_chart = st.selectbox("Select Stock for Chart", df_res["Stock"], key="chart")
-    chart_data = data[stock_chart]["Close"].resample("1D").last()
-    st.line_chart(chart_data)
+        st.subheader("📈 Chart")
+        st.line_chart(data[s]["Close"].resample("1D").last())
