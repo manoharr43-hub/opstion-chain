@@ -7,7 +7,7 @@ from streamlit_autorefresh import st_autorefresh
 # =============================
 # CONFIG
 # =============================
-st.set_page_config(page_title="🔥 NSE AI PRO TERMINAL V3", layout="wide")
+st.set_page_config(page_title="🔥 NSE AI PRO TERMINAL", layout="wide")
 st_autorefresh(interval=15000, key="refresh")
 
 st.title("🚀 MANOHAR NSE AI PRO TERMINAL")
@@ -44,7 +44,7 @@ def get_multi_data(tickers):
 
 
 # =============================
-# INDICATORS (SAFE)
+# INDICATORS (FIXED SAFE RSI)
 # =============================
 def add_indicators(df):
     df = df.copy()
@@ -55,8 +55,8 @@ def add_indicators(df):
     delta = df["Close"].diff()
     gain = delta.clip(lower=0).rolling(14).mean()
     loss = -delta.clip(upper=0).rolling(14).mean()
-    rs = gain / loss
 
+    rs = gain / loss
     df["RSI"] = 100 - (100 / (1 + rs))
 
     return df
@@ -96,6 +96,8 @@ with tab1:
     df = get_data(stock)
 
     if df is not None:
+        df = add_indicators(df)
+
         st.line_chart(df["Close"])
         st.metric("Price", round(df["Close"].iloc[-1], 2))
         st.metric("Signal", signal(df))
@@ -115,4 +117,45 @@ with tab2:
         "IT": ["WIPRO.NS","HCLTECH.NS","TECHM.NS"],
         "Auto": ["MARUTI.NS","TATAMOTORS.NS","M&M.NS"],
         "FMCG": ["HINDUNILVR.NS","ITC.NS","NESTLEIND.NS"],
-        "Pharma": ["SUNPHARMA.NS","
+        "Pharma": ["SUNPHARMA.NS","DRREDDY.NS","CIPLA.NS"]
+    }
+
+    sector = st.selectbox("Select Sector", list(sectors.keys()))
+    stocks = sectors[sector]
+
+    data = get_multi_data(stocks)
+
+    results = []
+
+    if data is not None:
+        for stock in stocks:
+            try:
+                if stock not in data.columns.get_level_values(0):
+                    continue
+
+                df = data[stock].dropna()
+                if len(df) < 20:
+                    continue
+
+                df = add_indicators(df)
+
+                results.append({
+                    "Stock": stock,
+                    "Price": round(df["Close"].iloc[-1], 2),
+                    "Signal": signal(df),
+                    "Strength": strength(df)
+                })
+
+            except:
+                continue
+
+    res_df = pd.DataFrame(results)
+
+    if not res_df.empty:
+        st.dataframe(res_df, use_container_width=True)
+
+        st.markdown("### 🟢 STRONG BUY")
+        st.dataframe(res_df[res_df["Strength"] == "STRONG BUY"])
+
+        st.markdown("### 🔴 STRONG SELL")
+        st.dataframe(res
