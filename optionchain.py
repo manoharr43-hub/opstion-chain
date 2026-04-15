@@ -1,181 +1,154 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-from datetime import datetime, timedelta
+import numpy as np
 from streamlit_autorefresh import st_autorefresh
 
 # =============================
-# 1. CONFIG
+# CONFIG
 # =============================
-st.set_page_config(page_title="🔥 MANOHAR NSE AI PRO", layout="wide")
-st_autorefresh(interval=60000, key="refresh")
+st.set_page_config(page_title="🔥 PRO NSE AI DASHBOARD V2", layout="wide")
+st_autorefresh(interval=15000, key="refresh")
 
-st.title("🚀 MANOHAR NSE AI PRO TERMINAL")
+st.title("🔥 PRO NSE AI DASHBOARD (SAFE VERSION)")
 st.markdown("---")
 
+tab1, tab2 = st.tabs(["📊 Dashboard", "🔥 Scanner"])
+
 # =============================
-# 2. ANALYSIS LOGIC (OLD + SAFE UPGRADE)
+# DATA LOADER (SAFE)
 # =============================
-def analyze_data(df):
-    if df is None or len(df) < 20:
+@st.cache_data(ttl=60)
+def get_data(symbol):
+    try:
+        df = yf.Ticker(symbol).history(period="3mo", interval="1d")
+        if df is None or df.empty:
+            return None
+        return df
+    except:
         return None
 
-    # EMA
-    e20 = df['Close'].ewm(span=20).mean()
-    e50 = df['Close'].ewm(span=50).mean()
 
-    # Volume
-    vol = df['Volume']
-    avg_vol = vol.rolling(window=20).mean()
+@st.cache_data(ttl=60)
+def get_multi_data(tickers):
+    try:
+        data = yf.download(
+            tickers,
+            period="10d",
+            interval="15m",
+            group_by="ticker",
+            threads=True,
+            progress=False
+        )
+        if data is None or len(data) == 0:
+            return None
+        return data
+    except:
+        return None
 
-    # Current values
-    curr_price = df['Close'].iloc[-1]
-    curr_e20 = e20.iloc[-1]
-    curr_e50 = e50.iloc[-1]
-    curr_vol = vol.iloc[-1]
-    curr_avg_vol = avg_vol.iloc[-1]
 
-    # =============================
-    # TREND + BIG PLAYER (UPGRADED)
-    # =============================
-    cp_strength = "🔵 CALL STRONG" if curr_e20 > curr_e50 else "🔴 PUT STRONG"
+# =============================
+# TREND LOGIC
+# =============================
+def get_signal(df):
+    df = df.copy()
+    df['EMA20'] = df['Close'].ewm(span=20).mean()
+    df['EMA50'] = df['Close'].ewm(span=50).mean()
 
-    if curr_vol > curr_avg_vol * 2:
-        big_player = "🔥 EXTREME INSTITUTIONAL"
-    elif curr_vol > curr_avg_vol * 1.5:
-        big_player = "🐋 BIG PLAYER ACTIVE"
+    if df['EMA20'].iloc[-1] > df['EMA50'].iloc[-1]:
+        return "🟢 BUY"
     else:
-        big_player = "💤 NORMAL"
+        return "🔴 SELL"
 
-    # Default
-    observation = "WAIT"
-    entry, sl, target = 0, 0, 0
 
-    # Risk calculation
-    recent_high = df['High'].iloc[-10:].max()
-    recent_low = df['Low'].iloc[-10:].min()
-    risk = (recent_high - recent_low) if (recent_high - recent_low) > 0 else curr_price * 0.01
+def get_strength(df):
+    df = df.copy()
+    df['EMA20'] = df['Close'].ewm(span=20).mean()
+    df['EMA50'] = df['Close'].ewm(span=50).mean()
 
-    # =============================
-    # SIGNAL LOGIC (OLD SAFE)
-    # =============================
-    if curr_e20 > curr_e50 and curr_vol > curr_avg_vol:
-        observation = "🚀 STRONG BUY"
-        entry = curr_price
-        sl = curr_price - (risk * 0.5)
-        target = curr_price + risk
+    rsi = 100 - (100 / (1 + df['Close'].pct_change().rolling(14).mean()))
+    df['RSI'] = rsi
 
-    elif curr_e20 < curr_e50 and curr_vol > curr_avg_vol:
-        observation = "💀 STRONG SELL"
-        entry = curr_price
-        sl = curr_price + (risk * 0.5)
-        target = curr_price - risk
+    if df['EMA20'].iloc[-1] > df['EMA50'].iloc[-1] and df['RSI'].iloc[-1] > 55:
+        return "STRONG BUY"
+    elif df['EMA20'].iloc[-1] < df['EMA50'].iloc[-1] and df['RSI'].iloc[-1] < 45:
+        return "STRONG SELL"
+    else:
+        return "NEUTRAL"
 
-    return (
-        cp_strength,
-        observation,
-        big_player,
-        round(entry, 2),
-        round(sl, 2),
-        round(target, 2)
-    )
 
 # =============================
-# 3. NSE SECTORS
+# 📊 DASHBOARD
 # =============================
-all_sectors = {
-    "Nifty 50": ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN", "ITC", "LT", "AXISBANK", "BHARTIARTL"],
-    "Banking": ["SBIN", "AXISBANK", "KOTAKBANK", "HDFCBANK", "ICICIBANK", "PNB", "CANBK", "FEDERALBNK"],
-    "Auto": ["TATAMOTORS", "MARUTI", "M&M", "HEROMOTOCO", "EICHERMOT", "ASHOKLEY", "TVSMOTOR"],
-    "Metal": ["TATASTEEL", "JINDALSTEL", "HINDALCO", "JSWSTEEL", "NATIONALUM", "SAIL", "VEDL"],
-    "IT Sector": ["TCS", "INFY", "WIPRO", "HCLTECH", "TECHM", "LTIM", "COFORGE"],
-    "Pharma": ["SUNPHARMA", "DRREDDY", "CIPLA", "APOLLOHOSP", "DIVISLAB"]
-}
+with tab1:
+    st.subheader("📊 Stock Dashboard")
+
+    stock = st.text_input("Enter Stock", "RELIANCE")
+
+    if not stock.endswith(".NS"):
+        stock = stock + ".NS"
+
+    df = get_data(stock)
+
+    if df is not None:
+        st.line_chart(df['Close'])
+
+        price = df['Close'].iloc[-1]
+        st.metric("Price", round(price, 2))
+
+        signal = get_signal(df)
+        st.metric("Signal", signal)
+
+    else:
+        st.error("Data not available")
+
 
 # =============================
-# 4. SIDEBAR
+# 🔥 SCANNER
 # =============================
-st.sidebar.title("📂 Backtest Panel")
-bt_date = st.sidebar.date_input("Select Date", datetime.now() - timedelta(days=1))
-bt_stock_input = st.sidebar.text_input("Stock (optional)", "").upper()
+with tab2:
+    st.subheader("🔥 NSE SCANNER")
 
-# =============================
-# 5. MAIN SCANNER
-# =============================
-selected_sector = st.selectbox("📂 Select Sector", list(all_sectors.keys()))
-stocks = all_sectors[selected_sector]
+    sectors = {
+        "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS"],
+        "Banking": ["SBIN.NS","AXISBANK.NS","KOTAKBANK.NS"],
+        "IT": ["WIPRO.NS","HCLTECH.NS","TECHM.NS"],
+        "Auto": ["MARUTI.NS","TATAMOTORS.NS","M&M.NS"],
+        "FMCG": ["HINDUNILVR.NS","ITC.NS","NESTLEIND.NS"],
+        "Pharma": ["SUNPHARMA.NS","DRREDDY.NS","CIPLA.NS"]
+    }
 
-if st.button("🔍 START LIVE SCANNER", use_container_width=True):
+    sector = st.selectbox("Select Sector", list(sectors.keys()))
+    stocks = sectors[sector]
+
+    data = get_multi_data(stocks)
 
     results = []
 
-    with st.spinner("AI Scanning Market..."):
-        for s in stocks:
+    if data is not None:
+        for stock in stocks:
             try:
-                t = yf.Ticker(s + ".NS")
-                df = t.history(period="2d", interval="15m")
+                if stock not in data.columns.get_level_values(0):
+                    continue
 
-                res = analyze_data(df)
+                df = data[stock].dropna()
 
-                if res:
-                    results.append({
-                        "Stock": s,
-                        "Price": round(df['Close'].iloc[-1], 2),
-                        "Trend": res[0],
-                        "Signal": res[1],
-                        "Big Player": res[2],
-                        "Entry": res[3],
-                        "SL": res[4],
-                        "Target": res[5],
-                        "Time": df.index[-1].strftime('%H:%M')
-                    })
+                if len(df) < 20:
+                    continue
+
+                signal = get_signal(df)
+                strength = get_strength(df)
+
+                results.append({
+                    "Stock": stock,
+                    "Signal": signal,
+                    "Strength": strength,
+                    "Price": round(df['Close'].iloc[-1], 2)
+                })
 
             except:
                 continue
 
-    if results:
-        st.dataframe(pd.DataFrame(results), use_container_width=True)
-    else:
-        st.error("No Data Found")
+    res_df = pd.DataFrame(results)
 
-# =============================
-# 6. BACKTEST (SAFE FIXED)
-# =============================
-st.markdown("---")
-st.subheader(f"📅 Backtest Report - {bt_date}")
-
-if st.sidebar.button("📊 RUN BACKTEST"):
-
-    bt_results = []
-    target_list = [bt_stock_input] if bt_stock_input else stocks
-
-    with st.spinner("Running Backtest..."):
-
-        for s in target_list:
-            try:
-                t = yf.Ticker(s + ".NS")
-                df_hist = t.history(start=bt_date, end=bt_date + timedelta(days=1), interval="15m")
-
-                if not df_hist.empty:
-                    for i in range(20, len(df_hist)):
-                        sub_df = df_hist.iloc[:i+1]
-                        res = analyze_data(sub_df)
-
-                        if res and res[1] != "WAIT":
-                            bt_results.append({
-                                "Time": sub_df.index[-1].strftime('%H:%M'),
-                                "Stock": s,
-                                "Signal": res[1],
-                                "Big Player": res[2],
-                                "Entry": res[3],
-                                "SL": res[4],
-                                "Target": res[5]
-                            })
-
-            except:
-                continue
-
-    if bt_results:
-        st.dataframe(pd.DataFrame(bt_results), use_container_width=True)
-    else:
-        st
+    if res_df
