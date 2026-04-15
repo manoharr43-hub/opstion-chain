@@ -6,10 +6,10 @@ from streamlit_autorefresh import st_autorefresh
 # =============================
 # CONFIG
 # =============================
-st.set_page_config(page_title="🔥 PRO NSE AI DASHBOARD", layout="wide")
+st.set_page_config(page_title="🔥 PRO NSE AI DASHBOARD ULTIMATE", layout="wide")
 st_autorefresh(interval=15000, key="refresh")
 
-st.title("🔥 PRO NSE AI DASHBOARD + SCANNER")
+st.title("🔥 PRO NSE AI DASHBOARD + MULTI TF SCANNER")
 st.markdown("---")
 
 # =============================
@@ -18,7 +18,33 @@ st.markdown("---")
 tab1, tab2 = st.tabs(["📊 Dashboard", "🔥 Scanner"])
 
 # =============================
-# 📊 DASHBOARD (100% SAFE)
+# DATA FUNCTION
+# =============================
+@st.cache_data(ttl=60)
+def get_data(symbol):
+    try:
+        df = yf.download(symbol, period="3mo", interval="1d", progress=False)
+        if df is None or df.empty:
+            return None
+        return df
+    except:
+        return None
+
+@st.cache_data(ttl=60)
+def get_multi_data(tickers):
+    try:
+        return yf.download(
+            tickers,
+            period="15d",
+            interval="15m",
+            group_by="ticker",
+            progress=False
+        )
+    except:
+        return None
+
+# =============================
+# 📊 DASHBOARD
 # =============================
 with tab1:
     st.subheader("📊 Simple Dashboard")
@@ -27,16 +53,6 @@ with tab1:
 
     if not stock.endswith(".NS"):
         stock = stock + ".NS"
-
-    @st.cache_data(ttl=60)
-    def get_data(symbol):
-        try:
-            df = yf.download(symbol, period="3mo", interval="1d", progress=False)
-            if df is None or df.empty:
-                return None
-            return df
-        except:
-            return None
 
     df = get_data(stock)
 
@@ -49,22 +65,14 @@ with tab1:
 
         col1, col2 = st.columns(2)
 
-        # PRICE SAFE
         price = df['Close'].iloc[-1]
         col1.metric("Price", round(price, 2))
 
-        # TREND SAFE (NO ERROR)
         sma20 = df['SMA20'].dropna()
         sma50 = df['SMA50'].dropna()
 
         if len(sma20) > 0 and len(sma50) > 0:
-            last_sma20 = float(sma20.iloc[-1])
-            last_sma50 = float(sma50.iloc[-1])
-
-            if pd.notna(last_sma20) and pd.notna(last_sma50):
-                trend = "UP" if last_sma20 > last_sma50 else "DOWN"
-            else:
-                trend = "N/A"
+            trend = "UP" if sma20.iloc[-1] > sma50.iloc[-1] else "DOWN"
         else:
             trend = "N/A"
 
@@ -74,27 +82,28 @@ with tab1:
         st.error("❌ Data Not Loading")
 
 # =============================
-# 🔥 SCANNER (FAST + SAFE)
+# 🔥 SCANNER
 # =============================
 with tab2:
-    st.subheader("🔥 NSE SCANNER")
+    st.subheader("🔥 NSE MULTI-SECTOR SCANNER")
 
+    # =============================
+    # ➕ EXPANDED SECTORS
+    # =============================
     sectors = {
         "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS"],
         "Banking": ["SBIN.NS","AXISBANK.NS","KOTAKBANK.NS","PNB.NS"],
         "IT": ["WIPRO.NS","HCLTECH.NS","TECHM.NS"],
-        "Auto": ["MARUTI.NS","TATAMOTORS.NS","M&M.NS"]
+        "Auto": ["MARUTI.NS","TATAMOTORS.NS","M&M.NS"],
+        "FMCG": ["HINDUNILVR.NS","ITC.NS","NESTLEIND.NS"],
+        "Pharma": ["SUNPHARMA.NS","DRREDDY.NS","CIPLA.NS"],
+        "Energy": ["ONGC.NS","IOC.NS","BPCL.NS"],
+        "Metal": ["TATASTEEL.NS","JSWSTEEL.NS","HINDALCO.NS"],
+        "Finance": ["BAJFINANCE.NS","BAJAJFINSV.NS","SHRIRAMFIN.NS"]
     }
 
     sector = st.selectbox("Select Sector", list(sectors.keys()))
     stocks = sectors[sector][:3]
-
-    @st.cache_data(ttl=60)
-    def get_multi_data(tickers):
-        try:
-            return yf.download(tickers, period="15d", interval="15m", group_by="ticker", progress=False)
-        except:
-            return None
 
     data = get_multi_data(stocks)
 
@@ -106,9 +115,12 @@ with tab2:
             try:
                 df = data[stock].dropna()
 
-                if len(df) < 20:
+                if len(df) < 30:
                     continue
 
+                # =============================
+                # EMA STRATEGY
+                # =============================
                 df['EMA20'] = df['Close'].ewm(span=20).mean()
                 df['EMA50'] = df['Close'].ewm(span=50).mean()
 
@@ -120,15 +132,34 @@ with tab2:
                 if "BUY" in signal:
                     entry = prev['High']
                     sl = prev['Low']
-                    target = entry + (entry - sl)*1.5
+                    target = entry + (entry - sl) * 1.5
                 else:
                     entry = prev['Low']
                     sl = prev['High']
-                    target = entry - (sl - entry)*1.5
+                    target = entry - (sl - entry) * 1.5
 
-                # MULTI TF SAFE
+                # =============================
+                # 5M / 15M TREND
+                # =============================
                 t5 = "UP" if df['EMA20'].iloc[-1] > df['EMA50'].iloc[-1] else "DOWN"
 
+                # =============================
+                # 2M TIMEFRAME (NEW)
+                # =============================
+                try:
+                    df_2m = yf.download(stock, period="5d", interval="2m", progress=False)
+                    if df_2m is not None and not df_2m.empty:
+                        df_2m['EMA20'] = df_2m['Close'].ewm(span=20).mean()
+                        df_2m['EMA50'] = df_2m['Close'].ewm(span=50).mean()
+                        t2m = "UP" if df_2m['EMA20'].iloc[-1] > df_2m['EMA50'].iloc[-1] else "DOWN"
+                    else:
+                        t2m = "N/A"
+                except:
+                    t2m = "N/A"
+
+                # =============================
+                # 1H TIMEFRAME (SAFE FIX)
+                # =============================
                 try:
                     df1h = df.resample("1h").last().dropna()
 
@@ -146,11 +177,12 @@ with tab2:
                 results.append({
                     "Stock": stock,
                     "Signal": signal,
-                    "Price": round(price,2),
-                    "Entry": round(entry,2),
-                    "SL": round(sl,2),
-                    "Target": round(target,2),
-                    "5M": t5,
+                    "Price": round(price, 2),
+                    "Entry": round(entry, 2),
+                    "SL": round(sl, 2),
+                    "Target": round(target, 2),
+                    "2M": t2m,
+                    "15M": t5,
                     "1H": t1h
                 })
 
@@ -160,18 +192,19 @@ with tab2:
     df_res = pd.DataFrame(results)
 
     if df_res.empty:
-        st.warning("⚠️ No Data")
+        st.warning("⚠️ No Data Found")
     else:
         st.dataframe(df_res, use_container_width=True)
 
-        st.subheader("📦 Multi Timeframe")
+        st.subheader("📦 Multi Timeframe View")
 
         s = st.selectbox("Select Stock", df_res["Stock"])
         row = df_res[df_res["Stock"] == s].iloc[0]
 
-        c1, c2 = st.columns(2)
-        c1.metric("5M Trend", row["5M"])
-        c2.metric("1H Trend", row["1H"])
+        c1, c2, c3 = st.columns(3)
+        c1.metric("2M Trend", row["2M"])
+        c2.metric("15M Trend", row["15M"])
+        c3.metric("1H Trend", row["1H"])
 
-        st.subheader("📈 Chart")
+        st.subheader("📈 Chart (Daily)")
         st.line_chart(data[s]["Close"].resample("1D").last())
