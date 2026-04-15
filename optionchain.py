@@ -4,130 +4,135 @@ import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from streamlit_autorefresh import st_autorefresh
-import requests
+import plotly.graph_objects as go
 
 # =============================
 # PAGE CONFIG
 # =============================
-st.set_page_config(page_title="🔥 PRO NSE AI SCANNER V7 MAX", layout="wide")
-st_autorefresh(interval=30000, key="refresh")
+st.set_page_config(page_title="🚀 PRO AI TRADING HUB V8", layout="wide")
+st_autorefresh(interval=60000, key="refresh")
 
-st.title("🔥 PRO NSE AI SCANNER (ULTIMATE VERSION)")
-st.markdown("---")
+st.title("🚀 PRO NSE AI SCANNER (BIG PLAYER & CHART EDITION)")
 
 # =============================
-# SECTORS
+# NSE SECTORS (Expanded)
 # =============================
 sectors = {
-    "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS"],
-    "Banking": ["SBIN.NS","AXISBANK.NS","KOTAKBANK.NS"],
-    "IT": ["WIPRO.NS","HCLTECH.NS","TECHM.NS"],
-    "Auto": ["MARUTI.NS","M&M.NS","TATAMOTORS.NS"]
+    "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS","BHARTIARTL.NS","SBIN.NS"],
+    "Banking": ["HDFCBANK.NS","ICICIBANK.NS","SBIN.NS","AXISBANK.NS","KOTAKBANK.NS","PNB.NS","CANBK.NS"],
+    "IT": ["TCS.NS","INFY.NS","WIPRO.NS","HCLTECH.NS","TECHM.NS","LTIM.NS"],
+    "Auto": ["TATAMOTORS.NS","M&M.NS","MARUTI.NS","EICHERMOT.NS","ASHOKLEY.NS"],
+    "Metal": ["TATASTEEL.NS","HINDALCO.NS","JINDALSTEL.NS","VEDL.NS"]
 }
 
-selected_sector = st.selectbox("📊 Select Sector", list(sectors.keys()))
-stocks_to_scan = sectors[selected_sector]
+col1, col2 = st.columns([1, 1])
+with col1:
+    selected_sector = st.selectbox("📊 Select NSE Sector", list(sectors.keys()))
+    stocks_to_scan = sectors[selected_sector]
+with col2:
+    selected_stock_chart = st.selectbox("📈 View Chart for", stocks_to_scan)
 
 # =============================
-# DATA FETCH & INDICATORS
+# CORE FUNCTIONS
 # =============================
 @st.cache_data(ttl=60)
 def get_data(tickers):
-    return yf.download(tickers, period="30d", interval="15m", group_by="ticker", threads=True)
+    return yf.download(tickers, period="60d", interval="15m", group_by="ticker", threads=True)
 
-def calculate_indicators(df):
+def calculate_advanced_metrics(df):
     df = df.copy()
+    # Basic Indicators
     df['EMA20'] = df['Close'].ewm(span=20).mean()
     df['EMA50'] = df['Close'].ewm(span=50).mean()
-    df['EMA12'] = df['Close'].ewm(span=12).mean()
-    df['EMA26'] = df['Close'].ewm(span=26).mean()
-    df['MACD'] = df['EMA12'] - df['EMA26']
     
+    # RSI
     delta = df['Close'].diff()
-    gain = delta.clip(lower=0).rolling(14).mean()
-    loss = -delta.clip(upper=0).rolling(14).mean()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss
-    df['RSI'] = 100 - (100/(1+rs))
+    df['RSI'] = 100 - (100 / (1 + rs))
+
+    # Support & Resistance (Pivot Points style)
+    df['Support'] = df['Low'].rolling(window=20).min()
+    df['Resistance'] = df['High'].rolling(window=20).max()
+
+    # Big Player Activity (Volume Spike)
+    avg_vol = df['Volume'].rolling(window=20).mean()
+    df['BigPlayer'] = np.where(df['Volume'] > (avg_vol * 2), "⚠️ ACTIVE", "Normal")
+    
     return df
 
 # =============================
-# AI & BACKTEST LOGIC
+# SCANNER LOGIC
 # =============================
-def ai_predict(df):
-    df = df.dropna()
-    if len(df) < 30: return "N/A", 0
-    df['Target'] = np.where(df['Close'].shift(-1) > df['Close'], 1, 0)
-    features = ['RSI', 'MACD', 'EMA20']
-    X = df[features].iloc[:-1]
-    y = df['Target'].iloc[:-1]
-    model = RandomForestClassifier(n_estimators=50, random_state=42)
-    model.fit(X, y)
-    last_row = df[features].tail(1)
-    pred = model.predict(last_row)[0]
-    prob = model.predict_proba(last_row).max()
-    return ("BUY 🚀" if pred == 1 else "SELL 📉"), round(prob * 100, 2)
-
-def backtest(df):
-    correct, total = 0, 0
-    if len(df) > 50:
-        for i in range(len(df)-11, len(df)-1):
-            if df['Close'].iloc[i] > df['EMA50'].iloc[i]:
-                if df['Close'].iloc[i+1] > df['Close'].iloc[i]: correct += 1
-                total += 1
-    return round((correct/total)*100, 2) if total > 0 else 0
-
-# =============================
-# MAIN EXECUTION
-# =============================
-st.subheader(f"📊 Scanning {selected_sector} Stocks...")
+st.subheader(f"🔍 Market Analysis: {selected_sector}")
 raw_data = get_data(stocks_to_scan)
-
 scan_results = []
 
 for ticker in stocks_to_scan:
     try:
-        # మల్టీ-ఇండెక్స్ డేటా హ్యాండ్లింగ్
-        if len(stocks_to_scan) > 1:
-            df_ticker = raw_data[ticker].copy()
-        else:
-            df_ticker = raw_data.copy()
-            
-        if df_ticker.empty: continue
-            
-        df_ticker = calculate_indicators(df_ticker)
-        signal, confidence = ai_predict(df_ticker)
-        accuracy = backtest(df_ticker)
+        df = raw_data[ticker].copy() if len(stocks_to_scan) > 1 else raw_data.copy()
+        df = calculate_advanced_metrics(df).dropna()
         
-        curr_p = round(df_ticker['Close'].iloc[-1], 2)
-        prev_p = df_ticker['Close'].iloc[-2]
-        chg = round(((curr_p - prev_p) / prev_p) * 100, 2)
+        last = df.iloc[-1]
+        prev = df.iloc[-2]
+        
+        # Trend Analysis
+        price = round(last['Close'], 2)
+        change = round(((price - prev['Close'])/prev['Close'])*100, 2)
+        
+        # Strong Buy/Sell Logic
+        if last['Close'] > last['EMA20'] and last['RSI'] > 60:
+            signal = "STRONG BUY 🔥"
+            side = "CALL SIDE 🟢"
+        elif last['Close'] < last['EMA20'] and last['RSI'] < 40:
+            signal = "STRONG SELL 🧊"
+            side = "PUT SIDE 🔴"
+        else:
+            signal = "NEUTRAL ⚖️"
+            side = "WAIT ⏳"
 
         scan_results.append({
-            "Ticker": ticker,
-            "Price": curr_p,
-            "Change %": chg,
-            "RSI": round(df_ticker['RSI'].iloc[-1], 2),
-            "AI Signal": signal,
-            "Confidence": f"{confidence}%",
-            "Accuracy": f"{accuracy}%"
+            "Stock": ticker,
+            "Price": price,
+            "Change %": change,
+            "Signal": signal,
+            "Side": side,
+            "Big Player": last['BigPlayer'],
+            "Support": round(last['Support'], 2),
+            "Resistance": round(last['Resistance'], 2),
+            "RSI": round(last['RSI'], 1)
         })
-    except:
-        continue
+    except: continue
 
-# DISPLAY TABLE
+# Display Table
 if scan_results:
-    final_df = pd.DataFrame(scan_results)
+    res_df = pd.DataFrame(scan_results)
+    def color_signal(val):
+        if "BUY" in str(val): return 'background-color: #006400; color: white'
+        if "SELL" in str(val): return 'background-color: #8B0000; color: white'
+        return ''
     
-    # ఎర్రర్ రాకుండా ఇక్కడ మార్పులు చేశాను (Pandas Styler Fix)
-    def style_df(res_df):
-        def apply_color(val):
-            if 'BUY' in str(val): return 'background-color: #228B22; color: white'
-            if 'SELL' in str(val): return 'background-color: #DC143C; color: white'
-            return ''
-        
-        # applymap బదులుగా map వాడుతున్నాము (New Pandas Version)
-        return res_df.style.map(apply_color, subset=['AI Signal'])
+    st.table(res_df.style.map(color_signal, subset=['Signal']))
 
-    st.table(style_df(final_df))
-else:
-    st.error("No data found. Please refresh or check connection.")
+# =============================
+# CHART SECTION (Interactive)
+# =============================
+st.markdown("---")
+st.subheader(f"📈 Price Chart: {selected_stock_chart}")
+
+chart_df = raw_data[selected_stock_chart].copy() if len(stocks_to_scan) > 1 else raw_data.copy()
+chart_df = calculate_advanced_metrics(chart_df)
+
+fig = go.Figure()
+# Candlestick
+fig.add_trace(go.Candlestick(x=chart_df.index, open=chart_df['Open'], high=chart_df['High'], low=chart_df['Low'], close=chart_df['Close'], name="Price"))
+# Indicators
+fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df['EMA20'], line=dict(color='yellow', width=1), name="EMA 20"))
+fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df['Support'], line=dict(color='green', dash='dash'), name="Support"))
+fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df['Resistance'], line=dict(color='red', dash='dash'), name="Resistance"))
+
+fig.update_layout(height=600, template="plotly_dark", xaxis_rangeslider_visible=False)
+st.plotly_chart(fig, use_container_width=True)
+
+st.info("💡 Tip: Use the 'View Chart' dropdown above to switch between different stocks in the sector.")
