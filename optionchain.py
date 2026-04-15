@@ -9,7 +9,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="🔥 PRO NSE AI DASHBOARD", layout="wide")
 st_autorefresh(interval=15000, key="refresh")
 
-st.title("🔥 PRO NSE AI DASHBOARD + SCANNER (FINAL FIXED)")
+st.title("🔥 PRO NSE AI DASHBOARD + SCANNER (SAFE FINAL)")
 st.markdown("---")
 
 # =============================
@@ -18,7 +18,7 @@ st.markdown("---")
 tab1, tab2 = st.tabs(["📊 Dashboard", "🔥 Scanner"])
 
 # =============================
-# SAFE DATA FUNCTIONS
+# SAFE DATA LOAD
 # =============================
 @st.cache_data(ttl=60)
 def get_data(symbol):
@@ -85,10 +85,10 @@ with tab1:
         st.error("❌ Data Not Loading")
 
 # =============================
-# 🔥 SCANNER (FULL FIXED)
+# 🔥 SCANNER
 # =============================
 with tab2:
-    st.subheader("🔥 NSE MULTI SECTOR SCANNER (FINAL FIX)")
+    st.subheader("🔥 NSE MULTI SECTOR SCANNER (FINAL SAFE)")
 
     sectors = {
         "Nifty 50": ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS"],
@@ -114,9 +114,6 @@ with tab2:
         for stock in stocks:
             try:
 
-                # =============================
-                # SAFE CHECK
-                # =============================
                 if stock not in data.columns.get_level_values(0):
                     continue
 
@@ -136,7 +133,7 @@ with tab2:
                 ema50 = df['EMA50'].iloc[-1]
 
                 # =============================
-                # BUY / SELL LOGIC (FIXED)
+                # SIGNAL LOGIC (FIXED)
                 # =============================
                 if ema20 > ema50 and price > ema20:
                     signal = "🟢 BUY"
@@ -190,9 +187,6 @@ with tab2:
                 except:
                     t15 = "N/A"
 
-                # =============================
-                # RESULT
-                # =============================
                 results.append({
                     "Stock": stock,
                     "Signal": signal,
@@ -214,7 +208,7 @@ with tab2:
     else:
         st.dataframe(df_res, use_container_width=True)
 
-        st.subheader("📊 Selected Stock View")
+        st.subheader("📊 Detail View")
 
         s = st.selectbox("Select Stock", df_res["Stock"])
         row = df_res[df_res["Stock"] == s].iloc[0]
