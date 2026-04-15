@@ -13,19 +13,18 @@ st.title("🔥 PRO NSE AI DASHBOARD + SCANNER")
 st.markdown("---")
 
 # =============================
-# TABS (SAFE ADD)
+# TABS
 # =============================
 tab1, tab2 = st.tabs(["📊 Dashboard", "🔥 Scanner"])
 
 # =============================
-# 📊 DASHBOARD (FIXED)
+# 📊 DASHBOARD (100% SAFE)
 # =============================
 with tab1:
     st.subheader("📊 Simple Dashboard")
 
     stock = st.text_input("Enter Stock (Example: RELIANCE)", "RELIANCE")
 
-    # AUTO FIX SYMBOL
     if not stock.endswith(".NS"):
         stock = stock + ".NS"
 
@@ -48,23 +47,31 @@ with tab1:
         df['SMA20'] = df['Close'].rolling(20).mean()
         df['SMA50'] = df['Close'].rolling(50).mean()
 
-        # SAFE DROP NA
-        df_clean = df.dropna()
+        col1, col2 = st.columns(2)
 
-        if len(df_clean) > 0:
-            latest = df_clean.iloc[-1]
+        # PRICE SAFE
+        price = df['Close'].iloc[-1]
+        col1.metric("Price", round(price, 2))
 
-            col1, col2 = st.columns(2)
-            col1.metric("Price", round(latest['Close'], 2))
+        # TREND SAFE (NO ERROR)
+        sma20 = df['SMA20'].dropna()
+        sma50 = df['SMA50'].dropna()
 
-            trend = "UP" if latest['SMA20'] > latest['SMA50'] else "DOWN"
-            col2.metric("Trend", trend)
+        if len(sma20) > 0 and len(sma50) > 0:
+            last_sma20 = float(sma20.iloc[-1])
+            last_sma50 = float(sma50.iloc[-1])
 
+            if pd.notna(last_sma20) and pd.notna(last_sma50):
+                trend = "UP" if last_sma20 > last_sma50 else "DOWN"
+            else:
+                trend = "N/A"
         else:
-            st.warning("⚠️ Not enough data for SMA trend")
+            trend = "N/A"
+
+        col2.metric("Trend", trend)
 
     else:
-        st.error("❌ Data Not Loading (Check symbol / network)")
+        st.error("❌ Data Not Loading")
 
 # =============================
 # 🔥 SCANNER (FAST + SAFE)
@@ -126,7 +133,11 @@ with tab2:
                     df1h = df.resample("1h").last().dropna()
 
                     if len(df1h) > 20:
-                        t1h = "UP" if df1h['Close'].iloc[-1] > df1h['Close'].rolling(20).mean().iloc[-1] else "DOWN"
+                        sma1h = df1h['Close'].rolling(20).mean().dropna()
+                        if len(sma1h) > 0:
+                            t1h = "UP" if df1h['Close'].iloc[-1] > sma1h.iloc[-1] else "DOWN"
+                        else:
+                            t1h = "N/A"
                     else:
                         t1h = "N/A"
                 except:
@@ -149,7 +160,7 @@ with tab2:
     df_res = pd.DataFrame(results)
 
     if df_res.empty:
-        st.warning("⚠️ No Data (Try another sector)")
+        st.warning("⚠️ No Data")
     else:
         st.dataframe(df_res, use_container_width=True)
 
