@@ -32,7 +32,7 @@ def calculate_rsi(series, period=14):
 # 3. ANALYSIS LOGIC
 # =============================
 def analyze_data(df):
-    if df is None or len(df) < 10:
+    if df is None or len(df) < 15:
         return None
 
     # EMA
@@ -42,6 +42,8 @@ def analyze_data(df):
     # RSI (manual)
     rsi_series = calculate_rsi(df['Close'])
     rsi = rsi_series.iloc[-1]
+    if pd.isna(rsi):
+        return None   # ✅ NaN skip
 
     # Volume
     vol = df['Volume']
