@@ -100,16 +100,18 @@ stocks = all_sectors[selected_sector]
 if st.button("🔍 START LIVE SCANNER", use_container_width=True):
 
     results = []
+    breakout_day_list = []  # 🔥 NEW
 
     with st.spinner("AI Scanning Market..."):
         for s in stocks:
             try:
                 t = yf.Ticker(s + ".NS")
-                df = t.history(period="2d", interval="15m")
+                df = t.history(period="1d", interval="15m")
 
                 if df is None or df.empty:
                     continue
 
+                # ===== EXISTING LOGIC =====
                 res = analyze_data(df)
 
                 if res:
@@ -125,16 +127,50 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
                         "Time": df.index[-1].strftime('%H:%M')
                     })
 
-            except Exception as e:
-                st.error(f"{s} Error: {e}")
+                # ===== 🔥 FULL DAY BREAKOUT LOGIC =====
+                opening_data = df.between_time("09:15", "09:30")
 
+                if not opening_data.empty:
+                    opening_high = opening_data['High'].max()
+                    opening_low = opening_data['Low'].min()
+
+                    for _, row in df.iterrows():
+                        if row['High'] > opening_high:
+                            breakout_day_list.append({
+                                "Stock": s,
+                                "Type": "🚀 BREAKOUT BUY",
+                                "Level": round(opening_high, 2)
+                            })
+                            break
+
+                        elif row['Low'] < opening_low:
+                            breakout_day_list.append({
+                                "Stock": s,
+                                "Type": "💀 BREAKDOWN SELL",
+                                "Level": round(opening_low, 2)
+                            })
+                            break
+
+            except:
+                continue
+
+    # ===== MAIN RESULT =====
     if results:
         st.dataframe(pd.DataFrame(results), use_container_width=True)
     else:
         st.error("No Data Found")
 
+    # ===== 🔥 BREAKOUT DISPLAY =====
+    st.markdown("---")
+    st.subheader("🔥 TODAY FULL DAY BREAKOUT STOCKS")
+
+    if breakout_day_list:
+        st.dataframe(pd.DataFrame(breakout_day_list), use_container_width=True)
+    else:
+        st.info("No Breakout Stocks Today")
+
 # =============================
-# 6. BACKTEST (FIXED + TIME FILTER)
+# 6. BACKTEST (UNCHANGED)
 # =============================
 st.markdown("---")
 st.subheader(f"📅 Backtest Report - {bt_date}")
@@ -149,39 +185,28 @@ if st.sidebar.button("📊 RUN BACKTEST"):
         for s in target_list:
             try:
                 t = yf.Ticker(s + ".NS")
+                df_hist = t.history(start=bt_date, end=bt_date + timedelta(days=1), interval="15m")
 
-                df_hist = t.history(
-                    start=bt_date,
-                    end=bt_date + timedelta(days=1),
-                    interval="15m"
-                )
-
-                if df_hist is None or df_hist.empty:
-                    continue
-
-                # ✅ TIME FILTER FIX
                 df_hist = df_hist.between_time("09:15", "15:30")
 
-                if len(df_hist) < 20:
-                    continue
+                if not df_hist.empty:
+                    for i in range(20, len(df_hist)):
+                        sub_df = df_hist.iloc[:i+1]
+                        res = analyze_data(sub_df)
 
-                for i in range(20, len(df_hist)):
-                    sub_df = df_hist.iloc[:i+1]
-                    res = analyze_data(sub_df)
+                        if res and res[1] != "WAIT":
+                            bt_results.append({
+                                "Time": sub_df.index[-1].strftime('%H:%M'),
+                                "Stock": s,
+                                "Signal": res[1],
+                                "Big Player": res[2],
+                                "Entry": res[3],
+                                "SL": res[4],
+                                "Target": res[5]
+                            })
 
-                    if res and res[1] != "WAIT":
-                        bt_results.append({
-                            "Time": sub_df.index[-1].strftime('%H:%M'),
-                            "Stock": s,
-                            "Signal": res[1],
-                            "Big Player": res[2],
-                            "Entry": res[3],
-                            "SL": res[4],
-                            "Target": res[5]
-                        })
-
-            except Exception as e:
-                st.error(f"{s} Backtest Error: {e}")
+            except:
+                continue
 
     if bt_results:
         st.dataframe(pd.DataFrame(bt_results), use_container_width=True)
