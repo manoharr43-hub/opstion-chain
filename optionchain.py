@@ -100,7 +100,7 @@ stocks = all_sectors[selected_sector]
 if st.button("🔍 START LIVE SCANNER", use_container_width=True):
 
     results = []
-    breakout_day_list = []  # 🔥 NEW
+    breakout_day_list = []
 
     with st.spinner("AI Scanning Market..."):
         for s in stocks:
@@ -127,19 +127,21 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
                         "Time": df.index[-1].strftime('%H:%M')
                     })
 
-                # ===== 🔥 FULL DAY BREAKOUT LOGIC =====
+                # ===== 🔥 FULL DAY BREAKOUT WITH TIME =====
                 opening_data = df.between_time("09:15", "09:30")
 
                 if not opening_data.empty:
                     opening_high = opening_data['High'].max()
                     opening_low = opening_data['Low'].min()
 
-                    for _, row in df.iterrows():
+                    for idx, row in df.iterrows():
+
                         if row['High'] > opening_high:
                             breakout_day_list.append({
                                 "Stock": s,
                                 "Type": "🚀 BREAKOUT BUY",
-                                "Level": round(opening_high, 2)
+                                "Level": round(opening_high, 2),
+                                "Time": idx.strftime('%H:%M')
                             })
                             break
 
@@ -147,7 +149,8 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
                             breakout_day_list.append({
                                 "Stock": s,
                                 "Type": "💀 BREAKDOWN SELL",
-                                "Level": round(opening_low, 2)
+                                "Level": round(opening_low, 2),
+                                "Time": idx.strftime('%H:%M')
                             })
                             break
 
@@ -160,9 +163,9 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
     else:
         st.error("No Data Found")
 
-    # ===== 🔥 BREAKOUT DISPLAY =====
+    # ===== BREAKOUT DISPLAY =====
     st.markdown("---")
-    st.subheader("🔥 TODAY FULL DAY BREAKOUT STOCKS")
+    st.subheader("🔥 TODAY FULL DAY BREAKOUT STOCKS (WITH TIME)")
 
     if breakout_day_list:
         st.dataframe(pd.DataFrame(breakout_day_list), use_container_width=True)
