@@ -14,7 +14,15 @@ st.title("🚀 MANOHAR NSE AI PRO TERMINAL")
 st.markdown("---")
 
 # =============================
-# 2. ANALYSIS LOGIC (OLD SAFE + FIXED)
+# 2. SAFE VALUE FIX (NEW ADD ONLY)
+# =============================
+def get_value(x):
+    if isinstance(x, pd.Series):
+        return float(x.iloc[0])
+    return float(x)
+
+# =============================
+# 3. ANALYSIS LOGIC (OLD SAFE)
 # =============================
 def analyze_data(df):
     if df is None or len(df) < 20:
@@ -26,12 +34,12 @@ def analyze_data(df):
     vol = df['Volume']
     avg_vol = vol.rolling(window=20).mean()
 
-    # 🔥 FORCE FLOAT FIX (MAIN BUG FIX)
-    curr_price = float(df['Close'].iloc[-1])
-    curr_e20 = float(e20.iloc[-1])
-    curr_e50 = float(e50.iloc[-1])
-    curr_vol = float(vol.iloc[-1])
-    curr_avg_vol = float(avg_vol.iloc[-1])
+    # 🔥 FIXED VALUE EXTRACTION
+    curr_price = get_value(df['Close'].iloc[-1])
+    curr_e20 = get_value(e20.iloc[-1])
+    curr_e50 = get_value(e50.iloc[-1])
+    curr_vol = get_value(vol.iloc[-1])
+    curr_avg_vol = get_value(avg_vol.iloc[-1])
 
     if pd.isna(curr_avg_vol) or curr_avg_vol == 0:
         return None
@@ -52,7 +60,6 @@ def analyze_data(df):
     recent_low = df['Low'].iloc[-10:].min()
     risk = (recent_high - recent_low) if (recent_high - recent_low) > 0 else curr_price * 0.01
 
-    # 🔥 Slight relaxed condition
     if curr_e20 > curr_e50 and curr_vol > curr_avg_vol * 0.6:
         observation = "🚀 STRONG BUY"
         entry = curr_price
@@ -75,7 +82,7 @@ def analyze_data(df):
     )
 
 # =============================
-# 3. NSE SECTORS (UNCHANGED)
+# 4. NSE SECTORS (UNCHANGED)
 # =============================
 all_sectors = {
     "Nifty 50": ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT","AXISBANK","BHARTIARTL"],
@@ -92,14 +99,14 @@ all_sectors = {
 }
 
 # =============================
-# 4. SIDEBAR
+# 5. SIDEBAR
 # =============================
 st.sidebar.title("📂 Backtest Panel")
 bt_date = st.sidebar.date_input("Select Date", datetime.now() - timedelta(days=1))
 bt_stock_input = st.sidebar.text_input("Stock (optional)", "").upper()
 
 # =============================
-# 5. MAIN SCANNER
+# 6. MAIN SCANNER
 # =============================
 selected_sector = st.selectbox("📂 Select Sector", list(all_sectors.keys()))
 stocks = all_sectors[selected_sector]
@@ -116,12 +123,15 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
                 if df.empty:
                     continue
 
+                # 🔥 FIX multi-index
+                df.columns = df.columns.get_level_values(0)
+
                 res = analyze_data(df)
 
                 if res:
                     results.append({
                         "Stock": s,
-                        "Price": round(float(df['Close'].iloc[-1]), 2),
+                        "Price": get_value(df['Close'].iloc[-1]),
                         "Trend": res[0],
                         "Signal": res[1],
                         "Big Player": res[2],
@@ -142,7 +152,7 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
         st.error("❌ No Signals Found")
 
 # =============================
-# 6. BACKTEST (FULL FIXED)
+# 7. BACKTEST (FULL FIXED)
 # =============================
 st.markdown("---")
 st.subheader(f"📅 Backtest Report - {bt_date}")
@@ -165,6 +175,9 @@ if st.sidebar.button("📊 RUN BACKTEST"):
 
                 if df_hist.empty:
                     continue
+
+                # 🔥 FIX multi-index
+                df_hist.columns = df_hist.columns.get_level_values(0)
 
                 df_hist = df_hist[df_hist.index.date == bt_date]
 
