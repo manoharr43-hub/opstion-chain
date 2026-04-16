@@ -14,41 +14,35 @@ st.title("🚀 MANOHAR NSE AI PRO TERMINAL")
 st.markdown("---")
 
 # =============================
-# 2. ANALYSIS LOGIC (SAFE)
+# 2. ANALYSIS LOGIC (OLD SAFE + SLIGHT BOOST)
 # =============================
 def analyze_data(df):
-    if df is None or len(df) < 50:   # 🔥 increased safety
+    if df is None or len(df) < 50:
         return None
 
-    df = df.copy()
-
     # EMA
-    df['E20'] = df['Close'].ewm(span=20).mean()
-    df['E50'] = df['Close'].ewm(span=50).mean()
+    e20 = df['Close'].ewm(span=20).mean()
+    e50 = df['Close'].ewm(span=50).mean()
 
     # Volume
-    df['AVG_VOL'] = df['Volume'].rolling(window=20).mean()
+    vol = df['Volume']
+    avg_vol = vol.rolling(window=20).mean()
 
     # Current values
-    curr = df.iloc[-1]
-
-    curr_price = curr['Close']
-    curr_e20 = curr['E20']
-    curr_e50 = curr['E50']
-    curr_vol = curr['Volume']
-    curr_avg_vol = curr['AVG_VOL']
+    curr_price = df['Close'].iloc[-1]
+    curr_e20 = e20.iloc[-1]
+    curr_e50 = e50.iloc[-1]
+    curr_vol = vol.iloc[-1]
+    curr_avg_vol = avg_vol.iloc[-1]
 
     if pd.isna(curr_avg_vol):
         return None
 
     # =============================
-    # TREND
+    # TREND + BIG PLAYER
     # =============================
     cp_strength = "🔵 CALL STRONG" if curr_e20 > curr_e50 else "🔴 PUT STRONG"
 
-    # =============================
-    # BIG PLAYER
-    # =============================
     if curr_vol > curr_avg_vol * 2:
         big_player = "🔥 EXTREME INSTITUTIONAL"
     elif curr_vol > curr_avg_vol * 1.5:
@@ -56,26 +50,25 @@ def analyze_data(df):
     else:
         big_player = "💤 NORMAL"
 
-    # =============================
-    # SIGNAL
-    # =============================
+    # Default
     observation = "WAIT"
     entry, sl, target = 0, 0, 0
 
+    # Risk
     recent_high = df['High'].iloc[-10:].max()
     recent_low = df['Low'].iloc[-10:].min()
+    risk = (recent_high - recent_low) if (recent_high - recent_low) > 0 else curr_price * 0.01
 
-    risk = (recent_high - recent_low)
-    if risk <= 0:
-        risk = curr_price * 0.01
-
-    if curr_e20 > curr_e50 and curr_vol > curr_avg_vol:
+    # =============================
+    # SIGNAL LOGIC (SLIGHT RELAXED ONLY)
+    # =============================
+    if curr_e20 > curr_e50 and curr_vol > curr_avg_vol * 0.8:
         observation = "🚀 STRONG BUY"
         entry = curr_price
         sl = curr_price - (risk * 0.5)
         target = curr_price + risk
 
-    elif curr_e20 < curr_e50 and curr_vol > curr_avg_vol:
+    elif curr_e20 < curr_e50 and curr_vol > curr_avg_vol * 0.8:
         observation = "💀 STRONG SELL"
         entry = curr_price
         sl = curr_price + (risk * 0.5)
@@ -91,12 +84,20 @@ def analyze_data(df):
     )
 
 # =============================
-# 3. NSE SECTORS
+# 3. NSE SECTORS (EXPANDED)
 # =============================
 all_sectors = {
-    "Nifty 50": ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK"],
-    "Banking": ["SBIN", "AXISBANK", "KOTAKBANK", "HDFCBANK"],
-    "Auto": ["TATAMOTORS", "MARUTI", "M&M"],
+    "Nifty 50": ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT","AXISBANK","BHARTIARTL"],
+    "Banking": ["SBIN","AXISBANK","KOTAKBANK","HDFCBANK","ICICIBANK","PNB","CANBK","FEDERALBNK","BANKBARODA"],
+    "Auto": ["TATAMOTORS","MARUTI","M&M","HEROMOTOCO","EICHERMOT","ASHOKLEY","TVSMOTOR","BAJAJ-AUTO"],
+    "IT Sector": ["TCS","INFY","WIPRO","HCLTECH","TECHM","LTIM","COFORGE","MPHASIS"],
+    "Pharma": ["SUNPHARMA","DRREDDY","CIPLA","DIVISLAB","LUPIN","AUROPHARMA"],
+    "Metal": ["TATASTEEL","JINDALSTEL","HINDALCO","JSWSTEEL","SAIL","VEDL","NMDC"],
+    "FMCG": ["HINDUNILVR","ITC","NESTLEIND","DABUR","BRITANNIA","GODREJCP"],
+    "Energy": ["RELIANCE","ONGC","IOC","BPCL","GAIL","ADANIGREEN","ADANIPOWER"],
+    "Infra": ["LT","ADANIPORTS","GMRINFRA","IRCTC","NBCC"],
+    "Midcap": ["POLYCAB","PIIND","ASTRAL","DIXON","DEEPAKNTR","PERSISTENT"],
+    "Top Traders": ["RELIANCE","SBIN","TATAMOTORS","INFY","HDFCBANK","ICICIBANK","LT"]
 }
 
 # =============================
@@ -117,18 +118,11 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
     results = []
 
     with st.spinner("AI Scanning Market..."):
-
         for s in stocks:
             try:
-                df = yf.download(
-                    s + ".NS",
-                    period="5d",      # 🔥 FIXED
-                    interval="15m",
-                    progress=False
-                )
+                df = yf.download(s + ".NS", period="5d", interval="15m", progress=False)
 
                 if df.empty:
-                    st.warning(f"No data: {s}")
                     continue
 
                 res = analyze_data(df)
@@ -147,16 +141,15 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
                     })
 
             except Exception as e:
-                st.error(f"{s} Error: {e}")   # 🔥 DEBUG ENABLED
+                st.error(f"{s} Error: {e}")
 
     if results:
         df_res = pd.DataFrame(results)
 
-        # 🔥 FILTER (only signals)
+        # ONLY SIGNALS
         df_res = df_res[df_res["Signal"] != "WAIT"]
 
         st.dataframe(df_res, use_container_width=True)
-
     else:
         st.error("❌ No Signals Found")
 
@@ -195,6 +188,7 @@ if st.sidebar.button("📊 RUN BACKTEST"):
                             "Time": sub_df.index[-1].strftime('%H:%M'),
                             "Stock": s,
                             "Signal": res[1],
+                            "Big Player": res[2],
                             "Entry": res[3],
                             "SL": res[4],
                             "Target": res[5]
