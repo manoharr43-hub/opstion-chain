@@ -105,4 +105,63 @@ bt_stock_input = st.sidebar.text_input("Stock (optional)", "").upper()
 # =============================
 # 6. MAIN SCANNER
 # =============================
-selected_sector = st.select
+selected_sector = st.selectbox("📂 Select Sector", list(all_sectors.keys()))  # ✅ fixed
+stocks = all_sectors[selected_sector]
+
+if st.button("🔍 START LIVE SCANNER", use_container_width=True):
+    results = []
+    with st.spinner("AI Scanning Market..."):
+        for s in stocks:
+            try:
+                t = yf.Ticker(s + ".NS")
+                df = t.history(period="2d", interval="15m")
+                res = analyze_data(df)
+                if res:
+                    results.append({
+                        "Stock": s,
+                        "Price": round(df['Close'].iloc[-1], 2),
+                        "Trend": res[0],
+                        "Signal": res[1],
+                        "Big Player": res[2],
+                        "Entry": res[3],
+                        "SL": res[4],
+                        "Target": res[5],
+                        "RSI": res[6],
+                        "Time": df.index[-1].strftime('%H:%M')
+                    })
+            except:
+                continue
+    st.dataframe(pd.DataFrame(results), use_container_width=True)
+
+# =============================
+# 7. BACKTEST (FULL DAY FIX)
+# =============================
+st.markdown("---")
+st.subheader(f"📅 Backtest Report - {bt_date}")
+
+if st.sidebar.button("📊 RUN BACKTEST"):
+    bt_results = []
+    target_list = [bt_stock_input] if bt_stock_input else stocks
+    with st.spinner("Running Backtest..."):
+        for s in target_list:
+            try:
+                t = yf.Ticker(s + ".NS")
+                df_hist = t.history(start=bt_date, end=bt_date + timedelta(days=1), interval="15m")
+                if not df_hist.empty:
+                    for i in range(5, len(df_hist)):   # ✅ full-day signals
+                        sub_df = df_hist.iloc[:i+1]
+                        res = analyze_data(sub_df)
+                        if res and res[1] != "WAIT":
+                            bt_results.append({
+                                "Time": sub_df.index[-1].strftime('%H:%M'),
+                                "Stock": s,
+                                "Signal": res[1],
+                                "Big Player": res[2],
+                                "Entry": res[3],
+                                "SL": res[4],
+                                "Target": res[5],
+                                "RSI": res[6]
+                            })
+            except:
+                continue
+    st.dataframe(pd.DataFrame(bt_results), use_container_width=True)
