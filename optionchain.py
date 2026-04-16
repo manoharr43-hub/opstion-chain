@@ -14,21 +14,18 @@ st.title("🚀 MANOHAR NSE AI PRO TERMINAL")
 st.markdown("---")
 
 # =============================
-# 2. ANALYSIS LOGIC (OLD SAFE + SLIGHT BOOST)
+# 2. ANALYSIS LOGIC (OLD SAFE)
 # =============================
 def analyze_data(df):
     if df is None or len(df) < 50:
         return None
 
-    # EMA
     e20 = df['Close'].ewm(span=20).mean()
     e50 = df['Close'].ewm(span=50).mean()
 
-    # Volume
     vol = df['Volume']
     avg_vol = vol.rolling(window=20).mean()
 
-    # Current values
     curr_price = df['Close'].iloc[-1]
     curr_e20 = e20.iloc[-1]
     curr_e50 = e50.iloc[-1]
@@ -38,9 +35,6 @@ def analyze_data(df):
     if pd.isna(curr_avg_vol):
         return None
 
-    # =============================
-    # TREND + BIG PLAYER
-    # =============================
     cp_strength = "🔵 CALL STRONG" if curr_e20 > curr_e50 else "🔴 PUT STRONG"
 
     if curr_vol > curr_avg_vol * 2:
@@ -50,18 +44,14 @@ def analyze_data(df):
     else:
         big_player = "💤 NORMAL"
 
-    # Default
     observation = "WAIT"
     entry, sl, target = 0, 0, 0
 
-    # Risk
     recent_high = df['High'].iloc[-10:].max()
     recent_low = df['Low'].iloc[-10:].min()
     risk = (recent_high - recent_low) if (recent_high - recent_low) > 0 else curr_price * 0.01
 
-    # =============================
-    # SIGNAL LOGIC (SLIGHT RELAXED ONLY)
-    # =============================
+    # 🔥 Slight relaxed condition (fix)
     if curr_e20 > curr_e50 and curr_vol > curr_avg_vol * 0.8:
         observation = "🚀 STRONG BUY"
         entry = curr_price
@@ -84,7 +74,7 @@ def analyze_data(df):
     )
 
 # =============================
-# 3. NSE SECTORS (EXPANDED)
+# 3. NSE SECTORS (SAME + MORE)
 # =============================
 all_sectors = {
     "Nifty 50": ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT","AXISBANK","BHARTIARTL"],
@@ -108,7 +98,7 @@ bt_date = st.sidebar.date_input("Select Date", datetime.now() - timedelta(days=1
 bt_stock_input = st.sidebar.text_input("Stock (optional)", "").upper()
 
 # =============================
-# 5. MAIN SCANNER
+# 5. MAIN SCANNER (NO CHANGE)
 # =============================
 selected_sector = st.selectbox("📂 Select Sector", list(all_sectors.keys()))
 stocks = all_sectors[selected_sector]
@@ -145,16 +135,13 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
 
     if results:
         df_res = pd.DataFrame(results)
-
-        # ONLY SIGNALS
         df_res = df_res[df_res["Signal"] != "WAIT"]
-
         st.dataframe(df_res, use_container_width=True)
     else:
         st.error("❌ No Signals Found")
 
 # =============================
-# 6. BACKTEST
+# 6. BACKTEST (FIXED ONLY)
 # =============================
 st.markdown("---")
 st.subheader(f"📅 Backtest Report - {bt_date}")
@@ -170,13 +157,18 @@ if st.sidebar.button("📊 RUN BACKTEST"):
             try:
                 df_hist = yf.download(
                     s + ".NS",
-                    start=bt_date,
-                    end=bt_date + timedelta(days=1),
+                    period="5d",   # 🔥 FIX
                     interval="15m",
                     progress=False
                 )
 
                 if df_hist.empty:
+                    continue
+
+                # 🔥 FILTER SELECTED DATE
+                df_hist = df_hist[df_hist.index.date == bt_date]
+
+                if len(df_hist) < 50:
                     continue
 
                 for i in range(50, len(df_hist)):
