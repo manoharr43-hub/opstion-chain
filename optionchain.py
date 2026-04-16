@@ -14,7 +14,22 @@ st.title("🚀 MANOHAR NSE AI PRO TERMINAL")
 st.markdown("---")
 
 # =============================
-# ANALYSIS (UPDATED WITH TREND SCORE)
+# DIRECTION FUNCTION (NEW)
+# =============================
+def get_direction(signal):
+    if "CONFIRMED BUY" in signal:
+        return "🟢 UP"
+    elif "CONFIRMED SELL" in signal:
+        return "🔴 DOWN"
+    elif "FAILED SELL" in signal:
+        return "🟢 UP"
+    elif "FAILED BUY" in signal:
+        return "🔴 DOWN"
+    else:
+        return "⚪ WAIT"
+
+# =============================
+# ANALYSIS (UPDATED ONLY ADD TREND SCORE)
 # =============================
 def analyze_data(df):
     if df is None or len(df) < 20:
@@ -52,19 +67,19 @@ def analyze_data(df):
     risk = (recent_high - recent_low) if (recent_high - recent_low) > 0 else curr_price * 0.01
 
     if curr_e20 > curr_e50 and curr_vol > curr_avg_vol:
-        observation = "🚀 STRONG BUY"
+        observation = "🚀 CONFIRMED BUY"
         entry = curr_price
         sl = curr_price - (risk * 0.5)
         target = curr_price + risk
 
     elif curr_e20 < curr_e50 and curr_vol > curr_avg_vol:
-        observation = "💀 STRONG SELL"
+        observation = "💀 CONFIRMED SELL"
         entry = curr_price
         sl = curr_price + (risk * 0.5)
         target = curr_price - risk
 
     # =============================
-    # 🔥 TREND STRENGTH SCORE (NEW)
+    # TREND SCORE (NEW ADD ONLY)
     # =============================
     try:
         ema_score = abs(curr_e20 - curr_e50) / curr_price * 100
@@ -91,7 +106,7 @@ def analyze_data(df):
         round(entry, 2),
         round(sl, 2),
         round(target, 2),
-        trend_score   # 👈 NEW
+        trend_score
     )
 
 # =============================
@@ -144,12 +159,13 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
                         "Entry": res[3],
                         "SL": res[4],
                         "Target": res[5],
-                        "Trend Score": res[6],   # 👈 NEW
+                        "Trend Score": res[6],
+                        "Direction": get_direction(res[1]),   # ✅ NEW COLUMN
                         "Time": df.index[-1].strftime('%H:%M')
                     })
 
                 # =============================
-                # BREAKOUT (UNCHANGED)
+                # BREAKOUT LOGIC (UNCHANGED)
                 # =============================
                 opening_data = df.between_time("09:15", "09:30")
 
@@ -201,11 +217,17 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
             except:
                 continue
 
+    # =============================
+    # MAIN TABLE
+    # =============================
     if results:
         st.dataframe(pd.DataFrame(results), use_container_width=True)
     else:
         st.error("No Data Found")
 
+    # =============================
+    # BREAKOUT TABLE
+    # =============================
     st.markdown("---")
     st.subheader("🔥 SMART BREAKOUT STOCKS (DIRECTION CONFIRMED)")
 
@@ -251,7 +273,8 @@ if st.sidebar.button("📊 RUN BACKTEST"):
                                 "Entry": res[3],
                                 "SL": res[4],
                                 "Target": res[5],
-                                "Trend Score": res[6]  # 👈 NEW
+                                "Trend Score": res[6],
+                                "Direction": get_direction(res[1])
                             })
 
             except:
