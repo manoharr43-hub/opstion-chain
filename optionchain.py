@@ -3,6 +3,7 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
+import ta  # Technical Analysis library
 
 # =============================
 # 1. CONFIG
@@ -14,77 +15,33 @@ st.title("🚀 MANOHAR NSE AI PRO TERMINAL")
 st.markdown("---")
 
 # =============================
-# 2. RSI CALCULATION
-# =============================
-def calculate_rsi(series, period=14):
-    delta = series.diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
-    avg_gain = gain.rolling(window=period).mean()
-    avg_loss = loss.rolling(window=period).mean()
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
-
-# =============================
-# 3. SuperTrend Calculation
-# =============================
-def calculate_supertrend(df, period=10, multiplier=3):
-    hl2 = (df['High'] + df['Low']) / 2
-    atr = df['High'].rolling(period).max() - df['Low'].rolling(period).min()
-    upperband = hl2 + (multiplier * atr)
-    lowerband = hl2 - (multiplier * atr)
-    supertrend = pd.Series(index=df.index, dtype=float)
-    for i in range(len(df)):
-        if df['Close'].iloc[i] > upperband.iloc[i]:
-            supertrend.iloc[i] = 1
-        elif df['Close'].iloc[i] < lowerband.iloc[i]:
-            supertrend.iloc[i] = -1
-        else:
-            supertrend.iloc[i] = 0
-    return supertrend
-
-# =============================
-# 4. Bollinger Bands Calculation
-# =============================
-def calculate_bollinger(df, period=20):
-    sma = df['Close'].rolling(window=period).mean()
-    std = df['Close'].rolling(window=period).std()
-    upper = sma + (2 * std)
-    lower = sma - (2 * std)
-    return sma, upper, lower
-
-# =============================
-# 5. ANALYSIS LOGIC
+# 2. ANALYSIS LOGIC (UPGRADED)
 # =============================
 def analyze_data(df):
-    if df is None or len(df) < 20:
+    if df is None or len(df) < 10:
         return None
 
+    # EMA
     e20 = df['Close'].ewm(span=20).mean()
     e50 = df['Close'].ewm(span=50).mean()
 
-    rsi_series = calculate_rsi(df['Close'])
-    rsi = rsi_series.iloc[-1]
-    if pd.isna(rsi):
-        return None
+    # RSI
+    rsi = ta.momentum.RSIIndicator(df['Close'], window=14).rsi().iloc[-1]
 
-    st_signal = calculate_supertrend(df)
-    st_last = st_signal.iloc[-1]
-
-    sma, upper, lower = calculate_bollinger(df)
-    bb_upper, bb_lower = upper.iloc[-1], lower.iloc[-1]
-
+    # Volume
     vol = df['Volume']
     avg_vol = vol.rolling(window=20).mean()
 
+    # Current values
     curr_price = df['Close'].iloc[-1]
     curr_e20, curr_e50 = e20.iloc[-1], e50.iloc[-1]
     curr_vol, curr_avg_vol = vol.iloc[-1], avg_vol.iloc[-1]
 
+    # Candlestick confirmation
     last_candle = df.iloc[-1]
     candle_signal = "Bullish" if last_candle['Close'] > last_candle['Open'] else "Bearish"
 
+    # Trend + Big Player
     cp_strength = "🔵 CALL STRONG" if curr_e20 > curr_e50 else "🔴 PUT STRONG"
     if curr_vol > curr_avg_vol * 2:
         big_player = "🔥 EXTREME INSTITUTIONAL"
@@ -93,19 +50,19 @@ def analyze_data(df):
     else:
         big_player = "💤 NORMAL"
 
+    # Risk calculation
     recent_high = df['High'].iloc[-10:].max()
     recent_low = df['Low'].iloc[-10:].min()
     risk = (recent_high - recent_low) if (recent_high - recent_low) > 0 else curr_price * 0.01
 
+    # Signal Logic
     observation, entry, sl, target = "WAIT", 0, 0, 0
-    if (curr_e20 > curr_e50 and curr_vol > curr_avg_vol and candle_signal == "Bullish"
-        and rsi > 45 and st_last == 1 and curr_price > bb_upper):
+    if curr_e20 > curr_e50 and curr_vol > curr_avg_vol and candle_signal == "Bullish" and rsi > 45:
         observation = "🚀 STRONG BUY"
         entry = curr_price
         sl = curr_price - (risk * 0.5)
         target = curr_price + risk
-    elif (curr_e20 < curr_e50 and curr_vol > curr_avg_vol and candle_signal == "Bearish"
-          and rsi < 55 and st_last == -1 and curr_price < bb_lower):
+    elif curr_e20 < curr_e50 and curr_vol > curr_avg_vol and candle_signal == "Bearish" and rsi < 55:
         observation = "💀 STRONG SELL"
         entry = curr_price
         sl = curr_price + (risk * 0.5)
@@ -114,7 +71,7 @@ def analyze_data(df):
     return (cp_strength, observation, big_player, round(entry,2), round(sl,2), round(target,2), round(rsi,2))
 
 # =============================
-# 6. NSE SECTORS
+# 3. NSE SECTORS
 # =============================
 all_sectors = {
     "Nifty 50": ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT","AXISBANK","BHARTIARTL"],
@@ -122,14 +79,14 @@ all_sectors = {
 }
 
 # =============================
-# 7. SIDEBAR
+# 4. SIDEBAR
 # =============================
 st.sidebar.title("📂 Backtest Panel")
 bt_date = st.sidebar.date_input("Select Date", datetime.now() - timedelta(days=1))
 bt_stock_input = st.sidebar.text_input("Stock (optional)", "").upper()
 
 # =============================
-# 8. MAIN SCANNER
+# 5. MAIN SCANNER
 # =============================
 selected_sector = st.selectbox("📂 Select Sector", list(all_sectors.keys()))
 stocks = all_sectors[selected_sector]
@@ -160,7 +117,7 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
     st.dataframe(pd.DataFrame(results), use_container_width=True)
 
 # =============================
-# 9. BACKTEST (FULL DAY FIX)
+# 6. BACKTEST (FULL DAY FIX)
 # =============================
 st.markdown("---")
 st.subheader(f"📅 Backtest Report - {bt_date}")
