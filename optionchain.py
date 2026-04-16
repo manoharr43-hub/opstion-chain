@@ -17,7 +17,7 @@ st.markdown("---")
 # 2. ANALYSIS LOGIC (OLD SAFE)
 # =============================
 def analyze_data(df):
-    if df is None or len(df) < 50:
+    if df is None or len(df) < 20:   # 🔥 FIX (50 → 20)
         return None
 
     e20 = df['Close'].ewm(span=20).mean()
@@ -51,14 +51,14 @@ def analyze_data(df):
     recent_low = df['Low'].iloc[-10:].min()
     risk = (recent_high - recent_low) if (recent_high - recent_low) > 0 else curr_price * 0.01
 
-    # 🔥 Slight relaxed condition (fix)
-    if curr_e20 > curr_e50 and curr_vol > curr_avg_vol * 0.8:
+    # 🔥 Slight relaxed condition
+    if curr_e20 > curr_e50 and curr_vol > curr_avg_vol * 0.6:
         observation = "🚀 STRONG BUY"
         entry = curr_price
         sl = curr_price - (risk * 0.5)
         target = curr_price + risk
 
-    elif curr_e20 < curr_e50 and curr_vol > curr_avg_vol * 0.8:
+    elif curr_e20 < curr_e50 and curr_vol > curr_avg_vol * 0.6:
         observation = "💀 STRONG SELL"
         entry = curr_price
         sl = curr_price + (risk * 0.5)
@@ -74,7 +74,7 @@ def analyze_data(df):
     )
 
 # =============================
-# 3. NSE SECTORS (SAME + MORE)
+# 3. NSE SECTORS (UNCHANGED)
 # =============================
 all_sectors = {
     "Nifty 50": ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT","AXISBANK","BHARTIARTL"],
@@ -141,7 +141,7 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
         st.error("❌ No Signals Found")
 
 # =============================
-# 6. BACKTEST (FIXED ONLY)
+# 6. BACKTEST (FIXED)
 # =============================
 st.markdown("---")
 st.subheader(f"📅 Backtest Report - {bt_date}")
@@ -157,7 +157,7 @@ if st.sidebar.button("📊 RUN BACKTEST"):
             try:
                 df_hist = yf.download(
                     s + ".NS",
-                    period="5d",   # 🔥 FIX
+                    period="5d",
                     interval="15m",
                     progress=False
                 )
@@ -165,13 +165,12 @@ if st.sidebar.button("📊 RUN BACKTEST"):
                 if df_hist.empty:
                     continue
 
-                # 🔥 FILTER SELECTED DATE
                 df_hist = df_hist[df_hist.index.date == bt_date]
 
-                if len(df_hist) < 50:
+                if len(df_hist) < 20:
                     continue
 
-                for i in range(50, len(df_hist)):
+                for i in range(20, len(df_hist)):
                     sub_df = df_hist.iloc[:i+1]
                     res = analyze_data(sub_df)
 
@@ -180,7 +179,6 @@ if st.sidebar.button("📊 RUN BACKTEST"):
                             "Time": sub_df.index[-1].strftime('%H:%M'),
                             "Stock": s,
                             "Signal": res[1],
-                            "Big Player": res[2],
                             "Entry": res[3],
                             "SL": res[4],
                             "Target": res[5]
