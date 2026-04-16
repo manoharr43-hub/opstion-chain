@@ -59,7 +59,6 @@ def analyze_data(df):
     recent_low = df['Low'].iloc[-10:].min()
     risk = (recent_high - recent_low) if (recent_high - recent_low) > 0 else curr_price * 0.01
 
-    # 🔥 Balanced Logic
     trend_strength = abs(curr_e20 - curr_e50)
     price_momentum = df['Close'].iloc[-1] - df['Close'].iloc[-3]
 
@@ -85,7 +84,7 @@ def analyze_data(df):
         sl = curr_price + (risk * 0.5)
         target = curr_price - risk
 
-    # 🔥 fallback (important)
+    # fallback (important)
     if observation == "WAIT":
         if curr_e20 > curr_e50:
             observation = "⚡ WEAK BUY"
@@ -131,12 +130,19 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
     with st.spinner("Scanning..."):
         for s in stocks:
             try:
-                df = yf.download(s + ".NS", period="5d", interval="15m", progress=False)
+                df = yf.download(
+                    s + ".NS",
+                    period="7d",   # 🔥 FIXED
+                    interval="15m",
+                    progress=False,
+                    auto_adjust=True
+                )
 
-                if df.empty:
+                if df is None or df.empty or len(df) < 30:
                     continue
 
-                df.columns = df.columns.get_level_values(0)
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = df.columns.get_level_values(0)
 
                 res = analyze_data(df)
 
@@ -156,7 +162,7 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
         st.error("No Signals Found")
 
 # =============================
-# 7. BACKTEST (FIXED)
+# 7. BACKTEST (CLOUD FIXED)
 # =============================
 st.markdown("---")
 st.subheader(f"📅 Backtest Report - {bt_date}")
@@ -170,12 +176,19 @@ if st.sidebar.button("📊 RUN BACKTEST"):
 
         for s in target_list:
             try:
-                df_hist = yf.download(s + ".NS", period="5d", interval="15m", progress=False)
+                df_hist = yf.download(
+                    s + ".NS",
+                    period="7d",   # 🔥 FIXED
+                    interval="15m",
+                    progress=False,
+                    auto_adjust=True
+                )
 
-                if df_hist.empty:
+                if df_hist is None or df_hist.empty or len(df_hist) < 30:
                     continue
 
-                df_hist.columns = df_hist.columns.get_level_values(0)
+                if isinstance(df_hist.columns, pd.MultiIndex):
+                    df_hist.columns = df_hist.columns.get_level_values(0)
 
                 df_hist = df_hist[df_hist.index.date == bt_date]
                 df_hist = df_hist.between_time("09:15", "15:30")
@@ -187,7 +200,6 @@ if st.sidebar.button("📊 RUN BACKTEST"):
                     sub_df = df_hist.iloc[:i+1]
                     res = analyze_data(sub_df)
 
-                    # 🔥 FIXED (NO FILTER)
                     if res:
                         bt_results.append({
                             "Time": sub_df.index[-1].strftime('%H:%M'),
