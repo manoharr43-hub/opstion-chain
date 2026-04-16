@@ -14,7 +14,7 @@ st.title("🚀 MANOHAR NSE AI PRO TERMINAL")
 st.markdown("---")
 
 # =============================
-# 2. SAFE VALUE FIX (NEW ADD ONLY)
+# 2. SAFE VALUE FIX
 # =============================
 def get_value(x):
     if isinstance(x, pd.Series):
@@ -34,7 +34,6 @@ def analyze_data(df):
     vol = df['Volume']
     avg_vol = vol.rolling(window=20).mean()
 
-    # 🔥 FIXED VALUE EXTRACTION
     curr_price = get_value(df['Close'].iloc[-1])
     curr_e20 = get_value(e20.iloc[-1])
     curr_e50 = get_value(e50.iloc[-1])
@@ -82,7 +81,7 @@ def analyze_data(df):
     )
 
 # =============================
-# 4. NSE SECTORS (UNCHANGED)
+# 4. NSE SECTORS
 # =============================
 all_sectors = {
     "Nifty 50": ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT","AXISBANK","BHARTIARTL"],
@@ -123,7 +122,6 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
                 if df.empty:
                     continue
 
-                # 🔥 FIX multi-index
                 df.columns = df.columns.get_level_values(0)
 
                 res = analyze_data(df)
@@ -152,7 +150,7 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
         st.error("❌ No Signals Found")
 
 # =============================
-# 7. BACKTEST (FULL FIXED)
+# 7. BACKTEST (TIME FILTER ADDED)
 # =============================
 st.markdown("---")
 st.subheader(f"📅 Backtest Report - {bt_date}")
@@ -176,10 +174,13 @@ if st.sidebar.button("📊 RUN BACKTEST"):
                 if df_hist.empty:
                     continue
 
-                # 🔥 FIX multi-index
                 df_hist.columns = df_hist.columns.get_level_values(0)
 
+                # DATE FILTER
                 df_hist = df_hist[df_hist.index.date == bt_date]
+
+                # 🔥 TIME FILTER (MAIN ADD)
+                df_hist = df_hist.between_time("09:15", "15:30")
 
                 if len(df_hist) < 20:
                     continue
