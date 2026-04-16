@@ -22,7 +22,7 @@ def get_value(x):
     return float(x)
 
 # =============================
-# 3. ANALYSIS LOGIC (OLD + ACCURACY BOOST)
+# 3. ANALYSIS LOGIC (BALANCED)
 # =============================
 def analyze_data(df):
     if df is None or len(df) < 20:
@@ -45,9 +45,7 @@ def analyze_data(df):
 
     cp_strength = "🔵 CALL STRONG" if curr_e20 > curr_e50 else "🔴 PUT STRONG"
 
-    # =============================
     # BIG PLAYER
-    # =============================
     if curr_vol > curr_avg_vol * 2:
         big_player = "🔥 EXTREME INSTITUTIONAL"
     elif curr_vol > curr_avg_vol * 1.5:
@@ -62,19 +60,14 @@ def analyze_data(df):
     recent_low = df['Low'].iloc[-10:].min()
     risk = (recent_high - recent_low) if (recent_high - recent_low) > 0 else curr_price * 0.01
 
-    # =============================
-    # 🔥 NEW ACCURACY FILTERS
-    # =============================
+    # 🔥 BALANCED FILTERS
     trend_strength = abs(curr_e20 - curr_e50)
     price_momentum = df['Close'].iloc[-1] - df['Close'].iloc[-3]
 
-    # =============================
-    # SIGNAL LOGIC (UPGRADED)
-    # =============================
     if (
         curr_e20 > curr_e50 and
-        curr_vol > curr_avg_vol * 0.6 and
-        trend_strength > curr_price * 0.002 and
+        curr_vol > curr_avg_vol * 0.5 and   # relaxed قلي
+        trend_strength > curr_price * 0.001 and
         price_momentum > 0
     ):
         observation = "🚀 STRONG BUY"
@@ -84,14 +77,21 @@ def analyze_data(df):
 
     elif (
         curr_e20 < curr_e50 and
-        curr_vol > curr_avg_vol * 0.6 and
-        trend_strength > curr_price * 0.002 and
+        curr_vol > curr_avg_vol * 0.5 and
+        trend_strength > curr_price * 0.001 and
         price_momentum < 0
     ):
         observation = "💀 STRONG SELL"
         entry = curr_price
         sl = curr_price + (risk * 0.5)
         target = curr_price - risk
+
+    # 🔥 FALLBACK SIGNAL (NEW)
+    if observation == "WAIT":
+        if curr_e20 > curr_e50:
+            observation = "⚡ WEAK BUY"
+        elif curr_e20 < curr_e50:
+            observation = "⚡ WEAK SELL"
 
     return (
         cp_strength,
@@ -103,7 +103,7 @@ def analyze_data(df):
     )
 
 # =============================
-# 4. NSE SECTORS (UNCHANGED)
+# 4. NSE SECTORS
 # =============================
 all_sectors = {
     "Nifty 50": ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT","AXISBANK","BHARTIARTL"],
@@ -166,13 +166,12 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
 
     if results:
         df_res = pd.DataFrame(results)
-        df_res = df_res[df_res["Signal"] != "WAIT"]
         st.dataframe(df_res, use_container_width=True)
     else:
         st.error("❌ No Signals Found")
 
 # =============================
-# 7. BACKTEST (TIME FILTER SAFE)
+# 7. BACKTEST
 # =============================
 st.markdown("---")
 st.subheader(f"📅 Backtest Report - {bt_date}")
@@ -208,7 +207,7 @@ if st.sidebar.button("📊 RUN BACKTEST"):
                     sub_df = df_hist.iloc[:i+1]
                     res = analyze_data(sub_df)
 
-                    if res and res[1] != "WAIT":
+                    if res:
                         bt_results.append({
                             "Time": sub_df.index[-1].strftime('%H:%M'),
                             "Stock": s,
