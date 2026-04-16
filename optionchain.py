@@ -3,7 +3,6 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
-import ta  # Technical Analysis library
 
 # =============================
 # 1. CONFIG
@@ -15,7 +14,22 @@ st.title("🚀 MANOHAR NSE AI PRO TERMINAL")
 st.markdown("---")
 
 # =============================
-# 2. ANALYSIS LOGIC (UPGRADED)
+# 2. RSI CALCULATION (Manual)
+# =============================
+def calculate_rsi(series, period=14):
+    delta = series.diff()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
+
+    avg_gain = gain.rolling(window=period).mean()
+    avg_loss = loss.rolling(window=period).mean()
+
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+# =============================
+# 3. ANALYSIS LOGIC
 # =============================
 def analyze_data(df):
     if df is None or len(df) < 10:
@@ -25,8 +39,9 @@ def analyze_data(df):
     e20 = df['Close'].ewm(span=20).mean()
     e50 = df['Close'].ewm(span=50).mean()
 
-    # RSI
-    rsi = ta.momentum.RSIIndicator(df['Close'], window=14).rsi().iloc[-1]
+    # RSI (manual)
+    rsi_series = calculate_rsi(df['Close'])
+    rsi = rsi_series.iloc[-1]
 
     # Volume
     vol = df['Volume']
@@ -71,7 +86,7 @@ def analyze_data(df):
     return (cp_strength, observation, big_player, round(entry,2), round(sl,2), round(target,2), round(rsi,2))
 
 # =============================
-# 3. NSE SECTORS
+# 4. NSE SECTORS
 # =============================
 all_sectors = {
     "Nifty 50": ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT","AXISBANK","BHARTIARTL"],
@@ -79,14 +94,14 @@ all_sectors = {
 }
 
 # =============================
-# 4. SIDEBAR
+# 5. SIDEBAR
 # =============================
 st.sidebar.title("📂 Backtest Panel")
 bt_date = st.sidebar.date_input("Select Date", datetime.now() - timedelta(days=1))
 bt_stock_input = st.sidebar.text_input("Stock (optional)", "").upper()
 
 # =============================
-# 5. MAIN SCANNER
+# 6. MAIN SCANNER
 # =============================
 selected_sector = st.selectbox("📂 Select Sector", list(all_sectors.keys()))
 stocks = all_sectors[selected_sector]
@@ -117,7 +132,7 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
     st.dataframe(pd.DataFrame(results), use_container_width=True)
 
 # =============================
-# 6. BACKTEST (FULL DAY FIX)
+# 7. BACKTEST (FULL DAY FIX)
 # =============================
 st.markdown("---")
 st.subheader(f"📅 Backtest Report - {bt_date}")
