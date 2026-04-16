@@ -14,10 +14,10 @@ st.title("🚀 MANOHAR NSE AI PRO TERMINAL")
 st.markdown("---")
 
 # =============================
-# 2. ANALYSIS LOGIC (OLD SAFE)
+# 2. ANALYSIS LOGIC (OLD SAFE + FIXED)
 # =============================
 def analyze_data(df):
-    if df is None or len(df) < 20:   # 🔥 FIX (50 → 20)
+    if df is None or len(df) < 20:
         return None
 
     e20 = df['Close'].ewm(span=20).mean()
@@ -26,13 +26,14 @@ def analyze_data(df):
     vol = df['Volume']
     avg_vol = vol.rolling(window=20).mean()
 
-    curr_price = df['Close'].iloc[-1]
-    curr_e20 = e20.iloc[-1]
-    curr_e50 = e50.iloc[-1]
-    curr_vol = vol.iloc[-1]
-    curr_avg_vol = avg_vol.iloc[-1]
+    # 🔥 FORCE FLOAT FIX (MAIN BUG FIX)
+    curr_price = float(df['Close'].iloc[-1])
+    curr_e20 = float(e20.iloc[-1])
+    curr_e50 = float(e50.iloc[-1])
+    curr_vol = float(vol.iloc[-1])
+    curr_avg_vol = float(avg_vol.iloc[-1])
 
-    if pd.isna(curr_avg_vol):
+    if pd.isna(curr_avg_vol) or curr_avg_vol == 0:
         return None
 
     cp_strength = "🔵 CALL STRONG" if curr_e20 > curr_e50 else "🔴 PUT STRONG"
@@ -98,7 +99,7 @@ bt_date = st.sidebar.date_input("Select Date", datetime.now() - timedelta(days=1
 bt_stock_input = st.sidebar.text_input("Stock (optional)", "").upper()
 
 # =============================
-# 5. MAIN SCANNER (NO CHANGE)
+# 5. MAIN SCANNER
 # =============================
 selected_sector = st.selectbox("📂 Select Sector", list(all_sectors.keys()))
 stocks = all_sectors[selected_sector]
@@ -120,7 +121,7 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
                 if res:
                     results.append({
                         "Stock": s,
-                        "Price": round(df['Close'].iloc[-1], 2),
+                        "Price": round(float(df['Close'].iloc[-1]), 2),
                         "Trend": res[0],
                         "Signal": res[1],
                         "Big Player": res[2],
@@ -141,7 +142,7 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
         st.error("❌ No Signals Found")
 
 # =============================
-# 6. BACKTEST (FIXED)
+# 6. BACKTEST (FULL FIXED)
 # =============================
 st.markdown("---")
 st.subheader(f"📅 Backtest Report - {bt_date}")
