@@ -22,7 +22,7 @@ def get_value(x):
     return float(x)
 
 # =============================
-# 3. ANALYSIS LOGIC (OLD SAFE)
+# 3. ANALYSIS LOGIC (OLD + ACCURACY BOOST)
 # =============================
 def analyze_data(df):
     if df is None or len(df) < 20:
@@ -45,6 +45,9 @@ def analyze_data(df):
 
     cp_strength = "🔵 CALL STRONG" if curr_e20 > curr_e50 else "🔴 PUT STRONG"
 
+    # =============================
+    # BIG PLAYER
+    # =============================
     if curr_vol > curr_avg_vol * 2:
         big_player = "🔥 EXTREME INSTITUTIONAL"
     elif curr_vol > curr_avg_vol * 1.5:
@@ -59,13 +62,32 @@ def analyze_data(df):
     recent_low = df['Low'].iloc[-10:].min()
     risk = (recent_high - recent_low) if (recent_high - recent_low) > 0 else curr_price * 0.01
 
-    if curr_e20 > curr_e50 and curr_vol > curr_avg_vol * 0.6:
+    # =============================
+    # 🔥 NEW ACCURACY FILTERS
+    # =============================
+    trend_strength = abs(curr_e20 - curr_e50)
+    price_momentum = df['Close'].iloc[-1] - df['Close'].iloc[-3]
+
+    # =============================
+    # SIGNAL LOGIC (UPGRADED)
+    # =============================
+    if (
+        curr_e20 > curr_e50 and
+        curr_vol > curr_avg_vol * 0.6 and
+        trend_strength > curr_price * 0.002 and
+        price_momentum > 0
+    ):
         observation = "🚀 STRONG BUY"
         entry = curr_price
         sl = curr_price - (risk * 0.5)
         target = curr_price + risk
 
-    elif curr_e20 < curr_e50 and curr_vol > curr_avg_vol * 0.6:
+    elif (
+        curr_e20 < curr_e50 and
+        curr_vol > curr_avg_vol * 0.6 and
+        trend_strength > curr_price * 0.002 and
+        price_momentum < 0
+    ):
         observation = "💀 STRONG SELL"
         entry = curr_price
         sl = curr_price + (risk * 0.5)
@@ -81,7 +103,7 @@ def analyze_data(df):
     )
 
 # =============================
-# 4. NSE SECTORS
+# 4. NSE SECTORS (UNCHANGED)
 # =============================
 all_sectors = {
     "Nifty 50": ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT","AXISBANK","BHARTIARTL"],
@@ -150,7 +172,7 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
         st.error("❌ No Signals Found")
 
 # =============================
-# 7. BACKTEST (TIME FILTER ADDED)
+# 7. BACKTEST (TIME FILTER SAFE)
 # =============================
 st.markdown("---")
 st.subheader(f"📅 Backtest Report - {bt_date}")
@@ -176,10 +198,7 @@ if st.sidebar.button("📊 RUN BACKTEST"):
 
                 df_hist.columns = df_hist.columns.get_level_values(0)
 
-                # DATE FILTER
                 df_hist = df_hist[df_hist.index.date == bt_date]
-
-                # 🔥 TIME FILTER (MAIN ADD)
                 df_hist = df_hist.between_time("09:15", "15:30")
 
                 if len(df_hist) < 20:
