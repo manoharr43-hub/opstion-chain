@@ -14,7 +14,7 @@ st.title("🚀 MANOHAR NSE AI PRO TERMINAL")
 st.markdown("---")
 
 # =============================
-# ANALYSIS (UNCHANGED)
+# ANALYSIS (UPDATED WITH TREND SCORE)
 # =============================
 def analyze_data(df):
     if df is None or len(df) < 20:
@@ -63,13 +63,35 @@ def analyze_data(df):
         sl = curr_price + (risk * 0.5)
         target = curr_price - risk
 
+    # =============================
+    # 🔥 TREND STRENGTH SCORE (NEW)
+    # =============================
+    try:
+        ema_score = abs(curr_e20 - curr_e50) / curr_price * 100
+        vol_score = curr_vol / curr_avg_vol
+        momentum = (curr_price - df['Close'].iloc[-5]) / curr_price * 100
+        range_strength = (recent_high - recent_low) / curr_price * 100
+
+        trend_score = (
+            ema_score * 0.3 +
+            vol_score * 20 * 0.3 +
+            abs(momentum) * 0.2 +
+            range_strength * 0.2
+        )
+
+        trend_score = min(100, round(trend_score, 2))
+
+    except:
+        trend_score = 0
+
     return (
         cp_strength,
         observation,
         big_player,
         round(entry, 2),
         round(sl, 2),
-        round(target, 2)
+        round(target, 2),
+        trend_score   # 👈 NEW
     )
 
 # =============================
@@ -110,7 +132,6 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
                 if df is None or df.empty:
                     continue
 
-                # ===== MAIN SIGNAL (UNCHANGED) =====
                 res = analyze_data(df)
 
                 if res:
@@ -123,11 +144,12 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
                         "Entry": res[3],
                         "SL": res[4],
                         "Target": res[5],
+                        "Trend Score": res[6],   # 👈 NEW
                         "Time": df.index[-1].strftime('%H:%M')
                     })
 
                 # =============================
-                # 🔥 SMART BREAKOUT (NEW)
+                # BREAKOUT (UNCHANGED)
                 # =============================
                 opening_data = df.between_time("09:15", "09:30")
 
@@ -142,7 +164,6 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
                         curr = df.iloc[i]
                         time = df.index[i]
 
-                        # BUY BREAKOUT
                         if prev['Close'] <= opening_high and curr['Close'] > opening_high:
 
                             future = df.iloc[i+1:i+4]
@@ -150,10 +171,7 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
                             up = sum(future['Close'] > curr['Close'])
                             down = sum(future['Close'] <= curr['Close'])
 
-                            if up > down:
-                                signal_type = "🚀 CONFIRMED BUY"
-                            else:
-                                signal_type = "⚠️ FAILED BUY → SELL"
+                            signal_type = "🚀 CONFIRMED BUY" if up > down else "⚠️ FAILED BUY → SELL"
 
                             breakout_day_list.append({
                                 "Stock": s,
@@ -163,7 +181,6 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
                             })
                             break
 
-                        # SELL BREAKDOWN
                         elif prev['Close'] >= opening_low and curr['Close'] < opening_low:
 
                             future = df.iloc[i+1:i+4]
@@ -171,10 +188,7 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
                             down = sum(future['Close'] < curr['Close'])
                             up = sum(future['Close'] >= curr['Close'])
 
-                            if down > up:
-                                signal_type = "💀 CONFIRMED SELL"
-                            else:
-                                signal_type = "⚠️ FAILED SELL → BUY"
+                            signal_type = "💀 CONFIRMED SELL" if down > up else "⚠️ FAILED SELL → BUY"
 
                             breakout_day_list.append({
                                 "Stock": s,
@@ -187,13 +201,11 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
             except:
                 continue
 
-    # ===== MAIN TABLE =====
     if results:
         st.dataframe(pd.DataFrame(results), use_container_width=True)
     else:
         st.error("No Data Found")
 
-    # ===== BREAKOUT TABLE =====
     st.markdown("---")
     st.subheader("🔥 SMART BREAKOUT STOCKS (DIRECTION CONFIRMED)")
 
@@ -238,7 +250,8 @@ if st.sidebar.button("📊 RUN BACKTEST"):
                                 "Big Player": res[2],
                                 "Entry": res[3],
                                 "SL": res[4],
-                                "Target": res[5]
+                                "Target": res[5],
+                                "Trend Score": res[6]  # 👈 NEW
                             })
 
             except:
