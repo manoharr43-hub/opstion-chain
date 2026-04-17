@@ -24,8 +24,12 @@ def get_option_chain(symbol="NIFTY"):
     session.get("https://www.nseindia.com", headers=headers)
     response = session.get(url, headers=headers)
     data = response.json()
+
+    # Safe access: check both records and filtered
     if "records" in data and "data" in data["records"]:
         return data["records"]["data"]
+    elif "filtered" in data and "data" in data["filtered"]:
+        return data["filtered"]["data"]
     else:
         return []
 
