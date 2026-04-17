@@ -14,22 +14,7 @@ st.title("🚀 MANOHAR NSE AI PRO TERMINAL")
 st.markdown("---")
 
 # =============================
-# DIRECTION FUNCTION (FIXED)
-# =============================
-def get_direction(signal):
-    if signal == "🚀 CONFIRMED BUY":
-        return "🟢 UP"
-    elif signal == "💀 CONFIRMED SELL":
-        return "🔴 DOWN"
-    elif signal == "⚠️ FAILED SELL → BUY":
-        return "🟢 UP"
-    elif signal == "⚠️ FAILED BUY → SELL":
-        return "🔴 DOWN"
-    else:
-        return "⚪ WAIT"
-
-# =============================
-# ANALYSIS FUNCTION
+# ANALYSIS (UPDATED WITH TREND SCORE)
 # =============================
 def analyze_data(df):
     if df is None or len(df) < 20:
@@ -67,19 +52,19 @@ def analyze_data(df):
     risk = (recent_high - recent_low) if (recent_high - recent_low) > 0 else curr_price * 0.01
 
     if curr_e20 > curr_e50 and curr_vol > curr_avg_vol:
-        observation = "🚀 CONFIRMED BUY"
+        observation = "🚀 STRONG BUY"
         entry = curr_price
         sl = curr_price - (risk * 0.5)
         target = curr_price + risk
 
     elif curr_e20 < curr_e50 and curr_vol > curr_avg_vol:
-        observation = "💀 CONFIRMED SELL"
+        observation = "💀 STRONG SELL"
         entry = curr_price
         sl = curr_price + (risk * 0.5)
         target = curr_price - risk
 
     # =============================
-    # TREND SCORE
+    # 🔥 TREND STRENGTH SCORE (NEW)
     # =============================
     try:
         ema_score = abs(curr_e20 - curr_e50) / curr_price * 100
@@ -106,7 +91,7 @@ def analyze_data(df):
         round(entry, 2),
         round(sl, 2),
         round(target, 2),
-        trend_score
+        trend_score   # 👈 NEW
     )
 
 # =============================
@@ -143,25 +128,23 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
         for s in stocks:
             try:
                 df = yf.Ticker(s + ".NS").history(period="1d", interval="15m")
+
                 if df is None or df.empty:
                     continue
 
                 res = analyze_data(df)
 
                 if res:
-                    signal = res[1]
-
                     results.append({
                         "Stock": s,
                         "Price": round(df['Close'].iloc[-1], 2),
                         "Trend": res[0],
-                        "Signal": signal,
+                        "Signal": res[1],
                         "Big Player": res[2],
                         "Entry": res[3],
                         "SL": res[4],
                         "Target": res[5],
-                        "Trend Score": res[6],
-                        "Direction": get_direction(signal),   # ✅ FIXED HERE
+                        "Trend Score": res[6],   # 👈 NEW
                         "Time": df.index[-1].strftime('%H:%M')
                     })
 
@@ -218,9 +201,6 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
             except:
                 continue
 
-    # =============================
-    # TABLE OUTPUT
-    # =============================
     if results:
         st.dataframe(pd.DataFrame(results), use_container_width=True)
     else:
@@ -235,7 +215,7 @@ if st.button("🔍 START LIVE SCANNER", use_container_width=True):
         st.info("No Breakout Stocks Today")
 
 # =============================
-# BACKTEST
+# BACKTEST (UNCHANGED)
 # =============================
 st.markdown("---")
 st.subheader(f"📅 Backtest Report - {bt_date}")
@@ -262,19 +242,16 @@ if st.sidebar.button("📊 RUN BACKTEST"):
                         sub_df = df_hist.iloc[:i+1]
                         res = analyze_data(sub_df)
 
-                        if res:
-                            signal = res[1]
-
+                        if res and res[1] != "WAIT":
                             bt_results.append({
                                 "Time": sub_df.index[-1].strftime('%H:%M'),
                                 "Stock": s,
-                                "Signal": signal,
+                                "Signal": res[1],
                                 "Big Player": res[2],
                                 "Entry": res[3],
                                 "SL": res[4],
                                 "Target": res[5],
-                                "Trend Score": res[6],
-                                "Direction": get_direction(signal)
+                                "Trend Score": res[6]  # 👈 NEW
                             })
 
             except:
