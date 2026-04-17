@@ -8,13 +8,13 @@ import time
 # =============================
 # CONFIG
 # =============================
-st.set_page_config(page_title="🔥 NSE AI PRO MAX", layout="wide")
+st.set_page_config(page_title="🔥 NSE AI PRO NEXT", layout="wide")
 st_autorefresh(interval=20000, key="refresh")
 
-st.title("🚀 NSE OPTION CHAIN + INTRADAY AI PRO MAX")
+st.title("🚀 NSE AI SMART TRADING DASHBOARD")
 
 # =============================
-# NSE OPTION CHAIN
+# OPTION CHAIN (WITH FALLBACK)
 # =============================
 @st.cache_data(ttl=20)
 def get_option_chain(symbol):
@@ -43,7 +43,7 @@ def get_option_chain(symbol):
     return []
 
 # =============================
-# USER INPUT
+# INPUT
 # =============================
 symbol = st.sidebar.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
 
@@ -59,153 +59,106 @@ for row in data:
     pe = row.get("PE")
 
     if ce:
-        calls.append({
-            "Strike": ce.get("strikePrice", 0),
-            "OI": ce.get("openInterest", 0),
-            "Chg OI": ce.get("changeinOpenInterest", 0),
-            "LTP": ce.get("lastPrice", 0)
-        })
+        calls.append(ce.get("openInterest", 0))
 
     if pe:
-        puts.append({
-            "Strike": pe.get("strikePrice", 0),
-            "OI": pe.get("openInterest", 0),
-            "Chg OI": pe.get("changeinOpenInterest", 0),
-            "LTP": pe.get("lastPrice", 0)
-        })
+        puts.append(pe.get("openInterest", 0))
 
-call_df = pd.DataFrame(calls)
-put_df = pd.DataFrame(puts)
+call_oi = sum(calls)
+put_oi = sum(puts)
+
+# =============================
+# PCR + AI BIAS
+# =============================
+if call_oi > 0:
+    pcr = round(put_oi / call_oi, 2)
+else:
+    pcr = None
+
+bias = "SIDEWAYS"
+
+if pcr:
+    if pcr > 1.2:
+        bias = "BULLISH 🚀"
+    elif pcr < 0.8:
+        bias = "BEARISH 🔻"
 
 col1, col2 = st.columns(2)
 
-with col1:
-    st.subheader("📈 CALLS")
-    st.dataframe(call_df, use_container_width=True)
-
-with col2:
-    st.subheader("📉 PUTS")
-    st.dataframe(put_df, use_container_width=True)
+col1.metric("PCR", pcr if pcr else "N/A")
+col2.metric("Market Bias", bias)
 
 # =============================
-# PCR
-# =============================
-pcr = 0
-if not call_df.empty and not put_df.empty:
-    try:
-        pcr = round(put_df["OI"].sum() / call_df["OI"].sum(), 2)
-    except:
-        pcr = 0
-
-st.metric("PCR", pcr)
-
-# =============================
-# SPOT PRICE (SAFE)
+# PRICE DATA
 # =============================
 ticker_symbol = "^NSEI" if symbol == "NIFTY" else "^NSEBANK"
-current_price = None
 
-try:
-    spot = yf.download(ticker_symbol, period="1d", interval="5m", progress=False)
+df = yf.download(ticker_symbol, period="1d", interval="5m", progress=False)
 
-    if spot is not None and not spot.empty:
+if isinstance(df.columns, pd.MultiIndex):
+    df.columns = df.columns.get_level_values(0)
 
-        if isinstance(spot.columns, pd.MultiIndex):
-            spot.columns = spot.columns.get_level_values(0)
+df = df.between_time("09:15", "15:30")
 
-        if "Close" in spot.columns:
-            close_series = pd.to_numeric(spot["Close"], errors="coerce").dropna()
-
-            if not close_series.empty:
-                current_price = float(close_series.iloc[-1])
-                st.success(f"📍 Spot Price: {round(current_price,2)}")
-
-except:
-    st.warning("Spot error")
+df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
+df = df.dropna(subset=["Close"])
 
 # =============================
-# ATM STRIKE
+# TREND
 # =============================
-atm = None
+df["EMA9"] = df["Close"].ewm(span=9).mean()
+df["EMA21"] = df["Close"].ewm(span=21).mean()
 
-if current_price:
-    atm = round(current_price / 50) * 50
-    st.info(f"🎯 ATM Strike: {atm}")
+trend = "SIDEWAYS"
 
-# =============================
-# OI SUPPORT / RESISTANCE
-# =============================
-if not call_df.empty and not put_df.empty:
-    resistance = call_df.sort_values("OI", ascending=False).iloc[0]["Strike"]
-    support = put_df.sort_values("OI", ascending=False).iloc[0]["Strike"]
+if df["EMA9"].iloc[-1] > df["EMA21"].iloc[-1]:
+    trend = "UPTREND 🚀"
+else:
+    trend = "DOWNTREND 🔻"
 
-    c1, c2 = st.columns(2)
-    c1.success(f"🟢 Support: {support}")
-    c2.error(f"🔴 Resistance: {resistance}")
+st.info(f"📊 Trend: {trend}")
 
 # =============================
-# INTRADAY SIGNALS (2 HOURS + CE/PE)
+# AI SIGNAL (COMBINED)
 # =============================
-st.subheader("⏱️ Intraday Signals (Last 2 Hours)")
+signal = "WAIT"
 
-try:
-    df = yf.download(ticker_symbol, period="1d", interval="5m", progress=False)
+if trend == "UPTREND 🚀" and bias == "BULLISH 🚀":
+    signal = "STRONG BUY CE 🚀"
 
-    if df is not None and not df.empty:
+elif trend == "DOWNTREND 🔻" and bias == "BEARISH 🔻":
+    signal = "STRONG BUY PE 🔻"
 
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
+elif trend == "UPTREND 🚀":
+    signal = "BUY CE (Weak)"
 
-        df = df.between_time("09:15", "15:30")
-        df = df.tail(24)
+elif trend == "DOWNTREND 🔻":
+    signal = "BUY PE (Weak)"
 
-        if "Close" in df.columns:
-            df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
-            df = df.dropna(subset=["Close"])
-
-            df["EMA9"] = df["Close"].ewm(span=9).mean()
-            df["EMA21"] = df["Close"].ewm(span=21).mean()
-
-            signals = []
-
-            for i in range(1, len(df)):
-                signal = "HOLD"
-                option = "-"
-                strike = atm if atm else "-"
-
-                if df["EMA9"].iloc[i] > df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] <= df["EMA21"].iloc[i-1]:
-                    signal = "BUY 🚀"
-                    option = "CE"
-
-                elif df["EMA9"].iloc[i] < df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] >= df["EMA21"].iloc[i-1]:
-                    signal = "SELL 🔻"
-                    option = "PE"
-
-                signals.append({
-                    "Time": df.index[i].strftime("%H:%M"),
-                    "Price": round(float(df["Close"].iloc[i]), 2),
-                    "Signal": signal,
-                    "Option": option,
-                    "Strike": strike
-                })
-
-            signal_df = pd.DataFrame(signals)
-            st.dataframe(signal_df, use_container_width=True)
-
-            if not signal_df.empty:
-                last = signal_df.iloc[-1]
-                st.success(f"📢 Latest: {last['Signal']} | {last['Option']} | Strike: {last['Strike']}")
-
-        else:
-            st.warning("Close data missing")
-
-    else:
-        st.warning("No intraday data")
-
-except:
-    st.warning("Intraday error")
+st.success(f"🤖 AI Signal: {signal}")
 
 # =============================
-# FOOTER
+# INTRADAY TABLE
 # =============================
-st.caption("⚡ NSE AI PRO MAX | CE/PE + ATM + 2H Signals")
+signals = []
+
+for i in range(1, len(df)):
+    sig = "HOLD"
+    opt = "-"
+
+    if df["EMA9"].iloc[i] > df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] <= df["EMA21"].iloc[i-1]:
+        sig = "BUY"
+        opt = "CE"
+
+    elif df["EMA9"].iloc[i] < df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] >= df["EMA21"].iloc[i-1]:
+        sig = "SELL"
+        opt = "PE"
+
+    signals.append({
+        "Time": df.index[i].strftime("%H:%M"),
+        "Price": round(df["Close"].iloc[i], 2),
+        "Signal": sig,
+        "Option": opt
+    })
+
+st.dataframe(pd.DataFrame(signals), use_container_width=True)
