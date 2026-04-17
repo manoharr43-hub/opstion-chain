@@ -24,7 +24,6 @@ def get_option_chain(symbol):
         "Referer": "https://www.nseindia.com/",
     }
     session = requests.Session()
-
     for _ in range(3):
         try:
             session.get("https://www.nseindia.com", headers=headers, timeout=5)
@@ -48,14 +47,12 @@ symbol = st.sidebar.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
 # OPTION DATA
 # =============================
 data = get_option_chain(symbol)
-
 calls, puts = [], []
 call_rows, put_rows = [], []
 
 for row in data:
     ce = row.get("CE")
     pe = row.get("PE")
-
     if ce:
         calls.append(ce.get("openInterest", 0))
         call_rows.append({
@@ -64,7 +61,6 @@ for row in data:
             "Chg OI": ce.get("changeinOpenInterest", 0),
             "LTP": ce.get("lastPrice", 0)
         })
-
     if pe:
         puts.append(pe.get("openInterest", 0))
         put_rows.append({
@@ -111,17 +107,16 @@ put_df = pd.DataFrame(put_rows)
 
 if not call_df.empty:
     st.subheader("🔥 Top CALL Strikes")
-    st.dataframe(call_df.sort_values("OI", ascending=False).head(5), use_container_width=True)
+    st.dataframe(call_df.sort_values("OI", ascending=False).head(5), width="stretch")
 
 if not put_df.empty:
     st.subheader("🔥 Top PUT Strikes")
-    st.dataframe(put_df.sort_values("OI", ascending=False).head(5), use_container_width=True)
+    st.dataframe(put_df.sort_values("OI", ascending=False).head(5), width="stretch")
 
 # =============================
 # PRICE DATA
 # =============================
 ticker_symbol = "^NSEI" if symbol == "NIFTY" else "^NSEBANK"
-
 df = yf.download(ticker_symbol, period="1d", interval="5m", progress=False)
 
 if isinstance(df.columns, pd.MultiIndex):
@@ -129,7 +124,6 @@ if isinstance(df.columns, pd.MultiIndex):
 
 df.index = pd.to_datetime(df.index, errors="coerce")
 df = df.between_time("09:15", "15:30")
-
 df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
 df = df.dropna(subset=["Close"])
 
@@ -138,7 +132,6 @@ df = df.dropna(subset=["Close"])
 # =============================
 current_price = None
 atm = None
-
 if not df.empty:
     current_price = float(df["Close"].iloc[-1])
     atm = round(current_price / 50) * 50
@@ -162,7 +155,6 @@ st.info(f"📊 Trend: {trend}")
 # SMART AI SIGNAL
 # =============================
 signal = "WAIT"
-
 if trend == "UPTREND 🚀" and bias == "BULLISH 🚀" and put_oi_change > call_oi_change:
     signal = "🔥 STRONG CE BUY"
 elif trend == "DOWNTREND 🔻" and bias == "BEARISH 🔻" and call_oi_change > put_oi_change:
@@ -175,23 +167,19 @@ elif trend == "DOWNTREND 🔻":
 st.success(f"🤖 AI Signal: {signal}")
 
 # =============================
-# INTRADAY (FULL DAY + STRIKE)
+# INTRADAY (FULL DAY + STRIKE + COLOR)
 # =============================
 signals = []
-
 for i in range(1, len(df)):
     sig = "HOLD"
     opt = "-"
     strike = atm if atm else "-"
-
     if df["EMA9"].iloc[i] > df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] <= df["EMA21"].iloc[i-1]:
         sig = "BUY"
         opt = "CE"
-
     elif df["EMA9"].iloc[i] < df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] >= df["EMA21"].iloc[i-1]:
         sig = "SELL"
         opt = "PE"
-
     signals.append({
         "Time": df.index[i].strftime("%H:%M"),
         "Price": round(df["Close"].iloc[i], 2),
@@ -200,5 +188,16 @@ for i in range(1, len(df)):
         "Strike": strike
     })
 
+intraday_df = pd.DataFrame(signals)
+
+def highlight_signal(val):
+    if val == "BUY":
+        return "background-color: lightgreen"
+    elif val == "SELL":
+        return "background-color: salmon"
+    elif val == "HOLD":
+        return "background-color: khaki"
+    return ""
+
 st.subheader("📘 Intraday Signals (Full Day)")
-st.dataframe(pd.DataFrame(signals), use_container_width=True)
+st.dataframe(intraday_df.style.map(highlight_signal, subset=["Signal"]), width="stretch")
