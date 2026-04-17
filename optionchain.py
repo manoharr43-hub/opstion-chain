@@ -8,7 +8,7 @@ import time
 # =============================
 # CONFIG
 # =============================
-st.set_page_config(page_title="🔥 NSE PRO", layout="wide")
+st.set_page_config(page_title="🔥 NSE AI PRO", layout="wide")
 st_autorefresh(interval=20000, key="refresh")
 
 st.title("🚀 NSE OPTION CHAIN + INTRADAY PRO")
@@ -29,7 +29,7 @@ def get_option_chain(symbol):
 
     session = requests.Session()
 
-    for i in range(3):  # retry 3 times
+    for _ in range(3):
         try:
             session.get("https://www.nseindia.com", headers=headers, timeout=5)
             res = session.get(url, headers=headers, timeout=5)
@@ -37,7 +37,6 @@ def get_option_chain(symbol):
             if res.status_code == 200:
                 data = res.json()
                 return data.get("records", {}).get("data", [])
-
         except:
             time.sleep(1)
 
@@ -60,13 +59,23 @@ for row in data:
     pe = row.get("PE")
 
     if ce:
-        calls.append([ce["strikePrice"], ce["openInterest"], ce["lastPrice"]])
+        calls.append({
+            "Strike": ce["strikePrice"],
+            "OI": ce["openInterest"],
+            "Chg OI": ce["changeinOpenInterest"],
+            "LTP": ce["lastPrice"]
+        })
 
     if pe:
-        puts.append([pe["strikePrice"], pe["openInterest"], pe["lastPrice"]])
+        puts.append({
+            "Strike": pe["strikePrice"],
+            "OI": pe["openInterest"],
+            "Chg OI": pe["changeinOpenInterest"],
+            "LTP": pe["lastPrice"]
+        })
 
-call_df = pd.DataFrame(calls, columns=["Strike", "OI", "LTP"])
-put_df = pd.DataFrame(puts, columns=["Strike", "OI", "LTP"])
+call_df = pd.DataFrame(calls)
+put_df = pd.DataFrame(puts)
 
 col1, col2 = st.columns(2)
 
@@ -89,15 +98,50 @@ else:
 st.metric("PCR", pcr)
 
 # =============================
-# SPOT PRICE (STRIKE LEVEL)
+# SAFE SPOT PRICE (FIXED)
 # =============================
 ticker_symbol = "^NSEI" if symbol == "NIFTY" else "^NSEBANK"
 
-spot = yf.download(ticker_symbol, period="1d", interval="1m", progress=False)
+spot = yf.download(ticker_symbol, period="1d", interval="5m", progress=False)
 
-if not spot.empty:
-    current_price = float(spot["Close"].iloc[-1])
-    st.success(f"📍 Current Spot Price: {round(current_price,2)}")
+current_price = None
+
+if spot is not None and not spot.empty and "Close" in spot.columns:
+    spot["Close"] = pd.to_numeric(spot["Close"], errors="coerce")
+    spot = spot.dropna(subset=["Close"])
+
+    if not spot.empty:
+        try:
+            current_price = float(spot["Close"].iloc[-1])
+            st.success(f"📍 Spot Price: {round(current_price,2)}")
+        except:
+            st.warning("Spot conversion issue")
+
+# =============================
+# ATM STRIKE LOGIC
+# =============================
+if current_price and not call_df.empty:
+    call_df["Distance"] = abs(call_df["Strike"] - current_price)
+    atm_strike = call_df.sort_values("Distance").iloc[0]["Strike"]
+
+    st.info(f"🎯 ATM Strike: {atm_strike}")
+
+    # Show only nearby strikes
+    call_df = call_df[(call_df["Strike"] >= atm_strike - 500) & (call_df["Strike"] <= atm_strike + 500)]
+    put_df = put_df[(put_df["Strike"] >= atm_strike - 500) & (put_df["Strike"] <= atm_strike + 500)]
+
+# =============================
+# OI SUPPORT / RESISTANCE
+# =============================
+st.subheader("📊 OI Analysis")
+
+if not call_df.empty and not put_df.empty:
+    resistance = call_df.sort_values("OI", ascending=False).iloc[0]["Strike"]
+    support = put_df.sort_values("OI", ascending=False).iloc[0]["Strike"]
+
+    col1, col2 = st.columns(2)
+    col1.success(f"🟢 Support: {support}")
+    col2.error(f"🔴 Resistance: {resistance}")
 
 # =============================
 # INTRADAY SIGNALS
@@ -107,12 +151,12 @@ st.subheader("⏱️ Intraday Signals (9:15 - 3:30)")
 df = yf.download(ticker_symbol, period="1d", interval="5m", progress=False)
 
 if df.empty:
-    st.warning("No data (Market Closed)")
+    st.warning("No intraday data (Market Closed)")
 else:
     df = df.between_time("09:15", "15:30")
 
-    # FIX FLOAT ISSUE
-    df["Close"] = df["Close"].astype(float)
+    df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
+    df = df.dropna(subset=["Close"])
 
     # EMA
     df["EMA9"] = df["Close"].ewm(span=9).mean()
@@ -141,6 +185,10 @@ else:
 
     st.dataframe(signal_df, use_container_width=True)
 
-    # LAST SIGNAL
     if not signal_df.empty:
         st.info(f"📢 Latest Signal: {signal_df.iloc[-1]['Signal']}")
+
+# =============================
+# FOOTER
+# =============================
+st.caption("⚡ NSE AI PRO | Auto Refresh Running")
