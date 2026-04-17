@@ -56,10 +56,14 @@ try:
     # DISPLAY TABLES
     # =============================
     st.subheader(f"📈 {symbol} CALLS")
-    st.dataframe(call_df.style.applymap(lambda v: "background-color:lightgreen" if isinstance(v, (int,float)) and v>0 else ""))
+    st.dataframe(
+        call_df.style.map(lambda v: "background-color:lightgreen" if isinstance(v, (int,float)) and v>0 else "")
+    )
 
     st.subheader(f"📉 {symbol} PUTS")
-    st.dataframe(put_df.style.applymap(lambda v: "background-color:salmon" if isinstance(v, (int,float)) and v<0 else ""))
+    st.dataframe(
+        put_df.style.map(lambda v: "background-color:salmon" if isinstance(v, (int,float)) and v<0 else "")
+    )
 
     # =============================
     # PCR CALCULATION
@@ -70,7 +74,7 @@ try:
     st.metric(label=f"{symbol} PCR (Put/Call Ratio)", value=pcr)
 
     # =============================
-    # INTRADAY SIGNALS (Mock Example)
+    # INTRADAY SIGNALS (Example Data)
     # =============================
     st.subheader(f"⏱️ Intraday Signals - {symbol} (15 mins)")
     intraday_data = [
@@ -81,10 +85,13 @@ try:
         ["11:45", 73244080, 1.63, "BUY"],
     ]
     intraday_df = pd.DataFrame(intraday_data, columns=["Time", "Diff", "PCR", "Signal"])
-    st.dataframe(intraday_df.style.applymap(
-        lambda v: "background-color:lightgreen" if v=="BUY" else "background-color:salmon",
-        subset=["Signal"]
-    ))
+
+    st.dataframe(
+        intraday_df.style.map(
+            lambda v: "background-color:lightgreen" if v=="BUY" else "background-color:salmon",
+            subset=["Signal"]
+        )
+    )
 
 except Exception as e:
     st.error(f"Error fetching data: {e}")
