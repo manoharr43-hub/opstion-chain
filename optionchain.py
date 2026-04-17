@@ -2,36 +2,43 @@ import streamlit as st
 import requests
 import pandas as pd
 import yfinance as yf
-from datetime import datetime, timedelta
+from datetime import datetime
+from streamlit_autorefresh import st_autorefresh
 
 # =============================
 # CONFIG
 # =============================
-st.set_page_config(page_title="🔥 NSE OPTION CHAIN", layout="wide")
-st.title("📊 NSE Option Chain + Intraday Dashboard")
+st.set_page_config(page_title="🔥 NSE AI OPTION CHAIN PRO", layout="wide")
+st_autorefresh(interval=20000, key="refresh")
+
+st.title("🚀 NSE AI OPTION CHAIN + INTRADAY PRO")
 
 # =============================
-# FUNCTION: Fetch Option Chain
+# NSE OPTION CHAIN FUNCTION
 # =============================
-def get_option_chain(symbol="NIFTY"):
+@st.cache_data(ttl=30)
+def get_option_chain(symbol):
     url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Accept": "application/json",
-        "Referer": "https://www.nseindia.com/option-chain"
+        "Referer": "https://www.nseindia.com/",
+        "Accept-Language": "en-US,en;q=0.9"
     }
-    session = requests.Session()
-    # First request to NSE homepage for cookies
-    session.get("https://www.nseindia.com", headers=headers)
-    response = session.get(url, headers=headers)
-    data = response.json()
 
-    # Safe access: check both records and filtered
-    if "records" in data and "data" in data["records"]:
-        return data["records"]["data"]
-    elif "filtered" in data and "data" in data["filtered"]:
-        return data["filtered"]["data"]
-    else:
+    session = requests.Session()
+
+    try:
+        session.get("https://www.nseindia.com", headers=headers, timeout=5)
+        response = session.get(url, headers=headers, timeout=5)
+
+        if response.status_code == 200:
+            json_data = response.json()
+            return json_data.get("records", {}).get("data", [])
+        else:
+            return []
+    except:
         return []
 
 # =============================
@@ -40,74 +47,136 @@ def get_option_chain(symbol="NIFTY"):
 symbol = st.sidebar.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
 
 # =============================
-# OPTION CHAIN DATA
+# OPTION CHAIN PROCESS
 # =============================
-try:
-    option_data = get_option_chain(symbol)
-    calls, puts = [], []
+data = get_option_chain(symbol)
 
-    for row in option_data:
-        ce = row.get("CE")
-        pe = row.get("PE")
-        if ce:
-            calls.append([ce["strikePrice"], ce["openInterest"], ce["changeinOpenInterest"], ce["lastPrice"]])
-        if pe:
-            puts.append([pe["strikePrice"], pe["openInterest"], pe["changeinOpenInterest"], pe["lastPrice"]])
+calls, puts = [], []
 
-    call_df = pd.DataFrame(calls, columns=["Strike", "OI", "Chg OI", "LTP"])
-    put_df = pd.DataFrame(puts, columns=["Strike", "OI", "Chg OI", "LTP"])
+for item in data:
+    ce = item.get("CE")
+    pe = item.get("PE")
 
+    if ce:
+        calls.append({
+            "Strike": ce["strikePrice"],
+            "OI": ce["openInterest"],
+            "Chg OI": ce["changeinOpenInterest"],
+            "LTP": ce["lastPrice"]
+        })
+
+    if pe:
+        puts.append({
+            "Strike": pe["strikePrice"],
+            "OI": pe["openInterest"],
+            "Chg OI": pe["changeinOpenInterest"],
+            "LTP": pe["lastPrice"]
+        })
+
+call_df = pd.DataFrame(calls)
+put_df = pd.DataFrame(puts)
+
+# =============================
+# DISPLAY OPTION CHAIN
+# =============================
+col1, col2 = st.columns(2)
+
+with col1:
     st.subheader(f"📈 {symbol} CALLS")
-    if not call_df.empty:
-        st.dataframe(call_df, width="stretch")
-    else:
-        st.warning("No CALL data available (Market closed or API empty).")
+    st.dataframe(call_df, use_container_width=True)
 
+with col2:
     st.subheader(f"📉 {symbol} PUTS")
-    if not put_df.empty:
-        st.dataframe(put_df, width="stretch")
-    else:
-        st.warning("No PUT data available (Market closed or API empty).")
-
-    # PCR Calculation
-    total_calls = call_df["OI"].sum() if not call_df.empty else 0
-    total_puts = put_df["OI"].sum() if not put_df.empty else 0
-    pcr = round(total_puts / total_calls, 2) if total_calls != 0 else 0
-    st.metric(label=f"{symbol} PCR (Put/Call Ratio)", value=pcr)
-
-except Exception as e:
-    st.error(f"Error fetching option chain data: {e}")
+    st.dataframe(put_df, use_container_width=True)
 
 # =============================
-# INTRADAY SIGNALS (YFinance Example)
+# PCR + MARKET BIAS
 # =============================
-st.subheader(f"⏱️ Intraday Signals - {symbol} (5 min data)")
+total_call = call_df["OI"].sum() if not call_df.empty else 0
+total_put = put_df["OI"].sum() if not put_df.empty else 0
+
+pcr = round(total_put / total_call, 2) if total_call != 0 else 0
+
+bias = "SIDEWAYS"
+if pcr > 1.2:
+    bias = "BULLISH 🚀"
+elif pcr < 0.8:
+    bias = "BEARISH 🔻"
+
+c1, c2 = st.columns(2)
+c1.metric("PCR", pcr)
+c2.metric("Market Bias", bias)
+
+# =============================
+# OI ANALYSIS (SUPPORT / RESISTANCE)
+# =============================
+st.subheader("📊 OI Analysis")
+
+if not call_df.empty and not put_df.empty:
+    resistance = call_df.sort_values("OI", ascending=False).iloc[0]["Strike"]
+    support = put_df.sort_values("OI", ascending=False).iloc[0]["Strike"]
+
+    col1, col2 = st.columns(2)
+    col1.success(f"🟢 Strong Support: {support}")
+    col2.error(f"🔴 Strong Resistance: {resistance}")
+
+# =============================
+# INTRADAY DATA
+# =============================
+st.subheader(f"⏱️ Intraday Signals ({symbol})")
 
 try:
-    # Example ticker for intraday (replace with actual stock/index)
-    bt_date = datetime.today() - timedelta(days=1)
-    ticker = yf.Ticker("^NSEI") if symbol == "NIFTY" else yf.Ticker("^NSEBANK")
+    ticker_symbol = "^NSEI" if symbol == "NIFTY" else "^NSEBANK"
 
-    df_hist = ticker.history(start=bt_date, end=bt_date + timedelta(days=1), interval="5m")
+    df = yf.download(
+        ticker_symbol,
+        period="1d",
+        interval="5m",
+        progress=False
+    )
 
-    # Ensure index is datetime
-    df_hist.index = pd.to_datetime(df_hist.index)
+    if df.empty:
+        st.warning("No intraday data (Market Closed)")
+    else:
+        df = df.between_time("09:15", "15:30")
 
-    # Filter trading hours
-    df_hist = df_hist.between_time("09:15", "15:30")
+        # Indicators
+        df["EMA9"] = df["Close"].ewm(span=9).mean()
+        df["EMA21"] = df["Close"].ewm(span=21).mean()
 
-    # Example signals (mock logic)
-    intraday_data = []
-    for i in range(len(df_hist)):
-        intraday_data.append([
-            df_hist.index[i].strftime("%H:%M"),
-            round(df_hist["Close"].iloc[i] - df_hist["Open"].iloc[i], 2),
-            pcr,
-            "BUY" if df_hist["Close"].iloc[i] > df_hist["Open"].iloc[i] else "SELL"
-        ])
+        signals = []
 
-    intraday_df = pd.DataFrame(intraday_data, columns=["Time", "Diff", "PCR", "Signal"])
-    st.dataframe(intraday_df, width="stretch")
+        for i in range(1, len(df)):
+            signal = "HOLD"
+
+            if df["EMA9"].iloc[i] > df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] <= df["EMA21"].iloc[i-1]:
+                signal = "BUY 🚀"
+
+            elif df["EMA9"].iloc[i] < df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] >= df["EMA21"].iloc[i-1]:
+                signal = "SELL 🔻"
+
+            signals.append({
+                "Time": df.index[i].strftime("%H:%M"),
+                "Price": round(df["Close"].iloc[i], 2),
+                "EMA9": round(df["EMA9"].iloc[i], 2),
+                "EMA21": round(df["EMA21"].iloc[i], 2),
+                "Signal": signal
+            })
+
+        signal_df = pd.DataFrame(signals)
+
+        st.dataframe(signal_df, use_container_width=True)
+
+# =============================
+# LIVE TREND SUMMARY
+# =============================
+        last = signal_df.iloc[-1]["Signal"] if not signal_df.empty else "N/A"
+        st.info(f"📢 Current Signal: {last}")
 
 except Exception as e:
-    st.error(f"Error fetching intraday data: {e}")
+    st.error(f"Error: {e}")
+
+# =============================
+# FOOTER
+# =============================
+st.caption("⚡ Powered by NSE + Yahoo Finance | Auto Refresh Enabled")
