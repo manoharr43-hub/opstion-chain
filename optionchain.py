@@ -60,20 +60,26 @@ try:
     # DISPLAY TABLES
     # =============================
     st.subheader(f"📈 {symbol} CALLS")
-    st.dataframe(
-        call_df.style.map(lambda v: "background-color:lightgreen" if isinstance(v, (int,float)) and v>0 else "")
-    )
+    if not call_df.empty:
+        st.dataframe(
+            call_df.style.map(lambda v: "background-color:lightgreen" if isinstance(v, (int,float)) and v>0 else "")
+        )
+    else:
+        st.warning("No CALL data available.")
 
     st.subheader(f"📉 {symbol} PUTS")
-    st.dataframe(
-        put_df.style.map(lambda v: "background-color:salmon" if isinstance(v, (int,float)) and v<0 else "")
-    )
+    if not put_df.empty:
+        st.dataframe(
+            put_df.style.map(lambda v: "background-color:salmon" if isinstance(v, (int,float)) and v<0 else "")
+        )
+    else:
+        st.warning("No PUT data available.")
 
     # =============================
     # PCR CALCULATION
     # =============================
-    total_calls = call_df["OI"].sum()
-    total_puts = put_df["OI"].sum()
+    total_calls = call_df["OI"].sum() if not call_df.empty else 0
+    total_puts = put_df["OI"].sum() if not put_df.empty else 0
     pcr = round(total_puts / total_calls, 2) if total_calls != 0 else 0
     st.metric(label=f"{symbol} PCR (Put/Call Ratio)", value=pcr)
 
