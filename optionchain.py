@@ -10,7 +10,6 @@ import time
 # =============================
 st.set_page_config(page_title="🔥 NSE AI PRO NEXT", layout="wide")
 st_autorefresh(interval=30000, key="refresh")  # 30 sec refresh
-
 st.title("🚀 NSE AI SMART TRADING DASHBOARD")
 
 # =============================
@@ -25,12 +24,10 @@ def get_option_chain(symbol):
         "Referer": "https://www.nseindia.com/",
     }
     session = requests.Session()
-
     for _ in range(3):
         try:
             session.get("https://www.nseindia.com", headers=headers, timeout=5)
             res = session.get(url, headers=headers, timeout=5)
-
             if res.status_code == 200:
                 data = res.json()
                 if "records" in data and "data" in data["records"]:
@@ -39,7 +36,6 @@ def get_option_chain(symbol):
                     return data["filtered"]["data"]
         except:
             time.sleep(1)
-
     return []
 
 # =============================
@@ -51,15 +47,28 @@ symbol = st.sidebar.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
 # OPTION DATA
 # =============================
 data = get_option_chain(symbol)
-
 calls, puts = [], []
+call_rows, put_rows = [], []
+
 for row in data:
     ce = row.get("CE")
     pe = row.get("PE")
     if ce:
         calls.append(ce.get("openInterest", 0))
+        call_rows.append({
+            "Strike": ce.get("strikePrice"),
+            "OI": ce.get("openInterest", 0),
+            "Chg OI": ce.get("changeinOpenInterest", 0),
+            "LTP": ce.get("lastPrice", 0)
+        })
     if pe:
         puts.append(pe.get("openInterest", 0))
+        put_rows.append({
+            "Strike": pe.get("strikePrice"),
+            "OI": pe.get("openInterest", 0),
+            "Chg OI": pe.get("changeinOpenInterest", 0),
+            "LTP": pe.get("lastPrice", 0)
+        })
 
 call_oi = sum(calls)
 put_oi = sum(puts)
@@ -69,16 +78,34 @@ put_oi = sum(puts)
 # =============================
 pcr = round(put_oi / call_oi, 2) if call_oi > 0 else None
 bias = "SIDEWAYS"
-
 if pcr:
     if pcr > 1.2:
         bias = "BULLISH 🚀"
     elif pcr < 0.8:
         bias = "BEARISH 🔻"
 
-col1, col2 = st.columns(2)
-col1.metric("PCR", pcr if pcr else "N/A")
-col2.metric("Market Bias", bias)
+col1, col2, col3 = st.columns(3)
+col1.metric("Total CALL OI", call_oi)
+col2.metric("Total PUT OI", put_oi)
+col3.metric("PCR", pcr if pcr else "N/A")
+
+st.info(f"📊 Market Bias: {bias}")
+
+# =============================
+# TOP STRIKES (CE/PE)
+# =============================
+call_df = pd.DataFrame(call_rows)
+put_df = pd.DataFrame(put_rows)
+
+if not call_df.empty:
+    top_calls = call_df.sort_values("OI", ascending=False).head(5)
+    st.subheader("🔥 Top CALL Strikes")
+    st.dataframe(top_calls, width="stretch")
+
+if not put_df.empty:
+    top_puts = put_df.sort_values("OI", ascending=False).head(5)
+    st.subheader("🔥 Top PUT Strikes")
+    st.dataframe(top_puts, width="stretch")
 
 # =============================
 # PRICE DATA
@@ -89,12 +116,8 @@ df = yf.download(ticker_symbol, period="1d", interval="5m", progress=False)
 if isinstance(df.columns, pd.MultiIndex):
     df.columns = df.columns.get_level_values(0)
 
-# Ensure datetime index
 df.index = pd.to_datetime(df.index, errors="coerce")
-
-# Filter trading hours
 df = df.between_time("09:15", "15:30")
-
 df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
 df = df.dropna(subset=["Close"])
 
@@ -128,7 +151,7 @@ elif trend == "DOWNTREND 🔻":
 st.success(f"🤖 AI Signal: {signal}")
 
 # =============================
-# INTRADAY TABLE
+# INTRADAY TABLE (FULL DAY)
 # =============================
 signals = []
 for i in range(1, len(df)):
@@ -140,7 +163,6 @@ for i in range(1, len(df)):
     elif df["EMA9"].iloc[i] < df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] >= df["EMA21"].iloc[i-1]:
         sig = "SELL"
         opt = "PE"
-
     signals.append({
         "Time": df.index[i].strftime("%H:%M"),
         "Price": round(df["Close"].iloc[i], 2),
@@ -148,4 +170,5 @@ for i in range(1, len(df)):
         "Option": opt
     })
 
+st.subheader("📘 Intraday Signals (Full Day)")
 st.dataframe(pd.DataFrame(signals), width="stretch")
