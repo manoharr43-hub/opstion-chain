@@ -8,12 +8,12 @@ import time
 # =============================
 # CONFIG
 # =============================
-st.set_page_config(page_title="🔥 NSE AI PRO NEXT", layout="wide")
+st.set_page_config(page_title="🔥 NSE AI PRO MAX FINAL", layout="wide")
 st_autorefresh(interval=30000, key="refresh")
-st.title("🚀 NSE AI SMART TRADING DASHBOARD")
+st.title("🚀 NSE AI SMART TRADING DASHBOARD (FINAL)")
 
 # =============================
-# OPTION CHAIN (WITH FALLBACK)
+# OPTION CHAIN
 # =============================
 @st.cache_data(ttl=20)
 def get_option_chain(symbol):
@@ -24,15 +24,16 @@ def get_option_chain(symbol):
         "Referer": "https://www.nseindia.com/",
     }
     session = requests.Session()
+
     for _ in range(3):
         try:
             session.get("https://www.nseindia.com", headers=headers, timeout=5)
             res = session.get(url, headers=headers, timeout=5)
             if res.status_code == 200:
                 data = res.json()
-                if "records" in data and "data" in data["records"]:
+                if "records" in data:
                     return data["records"]["data"]
-                elif "filtered" in data and "data" in data["filtered"]:
+                elif "filtered" in data:
                     return data["filtered"]["data"]
         except:
             time.sleep(1)
@@ -47,12 +48,14 @@ symbol = st.sidebar.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
 # OPTION DATA
 # =============================
 data = get_option_chain(symbol)
+
 calls, puts = [], []
 call_rows, put_rows = [], []
 
 for row in data:
     ce = row.get("CE")
     pe = row.get("PE")
+
     if ce:
         calls.append(ce.get("openInterest", 0))
         call_rows.append({
@@ -61,6 +64,7 @@ for row in data:
             "Chg OI": ce.get("changeinOpenInterest", 0),
             "LTP": ce.get("lastPrice", 0)
         })
+
     if pe:
         puts.append(pe.get("openInterest", 0))
         put_rows.append({
@@ -76,45 +80,48 @@ call_oi_change = sum([r["Chg OI"] for r in call_rows]) if call_rows else 0
 put_oi_change = sum([r["Chg OI"] for r in put_rows]) if put_rows else 0
 
 # =============================
-# PCR + AI BIAS
+# PCR FIX
 # =============================
-pcr = round(put_oi / call_oi, 2) if call_oi > 0 else None
+if call_oi > 0:
+    pcr = round(put_oi / call_oi, 2)
+else:
+    pcr = 1.0
+    st.warning("⚠️ NSE Data Issue → Using Default PCR")
+
 bias = "SIDEWAYS"
-if pcr:
-    if pcr > 1.2:
-        bias = "BULLISH 🚀"
-    elif pcr < 0.8:
-        bias = "BEARISH 🔻"
+if pcr > 1.2:
+    bias = "BULLISH 🚀"
+elif pcr < 0.8:
+    bias = "BEARISH 🔻"
 
 col1, col2, col3, col4, col5 = st.columns(5)
-col1.metric("Total CALL OI", call_oi)
-col2.metric("CALL OI Change", call_oi_change)
-col3.metric("Total PUT OI", put_oi)
-col4.metric("PUT OI Change", put_oi_change)
-col5.metric("PCR", pcr if pcr else "N/A")
+col1.metric("CALL OI", call_oi)
+col2.metric("CALL OI Chg", call_oi_change)
+col3.metric("PUT OI", put_oi)
+col4.metric("PUT OI Chg", put_oi_change)
+col5.metric("PCR", pcr)
 
 st.info(f"📊 Market Bias: {bias}")
 
 # =============================
-# TOP STRIKES (CE/PE)
+# TOP STRIKES
 # =============================
 call_df = pd.DataFrame(call_rows)
 put_df = pd.DataFrame(put_rows)
 
 if not call_df.empty:
-    top_calls = call_df.sort_values("OI", ascending=False).head(5)
     st.subheader("🔥 Top CALL Strikes")
-    st.dataframe(top_calls, width="stretch")
+    st.dataframe(call_df.sort_values("OI", ascending=False).head(5), use_container_width=True)
 
 if not put_df.empty:
-    top_puts = put_df.sort_values("OI", ascending=False).head(5)
     st.subheader("🔥 Top PUT Strikes")
-    st.dataframe(top_puts, width="stretch")
+    st.dataframe(put_df.sort_values("OI", ascending=False).head(5), use_container_width=True)
 
 # =============================
 # PRICE DATA
 # =============================
 ticker_symbol = "^NSEI" if symbol == "NIFTY" else "^NSEBANK"
+
 df = yf.download(ticker_symbol, period="1d", interval="5m", progress=False)
 
 if isinstance(df.columns, pd.MultiIndex):
@@ -122,8 +129,20 @@ if isinstance(df.columns, pd.MultiIndex):
 
 df.index = pd.to_datetime(df.index, errors="coerce")
 df = df.between_time("09:15", "15:30")
+
 df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
 df = df.dropna(subset=["Close"])
+
+# =============================
+# ATM STRIKE
+# =============================
+current_price = None
+atm = None
+
+if not df.empty:
+    current_price = float(df["Close"].iloc[-1])
+    atm = round(current_price / 50) * 50
+    st.success(f"📍 Spot: {round(current_price,2)} | 🎯 ATM: {atm}")
 
 # =============================
 # TREND
@@ -140,39 +159,46 @@ else:
 st.info(f"📊 Trend: {trend}")
 
 # =============================
-# AI SIGNAL (COMBINED)
+# SMART AI SIGNAL
 # =============================
 signal = "WAIT"
-if trend == "UPTREND 🚀" and bias == "BULLISH 🚀":
-    signal = "STRONG BUY CE 🚀"
-elif trend == "DOWNTREND 🔻" and bias == "BEARISH 🔻":
-    signal = "STRONG BUY PE 🔻"
+
+if trend == "UPTREND 🚀" and bias == "BULLISH 🚀" and put_oi_change > call_oi_change:
+    signal = "🔥 STRONG CE BUY"
+elif trend == "DOWNTREND 🔻" and bias == "BEARISH 🔻" and call_oi_change > put_oi_change:
+    signal = "🔥 STRONG PE BUY"
 elif trend == "UPTREND 🚀":
-    signal = "BUY CE (Weak)"
+    signal = "⚡ CE BUY"
 elif trend == "DOWNTREND 🔻":
-    signal = "BUY PE (Weak)"
+    signal = "⚡ PE BUY"
 
 st.success(f"🤖 AI Signal: {signal}")
 
 # =============================
-# INTRADAY TABLE (FULL DAY)
+# INTRADAY (FULL DAY + STRIKE)
 # =============================
 signals = []
+
 for i in range(1, len(df)):
     sig = "HOLD"
     opt = "-"
+    strike = atm if atm else "-"
+
     if df["EMA9"].iloc[i] > df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] <= df["EMA21"].iloc[i-1]:
         sig = "BUY"
         opt = "CE"
+
     elif df["EMA9"].iloc[i] < df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] >= df["EMA21"].iloc[i-1]:
         sig = "SELL"
         opt = "PE"
+
     signals.append({
         "Time": df.index[i].strftime("%H:%M"),
         "Price": round(df["Close"].iloc[i], 2),
         "Signal": sig,
-        "Option": opt
+        "Option": opt,
+        "Strike": strike
     })
 
 st.subheader("📘 Intraday Signals (Full Day)")
-st.dataframe(pd.DataFrame(signals), width="stretch")
+st.dataframe(pd.DataFrame(signals), use_container_width=True)
