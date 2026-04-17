@@ -1,0 +1,7 @@
+cd nse-ai-pro-terminal
+git init
+git add .
+git commit -m "Initial NSE AI PRO Terminal build"
+git remote add origin https://github.com/USERNAME/nse-ai-pro-terminal.git
+git branch -M main
+git push -u origin main
