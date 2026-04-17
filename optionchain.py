@@ -9,7 +9,7 @@ import time
 # CONFIG
 # =============================
 st.set_page_config(page_title="🔥 NSE AI PRO NEXT", layout="wide")
-st_autorefresh(interval=20000, key="refresh")
+st_autorefresh(interval=30000, key="refresh")  # 30 sec refresh
 
 st.title("🚀 NSE AI SMART TRADING DASHBOARD")
 
@@ -18,15 +18,12 @@ st.title("🚀 NSE AI SMART TRADING DASHBOARD")
 # =============================
 @st.cache_data(ttl=20)
 def get_option_chain(symbol):
-
     url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
-
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Accept": "application/json",
         "Referer": "https://www.nseindia.com/",
     }
-
     session = requests.Session()
 
     for _ in range(3):
@@ -36,7 +33,10 @@ def get_option_chain(symbol):
 
             if res.status_code == 200:
                 data = res.json()
-                return data.get("records", {}).get("data", [])
+                if "records" in data and "data" in data["records"]:
+                    return data["records"]["data"]
+                elif "filtered" in data and "data" in data["filtered"]:
+                    return data["filtered"]["data"]
         except:
             time.sleep(1)
 
@@ -53,14 +53,11 @@ symbol = st.sidebar.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
 data = get_option_chain(symbol)
 
 calls, puts = [], []
-
 for row in data:
     ce = row.get("CE")
     pe = row.get("PE")
-
     if ce:
         calls.append(ce.get("openInterest", 0))
-
     if pe:
         puts.append(pe.get("openInterest", 0))
 
@@ -70,11 +67,7 @@ put_oi = sum(puts)
 # =============================
 # PCR + AI BIAS
 # =============================
-if call_oi > 0:
-    pcr = round(put_oi / call_oi, 2)
-else:
-    pcr = None
-
+pcr = round(put_oi / call_oi, 2) if call_oi > 0 else None
 bias = "SIDEWAYS"
 
 if pcr:
@@ -84,7 +77,6 @@ if pcr:
         bias = "BEARISH 🔻"
 
 col1, col2 = st.columns(2)
-
 col1.metric("PCR", pcr if pcr else "N/A")
 col2.metric("Market Bias", bias)
 
@@ -92,12 +84,15 @@ col2.metric("Market Bias", bias)
 # PRICE DATA
 # =============================
 ticker_symbol = "^NSEI" if symbol == "NIFTY" else "^NSEBANK"
-
 df = yf.download(ticker_symbol, period="1d", interval="5m", progress=False)
 
 if isinstance(df.columns, pd.MultiIndex):
     df.columns = df.columns.get_level_values(0)
 
+# Ensure datetime index
+df.index = pd.to_datetime(df.index, errors="coerce")
+
+# Filter trading hours
 df = df.between_time("09:15", "15:30")
 
 df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
@@ -110,7 +105,6 @@ df["EMA9"] = df["Close"].ewm(span=9).mean()
 df["EMA21"] = df["Close"].ewm(span=21).mean()
 
 trend = "SIDEWAYS"
-
 if df["EMA9"].iloc[-1] > df["EMA21"].iloc[-1]:
     trend = "UPTREND 🚀"
 else:
@@ -122,16 +116,12 @@ st.info(f"📊 Trend: {trend}")
 # AI SIGNAL (COMBINED)
 # =============================
 signal = "WAIT"
-
 if trend == "UPTREND 🚀" and bias == "BULLISH 🚀":
     signal = "STRONG BUY CE 🚀"
-
 elif trend == "DOWNTREND 🔻" and bias == "BEARISH 🔻":
     signal = "STRONG BUY PE 🔻"
-
 elif trend == "UPTREND 🚀":
     signal = "BUY CE (Weak)"
-
 elif trend == "DOWNTREND 🔻":
     signal = "BUY PE (Weak)"
 
@@ -141,15 +131,12 @@ st.success(f"🤖 AI Signal: {signal}")
 # INTRADAY TABLE
 # =============================
 signals = []
-
 for i in range(1, len(df)):
     sig = "HOLD"
     opt = "-"
-
     if df["EMA9"].iloc[i] > df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] <= df["EMA21"].iloc[i-1]:
         sig = "BUY"
         opt = "CE"
-
     elif df["EMA9"].iloc[i] < df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] >= df["EMA21"].iloc[i-1]:
         sig = "SELL"
         opt = "PE"
@@ -161,4 +148,4 @@ for i in range(1, len(df)):
         "Option": opt
     })
 
-st.dataframe(pd.DataFrame(signals), use_container_width=True)
+st.dataframe(pd.DataFrame(signals), width="stretch")
