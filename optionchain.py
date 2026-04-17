@@ -9,7 +9,7 @@ import time
 # CONFIG
 # =============================
 st.set_page_config(page_title="🔥 NSE AI PRO NEXT", layout="wide")
-st_autorefresh(interval=30000, key="refresh")  # 30 sec refresh
+st_autorefresh(interval=30000, key="refresh")
 st.title("🚀 NSE AI SMART TRADING DASHBOARD")
 
 # =============================
@@ -72,6 +72,8 @@ for row in data:
 
 call_oi = sum(calls)
 put_oi = sum(puts)
+call_oi_change = sum([r["Chg OI"] for r in call_rows]) if call_rows else 0
+put_oi_change = sum([r["Chg OI"] for r in put_rows]) if put_rows else 0
 
 # =============================
 # PCR + AI BIAS
@@ -84,10 +86,12 @@ if pcr:
     elif pcr < 0.8:
         bias = "BEARISH 🔻"
 
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4, col5 = st.columns(5)
 col1.metric("Total CALL OI", call_oi)
-col2.metric("Total PUT OI", put_oi)
-col3.metric("PCR", pcr if pcr else "N/A")
+col2.metric("CALL OI Change", call_oi_change)
+col3.metric("Total PUT OI", put_oi)
+col4.metric("PUT OI Change", put_oi_change)
+col5.metric("PCR", pcr if pcr else "N/A")
 
 st.info(f"📊 Market Bias: {bias}")
 
