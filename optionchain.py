@@ -7,7 +7,7 @@ from datetime import datetime
 # CONFIG
 # =============================
 st.set_page_config(page_title="🔥 NSE OPTION CHAIN", layout="wide")
-st.title("📊 NSE Option Chain Dashboard")
+st.title("📊 NSE Option Chain + Intraday Dashboard")
 
 # =============================
 # FUNCTION: Fetch Option Chain
@@ -16,13 +16,18 @@ def get_option_chain(symbol="NIFTY"):
     url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
     headers = {
         "User-Agent": "Mozilla/5.0",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br"
+        "Accept": "application/json",
+        "Referer": "https://www.nseindia.com/option-chain"
     }
     session = requests.Session()
+    # First request to NSE homepage for cookies
+    session.get("https://www.nseindia.com", headers=headers)
     response = session.get(url, headers=headers)
     data = response.json()
-    return data["records"]["data"]
+    if "records" in data and "data" in data["records"]:
+        return data["records"]["data"]
+    else:
+        return []
 
 # =============================
 # USER INPUT
@@ -62,8 +67,24 @@ try:
     total_calls = call_df["OI"].sum()
     total_puts = put_df["OI"].sum()
     pcr = round(total_puts / total_calls, 2) if total_calls != 0 else 0
-
     st.metric(label=f"{symbol} PCR (Put/Call Ratio)", value=pcr)
+
+    # =============================
+    # INTRADAY SIGNALS (Mock Example)
+    # =============================
+    st.subheader(f"⏱️ Intraday Signals - {symbol} (15 mins)")
+    intraday_data = [
+        ["12:45", 90987130, 1.76, "BUY"],
+        ["12:30", 88337015, 1.76, "BUY"],
+        ["12:15", 89207755, 1.79, "BUY"],
+        ["12:00", 97324760, 1.99, "BUY"],
+        ["11:45", 73244080, 1.63, "BUY"],
+    ]
+    intraday_df = pd.DataFrame(intraday_data, columns=["Time", "Diff", "PCR", "Signal"])
+    st.dataframe(intraday_df.style.applymap(
+        lambda v: "background-color:lightgreen" if v=="BUY" else "background-color:salmon",
+        subset=["Signal"]
+    ))
 
 except Exception as e:
     st.error(f"Error fetching data: {e}")
