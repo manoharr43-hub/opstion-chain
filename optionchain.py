@@ -2,44 +2,46 @@ import streamlit as st
 import requests
 import pandas as pd
 import yfinance as yf
-from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
+import time
 
 # =============================
 # CONFIG
 # =============================
-st.set_page_config(page_title="🔥 NSE AI OPTION CHAIN PRO", layout="wide")
+st.set_page_config(page_title="🔥 NSE PRO", layout="wide")
 st_autorefresh(interval=20000, key="refresh")
 
-st.title("🚀 NSE AI OPTION CHAIN + INTRADAY PRO")
+st.title("🚀 NSE OPTION CHAIN + INTRADAY PRO")
 
 # =============================
-# NSE OPTION CHAIN FUNCTION
+# NSE OPTION CHAIN (RETRY FIX)
 # =============================
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=20)
 def get_option_chain(symbol):
+
     url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
 
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Accept": "application/json",
         "Referer": "https://www.nseindia.com/",
-        "Accept-Language": "en-US,en;q=0.9"
     }
 
     session = requests.Session()
 
-    try:
-        session.get("https://www.nseindia.com", headers=headers, timeout=5)
-        response = session.get(url, headers=headers, timeout=5)
+    for i in range(3):  # retry 3 times
+        try:
+            session.get("https://www.nseindia.com", headers=headers, timeout=5)
+            res = session.get(url, headers=headers, timeout=5)
 
-        if response.status_code == 200:
-            json_data = response.json()
-            return json_data.get("records", {}).get("data", [])
-        else:
-            return []
-    except:
-        return []
+            if res.status_code == 200:
+                data = res.json()
+                return data.get("records", {}).get("data", [])
+
+        except:
+            time.sleep(1)
+
+    return []
 
 # =============================
 # USER INPUT
@@ -47,136 +49,98 @@ def get_option_chain(symbol):
 symbol = st.sidebar.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
 
 # =============================
-# OPTION CHAIN PROCESS
+# OPTION CHAIN
 # =============================
 data = get_option_chain(symbol)
 
 calls, puts = [], []
 
-for item in data:
-    ce = item.get("CE")
-    pe = item.get("PE")
+for row in data:
+    ce = row.get("CE")
+    pe = row.get("PE")
 
     if ce:
-        calls.append({
-            "Strike": ce["strikePrice"],
-            "OI": ce["openInterest"],
-            "Chg OI": ce["changeinOpenInterest"],
-            "LTP": ce["lastPrice"]
-        })
+        calls.append([ce["strikePrice"], ce["openInterest"], ce["lastPrice"]])
 
     if pe:
-        puts.append({
-            "Strike": pe["strikePrice"],
-            "OI": pe["openInterest"],
-            "Chg OI": pe["changeinOpenInterest"],
-            "LTP": pe["lastPrice"]
-        })
+        puts.append([pe["strikePrice"], pe["openInterest"], pe["lastPrice"]])
 
-call_df = pd.DataFrame(calls)
-put_df = pd.DataFrame(puts)
+call_df = pd.DataFrame(calls, columns=["Strike", "OI", "LTP"])
+put_df = pd.DataFrame(puts, columns=["Strike", "OI", "LTP"])
 
-# =============================
-# DISPLAY OPTION CHAIN
-# =============================
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader(f"📈 {symbol} CALLS")
+    st.subheader("📈 CALLS")
     st.dataframe(call_df, use_container_width=True)
 
 with col2:
-    st.subheader(f"📉 {symbol} PUTS")
+    st.subheader("📉 PUTS")
     st.dataframe(put_df, use_container_width=True)
 
 # =============================
-# PCR + MARKET BIAS
+# PCR
 # =============================
-total_call = call_df["OI"].sum() if not call_df.empty else 0
-total_put = put_df["OI"].sum() if not put_df.empty else 0
-
-pcr = round(total_put / total_call, 2) if total_call != 0 else 0
-
-bias = "SIDEWAYS"
-if pcr > 1.2:
-    bias = "BULLISH 🚀"
-elif pcr < 0.8:
-    bias = "BEARISH 🔻"
-
-c1, c2 = st.columns(2)
-c1.metric("PCR", pcr)
-c2.metric("Market Bias", bias)
-
-# =============================
-# OI ANALYSIS (SUPPORT / RESISTANCE)
-# =============================
-st.subheader("📊 OI Analysis")
-
 if not call_df.empty and not put_df.empty:
-    resistance = call_df.sort_values("OI", ascending=False).iloc[0]["Strike"]
-    support = put_df.sort_values("OI", ascending=False).iloc[0]["Strike"]
+    pcr = round(put_df["OI"].sum() / call_df["OI"].sum(), 2)
+else:
+    pcr = 0
 
-    col1, col2 = st.columns(2)
-    col1.success(f"🟢 Strong Support: {support}")
-    col2.error(f"🔴 Strong Resistance: {resistance}")
-
-# =============================
-# INTRADAY DATA
-# =============================
-st.subheader(f"⏱️ Intraday Signals ({symbol})")
-
-try:
-    ticker_symbol = "^NSEI" if symbol == "NIFTY" else "^NSEBANK"
-
-    df = yf.download(
-        ticker_symbol,
-        period="1d",
-        interval="5m",
-        progress=False
-    )
-
-    if df.empty:
-        st.warning("No intraday data (Market Closed)")
-    else:
-        df = df.between_time("09:15", "15:30")
-
-        # Indicators
-        df["EMA9"] = df["Close"].ewm(span=9).mean()
-        df["EMA21"] = df["Close"].ewm(span=21).mean()
-
-        signals = []
-
-        for i in range(1, len(df)):
-            signal = "HOLD"
-
-            if df["EMA9"].iloc[i] > df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] <= df["EMA21"].iloc[i-1]:
-                signal = "BUY 🚀"
-
-            elif df["EMA9"].iloc[i] < df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] >= df["EMA21"].iloc[i-1]:
-                signal = "SELL 🔻"
-
-            signals.append({
-                "Time": df.index[i].strftime("%H:%M"),
-                "Price": round(df["Close"].iloc[i], 2),
-                "EMA9": round(df["EMA9"].iloc[i], 2),
-                "EMA21": round(df["EMA21"].iloc[i], 2),
-                "Signal": signal
-            })
-
-        signal_df = pd.DataFrame(signals)
-
-        st.dataframe(signal_df, use_container_width=True)
+st.metric("PCR", pcr)
 
 # =============================
-# LIVE TREND SUMMARY
+# SPOT PRICE (STRIKE LEVEL)
 # =============================
-        last = signal_df.iloc[-1]["Signal"] if not signal_df.empty else "N/A"
-        st.info(f"📢 Current Signal: {last}")
+ticker_symbol = "^NSEI" if symbol == "NIFTY" else "^NSEBANK"
 
-except Exception as e:
-    st.error(f"Error: {e}")
+spot = yf.download(ticker_symbol, period="1d", interval="1m", progress=False)
+
+if not spot.empty:
+    current_price = float(spot["Close"].iloc[-1])
+    st.success(f"📍 Current Spot Price: {round(current_price,2)}")
 
 # =============================
-# FOOTER
+# INTRADAY SIGNALS
 # =============================
-st.caption("⚡ Powered by NSE + Yahoo Finance | Auto Refresh Enabled")
+st.subheader("⏱️ Intraday Signals (9:15 - 3:30)")
+
+df = yf.download(ticker_symbol, period="1d", interval="5m", progress=False)
+
+if df.empty:
+    st.warning("No data (Market Closed)")
+else:
+    df = df.between_time("09:15", "15:30")
+
+    # FIX FLOAT ISSUE
+    df["Close"] = df["Close"].astype(float)
+
+    # EMA
+    df["EMA9"] = df["Close"].ewm(span=9).mean()
+    df["EMA21"] = df["Close"].ewm(span=21).mean()
+
+    signals = []
+
+    for i in range(1, len(df)):
+        signal = "HOLD"
+
+        if df["EMA9"].iloc[i] > df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] <= df["EMA21"].iloc[i-1]:
+            signal = "BUY 🚀"
+
+        elif df["EMA9"].iloc[i] < df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] >= df["EMA21"].iloc[i-1]:
+            signal = "SELL 🔻"
+
+        signals.append({
+            "Time": df.index[i].strftime("%H:%M"),
+            "Price": round(float(df["Close"].iloc[i]),2),
+            "EMA9": round(df["EMA9"].iloc[i],2),
+            "EMA21": round(df["EMA21"].iloc[i],2),
+            "Signal": signal
+        })
+
+    signal_df = pd.DataFrame(signals)
+
+    st.dataframe(signal_df, use_container_width=True)
+
+    # LAST SIGNAL
+    if not signal_df.empty:
+        st.info(f"📢 Latest Signal: {signal_df.iloc[-1]['Signal']}")
