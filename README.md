@@ -19,3 +19,12 @@
 ```bash
 pip install -r requirements.txt
 streamlit run stock_dashboard.py
+# NSE AI PRO Terminal
+
+Streamlit app for NIFTY & BANKNIFTY option chain analysis.
+
+## Run Locally
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+
