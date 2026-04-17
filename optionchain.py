@@ -8,13 +8,13 @@ import time
 # =============================
 # CONFIG
 # =============================
-st.set_page_config(page_title="🔥 NSE AI PRO", layout="wide")
+st.set_page_config(page_title="🔥 NSE AI PRO FINAL", layout="wide")
 st_autorefresh(interval=20000, key="refresh")
 
-st.title("🚀 NSE OPTION CHAIN + INTRADAY PRO")
+st.title("🚀 NSE OPTION CHAIN + INTRADAY PRO (FINAL)")
 
 # =============================
-# NSE OPTION CHAIN (RETRY FIX)
+# NSE OPTION CHAIN (RETRY SAFE)
 # =============================
 @st.cache_data(ttl=20)
 def get_option_chain(symbol):
@@ -60,18 +60,18 @@ for row in data:
 
     if ce:
         calls.append({
-            "Strike": ce["strikePrice"],
-            "OI": ce["openInterest"],
-            "Chg OI": ce["changeinOpenInterest"],
-            "LTP": ce["lastPrice"]
+            "Strike": ce.get("strikePrice", 0),
+            "OI": ce.get("openInterest", 0),
+            "Chg OI": ce.get("changeinOpenInterest", 0),
+            "LTP": ce.get("lastPrice", 0)
         })
 
     if pe:
         puts.append({
-            "Strike": pe["strikePrice"],
-            "OI": pe["openInterest"],
-            "Chg OI": pe["changeinOpenInterest"],
-            "LTP": pe["lastPrice"]
+            "Strike": pe.get("strikePrice", 0),
+            "OI": pe.get("openInterest", 0),
+            "Chg OI": pe.get("changeinOpenInterest", 0),
+            "LTP": pe.get("lastPrice", 0)
         })
 
 call_df = pd.DataFrame(calls)
@@ -90,48 +90,64 @@ with col2:
 # =============================
 # PCR
 # =============================
+pcr = 0
 if not call_df.empty and not put_df.empty:
-    pcr = round(put_df["OI"].sum() / call_df["OI"].sum(), 2)
-else:
-    pcr = 0
+    try:
+        pcr = round(put_df["OI"].sum() / call_df["OI"].sum(), 2)
+    except:
+        pcr = 0
 
 st.metric("PCR", pcr)
 
 # =============================
-# SAFE SPOT PRICE (FIXED)
+# SAFE SPOT PRICE (ULTIMATE FIX)
 # =============================
 ticker_symbol = "^NSEI" if symbol == "NIFTY" else "^NSEBANK"
 
-spot = yf.download(ticker_symbol, period="1d", interval="5m", progress=False)
-
 current_price = None
 
-if spot is not None and not spot.empty and "Close" in spot.columns:
-    spot["Close"] = pd.to_numeric(spot["Close"], errors="coerce")
-    spot = spot.dropna(subset=["Close"])
+try:
+    spot = yf.download(ticker_symbol, period="1d", interval="5m", progress=False)
 
-    if not spot.empty:
-        try:
-            current_price = float(spot["Close"].iloc[-1])
-            st.success(f"📍 Spot Price: {round(current_price,2)}")
-        except:
-            st.warning("Spot conversion issue")
+    if spot is not None and not spot.empty:
+
+        # FIX MultiIndex
+        if isinstance(spot.columns, pd.MultiIndex):
+            spot.columns = spot.columns.get_level_values(0)
+
+        if "Close" in spot.columns:
+
+            close_series = spot["Close"]
+
+            if isinstance(close_series, pd.Series):
+
+                close_series = pd.to_numeric(close_series, errors="coerce")
+                close_series = close_series.dropna()
+
+                if not close_series.empty:
+                    current_price = float(close_series.iloc[-1])
+                    st.success(f"📍 Spot Price: {round(current_price,2)}")
+                else:
+                    st.warning("No valid spot data")
+
+except:
+    st.warning("Spot fetch error")
 
 # =============================
-# ATM STRIKE LOGIC
+# ATM STRIKE
 # =============================
 if current_price and not call_df.empty:
     call_df["Distance"] = abs(call_df["Strike"] - current_price)
-    atm_strike = call_df.sort_values("Distance").iloc[0]["Strike"]
+    atm = call_df.sort_values("Distance").iloc[0]["Strike"]
 
-    st.info(f"🎯 ATM Strike: {atm_strike}")
+    st.info(f"🎯 ATM Strike: {atm}")
 
-    # Show only nearby strikes
-    call_df = call_df[(call_df["Strike"] >= atm_strike - 500) & (call_df["Strike"] <= atm_strike + 500)]
-    put_df = put_df[(put_df["Strike"] >= atm_strike - 500) & (put_df["Strike"] <= atm_strike + 500)]
+    # Filter strikes near ATM
+    call_df = call_df[(call_df["Strike"] >= atm - 500) & (call_df["Strike"] <= atm + 500)]
+    put_df = put_df[(put_df["Strike"] >= atm - 500) & (put_df["Strike"] <= atm + 500)]
 
 # =============================
-# OI SUPPORT / RESISTANCE
+# OI ANALYSIS
 # =============================
 st.subheader("📊 OI Analysis")
 
@@ -139,56 +155,69 @@ if not call_df.empty and not put_df.empty:
     resistance = call_df.sort_values("OI", ascending=False).iloc[0]["Strike"]
     support = put_df.sort_values("OI", ascending=False).iloc[0]["Strike"]
 
-    col1, col2 = st.columns(2)
-    col1.success(f"🟢 Support: {support}")
-    col2.error(f"🔴 Resistance: {resistance}")
+    c1, c2 = st.columns(2)
+    c1.success(f"🟢 Support: {support}")
+    c2.error(f"🔴 Resistance: {resistance}")
 
 # =============================
-# INTRADAY SIGNALS
+# INTRADAY SIGNALS (SAFE)
 # =============================
 st.subheader("⏱️ Intraday Signals (9:15 - 3:30)")
 
-df = yf.download(ticker_symbol, period="1d", interval="5m", progress=False)
+try:
+    df = yf.download(ticker_symbol, period="1d", interval="5m", progress=False)
 
-if df.empty:
-    st.warning("No intraday data (Market Closed)")
-else:
-    df = df.between_time("09:15", "15:30")
+    if df is not None and not df.empty:
 
-    df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
-    df = df.dropna(subset=["Close"])
+        # Fix MultiIndex
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
 
-    # EMA
-    df["EMA9"] = df["Close"].ewm(span=9).mean()
-    df["EMA21"] = df["Close"].ewm(span=21).mean()
+        df = df.between_time("09:15", "15:30")
 
-    signals = []
+        if "Close" in df.columns:
 
-    for i in range(1, len(df)):
-        signal = "HOLD"
+            df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
+            df = df.dropna(subset=["Close"])
 
-        if df["EMA9"].iloc[i] > df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] <= df["EMA21"].iloc[i-1]:
-            signal = "BUY 🚀"
+            df["EMA9"] = df["Close"].ewm(span=9).mean()
+            df["EMA21"] = df["Close"].ewm(span=21).mean()
 
-        elif df["EMA9"].iloc[i] < df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] >= df["EMA21"].iloc[i-1]:
-            signal = "SELL 🔻"
+            signals = []
 
-        signals.append({
-            "Time": df.index[i].strftime("%H:%M"),
-            "Price": round(float(df["Close"].iloc[i]),2),
-            "EMA9": round(df["EMA9"].iloc[i],2),
-            "EMA21": round(df["EMA21"].iloc[i],2),
-            "Signal": signal
-        })
+            for i in range(1, len(df)):
+                signal = "HOLD"
 
-    signal_df = pd.DataFrame(signals)
+                if df["EMA9"].iloc[i] > df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] <= df["EMA21"].iloc[i-1]:
+                    signal = "BUY 🚀"
 
-    st.dataframe(signal_df, use_container_width=True)
+                elif df["EMA9"].iloc[i] < df["EMA21"].iloc[i] and df["EMA9"].iloc[i-1] >= df["EMA21"].iloc[i-1]:
+                    signal = "SELL 🔻"
 
-    if not signal_df.empty:
-        st.info(f"📢 Latest Signal: {signal_df.iloc[-1]['Signal']}")
+                signals.append({
+                    "Time": df.index[i].strftime("%H:%M"),
+                    "Price": round(float(df["Close"].iloc[i]), 2),
+                    "EMA9": round(df["EMA9"].iloc[i], 2),
+                    "EMA21": round(df["EMA21"].iloc[i], 2),
+                    "Signal": signal
+                })
+
+            signal_df = pd.DataFrame(signals)
+            st.dataframe(signal_df, use_container_width=True)
+
+            if not signal_df.empty:
+                st.info(f"📢 Latest Signal: {signal_df.iloc[-1]['Signal']}")
+
+        else:
+            st.warning("Close data missing")
+
+    else:
+        st.warning("No intraday data")
+
+except:
+    st.warning("Intraday fetch error")
 
 # =============================
 # FOOTER
 # =============================
-st.caption("⚡ NSE AI PRO | Auto Refresh Running")
+st.caption("⚡ FINAL PRO VERSION | Stable + Error-Free")
