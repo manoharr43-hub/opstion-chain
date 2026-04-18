@@ -1,224 +1,159 @@
 import streamlit as st
-import requests
 import pandas as pd
-import yfinance as yf
-from streamlit_autorefresh import st_autorefresh
+import requests
+import hashlib
 import time
+from streamlit_autorefresh import st_autorefresh
 
 # =============================
 # CONFIG
 # =============================
-st.set_page_config(page_title="🔥 NSE AI ULTRA PRO V2 HYBRID", layout="wide")
+st.set_page_config(page_title="🔥 NSE AI ULTRA PRO (SHOONYA)", layout="wide")
 st_autorefresh(interval=30000, key="refresh")
-st.title("🚀 NSE AI ULTRA PRO V2 (HYBRID DATA ENGINE)")
+st.title("🚀 NSE AI ULTRA PRO (LIVE DATA - SHOONYA)")
 
 # =============================
-# NSE OPTION CHAIN (ROBUST)
+# USER INPUT (SECURE)
 # =============================
-@st.cache_data(ttl=30)
-def get_option_chain(symbol):
-    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+st.sidebar.header("🔐 Shoonya Login")
 
-    session = requests.Session()
+userid = st.sidebar.text_input("User ID")
+password = st.sidebar.text_input("Password", type="password")
+totp = st.sidebar.text_input("TOTP")
 
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.nseindia.com/",
-        "Connection": "keep-alive"
+vendor_code = "FA"      # change if needed
+api_secret = "YOUR_API_SECRET"
+imei = "abc1234"
+
+# =============================
+# LOGIN FUNCTION
+# =============================
+def shoonya_login():
+    try:
+        url = "https://api.shoonya.com/NorenWClientTP/QuickAuth"
+
+        pwd = hashlib.sha256(password.encode()).hexdigest()
+
+        data = {
+            "uid": userid,
+            "pwd": pwd,
+            "factor2": totp,
+            "vc": vendor_code,
+            "appkey": hashlib.sha256(api_secret.encode()).hexdigest(),
+            "imei": imei
+        }
+
+        res = requests.post(url, data=data)
+        return res.json()
+
+    except Exception as e:
+        st.error(f"Login Error: {e}")
+        return None
+
+# =============================
+# OPTION CHAIN (SHOONYA)
+# =============================
+def get_option_chain(token):
+    url = "https://api.shoonya.com/NorenWClientTP/GetOptionChain"
+
+    data = {
+        "uid": userid,
+        "token": token,
+        "exch": "NFO",
+        "tsym": "NIFTY",
+        "cnt": "10"
     }
 
     try:
-        session.get("https://www.nseindia.com", headers=headers, timeout=10)
-        res = session.get(url, headers=headers, timeout=10)
-
-        if res.status_code == 200:
-            data = res.json()
-            return data.get("records", {}).get("data", [])
+        res = requests.post(url, data=data)
+        return res.json()
     except:
         return []
 
-    return []
-
 # =============================
-# FALLBACK (DUMMY OI MODEL)
+# LOGIN BUTTON
 # =============================
-def fallback_option_data(price):
-    strikes = [price + i*50 for i in range(-5,6)]
+if st.sidebar.button("Login"):
+    login_data = shoonya_login()
 
-    call_rows = []
-    put_rows = []
+    if login_data and login_data.get("stat") == "Ok":
+        st.success("✅ Login Success")
 
-    for s in strikes:
-        call_rows.append({
-            "Strike": s,
-            "OI": abs(price - s) * 100,
-            "Chg OI": abs(price - s) * 10,
-            "LTP": max(1, price - s)
-        })
+        token = login_data.get("susertoken")
 
-        put_rows.append({
-            "Strike": s,
-            "OI": abs(price - s) * 100,
-            "Chg OI": abs(price - s) * 10,
-            "LTP": max(1, s - price)
-        })
+        option_data = get_option_chain(token)
 
-    return pd.DataFrame(call_rows), pd.DataFrame(put_rows)
+        if not option_data:
+            st.error("❌ No Option Data")
+            st.stop()
 
-# =============================
-# INPUT
-# =============================
-symbol = st.sidebar.selectbox("Index", ["NIFTY", "BANKNIFTY"])
+        call_rows, put_rows = [], []
 
-# =============================
-# PRICE DATA
-# =============================
-ticker = "^NSEI" if symbol == "NIFTY" else "^NSEBANK"
-df = yf.download(ticker, period="1d", interval="5m", progress=False)
+        for row in option_data:
+            if "CE" in row:
+                ce = row["CE"]
+                call_rows.append({
+                    "Strike": ce.get("strprc"),
+                    "OI": int(ce.get("oi", 0)),
+                    "Chg OI": int(ce.get("oi_chg", 0)),
+                    "LTP": float(ce.get("lp", 0))
+                })
 
-if isinstance(df.columns, pd.MultiIndex):
-    df.columns = df.columns.get_level_values(0)
+            if "PE" in row:
+                pe = row["PE"]
+                put_rows.append({
+                    "Strike": pe.get("strprc"),
+                    "OI": int(pe.get("oi", 0)),
+                    "Chg OI": int(pe.get("oi_chg", 0)),
+                    "LTP": float(pe.get("lp", 0))
+                })
 
-df = df.between_time("09:15", "15:30")
-df = df.dropna()
+        call_df = pd.DataFrame(call_rows)
+        put_df = pd.DataFrame(put_rows)
 
-if df.empty:
-    st.error("❌ Price data not available")
-    st.stop()
+        # =============================
+        # METRICS
+        # =============================
+        call_oi = call_df["OI"].sum()
+        put_oi = put_df["OI"].sum()
 
-price = float(df["Close"].iloc[-1])
-atm = round(price / 50) * 50
+        call_chg = call_df["Chg OI"].sum()
+        put_chg = put_df["Chg OI"].sum()
 
-st.success(f"📍 Spot: {round(price,2)} | 🎯 ATM: {atm}")
+        pcr = round(put_oi / call_oi, 2) if call_oi else 1
 
-# =============================
-# OPTION DATA
-# =============================
-data = get_option_chain(symbol)
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("CALL OI", call_oi)
+        col2.metric("CALL OI Chg", call_chg)
+        col3.metric("PUT OI", put_oi)
+        col4.metric("PUT OI Chg", put_chg)
+        col5.metric("PCR", pcr)
 
-call_rows, put_rows = [], []
+        # =============================
+        # TOP STRIKES
+        # =============================
+        st.subheader("🔥 Top CALL")
+        st.dataframe(call_df.sort_values("OI", ascending=False).head(5))
 
-for row in data:
-    ce = row.get("CE")
-    pe = row.get("PE")
+        st.subheader("🔥 Top PUT")
+        st.dataframe(put_df.sort_values("OI", ascending=False).head(5))
 
-    if ce:
-        call_rows.append({
-            "Strike": ce.get("strikePrice"),
-            "OI": ce.get("openInterest", 0),
-            "Chg OI": ce.get("changeinOpenInterest", 0),
-            "LTP": ce.get("lastPrice", 0)
-        })
+        # =============================
+        # SIGNAL LOGIC
+        # =============================
+        bias = "SIDEWAYS"
+        if pcr > 1.2:
+            bias = "BULLISH 🚀"
+        elif pcr < 0.8:
+            bias = "BEARISH 🔻"
 
-    if pe:
-        put_rows.append({
-            "Strike": pe.get("strikePrice"),
-            "OI": pe.get("openInterest", 0),
-            "Chg OI": pe.get("changeinOpenInterest", 0),
-            "LTP": pe.get("lastPrice", 0)
-        })
+        signal = "WAIT"
+        if bias == "BULLISH 🚀" and put_chg > call_chg:
+            signal = "🔥 CE BUY"
+        elif bias == "BEARISH 🔻" and call_chg > put_chg:
+            signal = "🔥 PE BUY"
 
-# =============================
-# FALLBACK TRIGGER
-# =============================
-if len(call_rows) == 0 or len(put_rows) == 0:
-    st.warning("⚠️ NSE blocked → Using fallback data")
-    call_df, put_df = fallback_option_data(price)
-else:
-    call_df = pd.DataFrame(call_rows)
-    put_df = pd.DataFrame(put_rows)
+        st.success(f"🤖 AI Signal: {signal}")
 
-# =============================
-# METRICS
-# =============================
-call_oi = call_df["OI"].sum()
-put_oi = put_df["OI"].sum()
-
-call_oi_change = call_df["Chg OI"].sum()
-put_oi_change = put_df["Chg OI"].sum()
-
-pcr = round(put_oi / call_oi, 2) if call_oi else 1
-
-bias = "SIDEWAYS"
-if pcr > 1.2:
-    bias = "BULLISH 🚀"
-elif pcr < 0.8:
-    bias = "BEARISH 🔻"
-
-col1, col2, col3, col4, col5 = st.columns(5)
-col1.metric("CALL OI", int(call_oi))
-col2.metric("CALL OI Chg", int(call_oi_change))
-col3.metric("PUT OI", int(put_oi))
-col4.metric("PUT OI Chg", int(put_oi_change))
-col5.metric("PCR", pcr)
-
-st.info(f"📊 Market Bias: {bias}")
-
-# =============================
-# TOP STRIKES
-# =============================
-st.subheader("🔥 Top CALL Strikes")
-st.dataframe(call_df.sort_values("OI", ascending=False).head(5), use_container_width=True)
-
-st.subheader("🔥 Top PUT Strikes")
-st.dataframe(put_df.sort_values("OI", ascending=False).head(5), use_container_width=True)
-
-# =============================
-# INDICATORS
-# =============================
-df["EMA9"] = df["Close"].ewm(span=9).mean()
-df["EMA21"] = df["Close"].ewm(span=21).mean()
-df["VWAP"] = (df["Close"] * df["Volume"]).cumsum() / df["Volume"].cumsum()
-
-trend = "UPTREND 🚀" if df["EMA9"].iloc[-1] > df["EMA21"].iloc[-1] else "DOWNTREND 🔻"
-vwap = "ABOVE VWAP" if price > df["VWAP"].iloc[-1] else "BELOW VWAP"
-
-st.info(f"📊 Trend: {trend} | {vwap}")
-
-# =============================
-# SIGNAL
-# =============================
-signal = "WAIT"
-
-if trend == "UPTREND 🚀" and bias == "BULLISH 🚀" and price > df["VWAP"].iloc[-1]:
-    signal = "💥 CE BUY"
-elif trend == "DOWNTREND 🔻" and bias == "BEARISH 🔻" and price < df["VWAP"].iloc[-1]:
-    signal = "💥 PE BUY"
-elif trend == "UPTREND 🚀":
-    signal = "⚡ CE BUY"
-elif trend == "DOWNTREND 🔻":
-    signal = "⚡ PE BUY"
-
-st.success(f"🤖 AI Signal: {signal}")
-
-# =============================
-# TARGET / SL
-# =============================
-if "CE" in signal:
-    st.success(f"🎯 Target: {round(price+50,2)} | 🛑 SL: {round(price-20,2)}")
-elif "PE" in signal:
-    st.success(f"🎯 Target: {round(price-50,2)} | 🛑 SL: {round(price+20,2)}")
-
-# =============================
-# INTRADAY
-# =============================
-signals = []
-
-for i in range(1, len(df)):
-    sig = "HOLD"
-    if df["EMA9"].iloc[i] > df["EMA21"].iloc[i]:
-        sig = "BUY"
-    elif df["EMA9"].iloc[i] < df["EMA21"].iloc[i]:
-        sig = "SELL"
-
-    signals.append({
-        "Time": df.index[i].strftime("%H:%M"),
-        "Price": round(df["Close"].iloc[i], 2),
-        "Signal": sig
-    })
-
-intraday_df = pd.DataFrame(signals)
-
-st.subheader("📘 Intraday Signals")
-st.dataframe(intraday_df, use_container_width=True)
+    else:
+        st.error("❌ Login Failed")
