@@ -1,77 +1,71 @@
 import streamlit as st
 import pandas as pd
-import requests
+from NorenRestApiPy.NorenApi import NorenApi
 
 # ==============================
-# PAGE CONFIG
+# CONFIG
 # ==============================
-st.set_page_config(page_title="NSE AI ULTRA PRO (Shoonya Direct API)", layout="wide")
-st.title("🚀 NSE AI ULTRA PRO (Shoonya Direct API)")
+st.set_page_config(page_title="Shoonya AI PRO", layout="wide")
+st.title("🚀 Shoonya AI PRO (Official API)")
 
 # ==============================
 # LOAD SECRETS
 # ==============================
 try:
-    user_id = st.secrets["shoonyasecrets"]["user_id"]
-    password = st.secrets["shoonyasecrets"]["password"]
-    api_secret = st.secrets["shoonyasecrets"]["api_secret"]
-    totp = st.secrets["shoonyasecrets"]["totp"]
-except Exception as e:
+    creds = st.secrets["shoonyasecrets"]
+except:
     st.error("❌ secrets.toml not configured properly")
     st.stop()
 
 # ==============================
-# LOGIN FUNCTION
+# API CLASS
 # ==============================
-def shoonyalogin():
-    url = "https://api.shoonya.com/NSE/login"
-    payload = {
-        "user_id": user_id,
-        "password": password,
-        "api_secret": api_secret,
-        "totp": totp
-    }
-    try:
-        res = requests.post(url, json=payload)
-        if res.status_code == 200:
-            return res.json().get("token")
-        else:
-            st.error(f"Login failed: {res.text}")
-            return None
-    except Exception as e:
-        st.error(f"Login error: {e}")
-        return None
+class ShoonyaApiPy(NorenApi):
+    def __init__(self):
+        super().__init__(
+            host='https://api.shoonya.com/NorenWClientTP/',
+            websocket='wss://api.shoonya.com/NorenWSTP/'
+        )
 
 # ==============================
-# OPTION CHAIN FETCH
+# LOGIN
 # ==============================
-def get_option_chain(symbol, token):
-    url = f"https://api.shoonya.com/NSE/optionchain/{symbol}"
-    headers = {"Authorization": f"Bearer {token}"}
-    try:
-        res = requests.get(url, headers=headers)
-        if res.status_code == 200:
-            return pd.DataFrame(res.json()["data"])
-        else:
-            st.error(f"Option Chain fetch failed: {res.text}")
-            return None
-    except Exception as e:
-        st.error(f"Error fetching option chain: {e}")
-        return None
+def login():
+    api = ShoonyaApiPy()
+
+    ret = api.login(
+        userid=creds["user_id"],
+        password=creds["password"],
+        twoFA=creds["totp"],
+        vendor_code="FA189165",
+        api_secret=creds["api_secret"],
+        imei="abc1234"
+    )
+
+    return api if ret else None
 
 # ==============================
-# MAIN APP
+# UI
 # ==============================
-st.sidebar.header("⚙️ Settings")
-symbol = st.sidebar.text_input("Enter NSE Symbol", value="NIFTY")
+symbol = st.sidebar.text_input("Symbol", "NIFTY")
 
-if st.sidebar.button("🔑 Login & Fetch"):
-    token = shoonyalogin()
-    if token:
+if st.sidebar.button("Login & Fetch"):
+    api = login()
+
+    if api:
         st.success("✅ Login Successful")
-        df = get_option_chain(symbol, token)
-        if df is not None:
+
+        try:
+            data = api.get_option_chain(
+                exchange="NSE",
+                tradingsymbol=symbol
+            )
+
+            df = pd.DataFrame(data)
             st.dataframe(df)
-            st.download_button("⬇️ Download CSV", df.to_csv(index=False), "option_chain.csv", "text/csv")
+
+        except Exception as e:
+            st.error(f"Error: {e}")
+
     else:
-        st.error("❌ Could not login. Check secrets.toml")
+        st.error("❌ Login Failed")
