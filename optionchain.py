@@ -1,8 +1,6 @@
-
 import streamlit as st
 import requests
 import pandas as pd
-import time
 
 # =============================
 # CONFIG
@@ -11,23 +9,22 @@ st.set_page_config(page_title="NSE Option Chain PRO", layout="wide")
 st.title("📊 NSE Option Chain Live (Stable Version)")
 
 # =============================
-# SAFE SESSION CREATION
+# SESSION (IMPORTANT FIX)
 # =============================
 @st.cache_resource
 def create_session():
     session = requests.Session()
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "User-Agent": "Mozilla/5.0",
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "en-US,en;q=0.9",
-        "Connection": "keep-alive",
-        "Referer": "https://www.nseindia.com/option-chain"
+        "Referer": "https://www.nseindia.com"
     }
 
     session.headers.update(headers)
 
-    # IMPORTANT: get cookies first
+    # Get cookies first (VERY IMPORTANT)
     try:
         session.get("https://www.nseindia.com", timeout=5)
     except:
@@ -38,7 +35,7 @@ def create_session():
 session = create_session()
 
 # =============================
-# FETCH DATA FUNCTION
+# FETCH DATA
 # =============================
 @st.cache_data(ttl=60)
 def get_option_chain(symbol):
@@ -57,20 +54,20 @@ def get_option_chain(symbol):
         return None
 
 # =============================
-# USER INPUT
+# UI INPUT
 # =============================
 symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
 
 # =============================
-# LOAD DATA BUTTON
+# LOAD BUTTON
 # =============================
 if st.button("📥 Load Option Chain"):
 
-    with st.spinner("Fetching live data..."):
+    with st.spinner("⏳ Fetching live NSE data..."):
         data = get_option_chain(symbol)
 
     if not data:
-        st.warning("⚠️ No data received. Try again.")
+        st.warning("⚠️ Data not received. NSE may be blocking request. Try again.")
         st.stop()
 
     # =============================
@@ -112,16 +109,16 @@ if st.button("📥 Load Option Chain"):
     st.subheader("📈 Market Insights")
 
     try:
-        max_ce_oi = df.loc[df["CE OI"].idxmax()]
-        max_pe_oi = df.loc[df["PE OI"].idxmax()]
+        max_ce = df.loc[df["CE OI"].idxmax()]
+        max_pe = df.loc[df["PE OI"].idxmax()]
 
-        st.success(f"📊 Max CE OI Strike: {max_ce_oi['Strike']}")
-        st.success(f"📊 Max PE OI Strike: {max_pe_oi['Strike']}")
+        st.success(f"📊 Max CE OI Strike: {max_ce['Strike']}")
+        st.success(f"📊 Max PE OI Strike: {max_pe['Strike']}")
 
     except:
-        st.warning("Not enough data for insights.")
+        st.warning("Not enough data for insights")
 
 # =============================
-# AUTO REFRESH OPTION
+# REFRESH INFO
 # =============================
-st.caption("Tip: Press Load Option Chain again to refresh latest data")
+st.caption("👉 Click 'Load Option Chain' again to refresh live data")
