@@ -1,115 +1,102 @@
 import streamlit as st
 import pandas as pd
-import requests
-import hashlib
-import time
-from streamlit_autorefresh import st_autorefresh
+from NorenRestApiPy.NorenApi import NorenApi
 
 # =============================
 # CONFIG
 # =============================
-st.set_page_config(page_title="🔥 NSE AI ULTRA PRO (SHOONYA)", layout="wide")
-st_autorefresh(interval=30000, key="refresh")
-st.title("🚀 NSE AI ULTRA PRO (LIVE DATA - SHOONYA)")
+st.set_page_config(page_title="🔥 NSE AI ULTRA PRO", layout="wide")
+st.title("🚀 NSE AI ULTRA PRO (WORKING)")
 
 # =============================
-# USER INPUT (SECURE)
+# API CLASS
 # =============================
-st.sidebar.header("🔐 Shoonya Login")
+class ShoonyaApi(NorenApi):
+    def __init__(self):
+        super().__init__(
+            host='https://api.shoonya.com/NorenWClientTP/',
+            websocket='wss://api.shoonya.com/NorenWSTP/'
+        )
 
-userid = st.sidebar.text_input("User ID")
-password = st.sidebar.text_input("Password", type="password")
-totp = st.sidebar.text_input("TOTP")
-
-vendor_code = "FA"      # change if needed
-api_secret = "YOUR_API_SECRET"
-imei = "abc1234"
+api = ShoonyaApi()
 
 # =============================
 # LOGIN FUNCTION
 # =============================
-def shoonya_login():
+def login():
     try:
-        url = "https://api.shoonya.com/NorenWClientTP/QuickAuth"
+        ret = api.login(
+            userid=st.secrets["USER_ID"],
+            password=st.secrets["PASSWORD"],
+            twoFA=st.secrets["TOTP"],
+            vendor_code="FA",
+            api_secret=st.secrets["API_SECRET"],
+            imei="abc1234"
+        )
 
-        pwd = hashlib.sha256(password.encode()).hexdigest()
-
-        data = {
-            "uid": userid,
-            "pwd": pwd,
-            "factor2": totp,
-            "vc": vendor_code,
-            "appkey": hashlib.sha256(api_secret.encode()).hexdigest(),
-            "imei": imei
-        }
-
-        res = requests.post(url, data=data)
-        return res.json()
+        if ret and ret.get("stat") == "Ok":
+            st.success("✅ Login Success")
+            return True
+        else:
+            st.error(f"❌ Login Failed: {ret}")
+            return False
 
     except Exception as e:
-        st.error(f"Login Error: {e}")
+        st.error(f"Error: {e}")
+        return False
+
+# =============================
+# OPTION CHAIN
+# =============================
+def get_option_chain():
+    try:
+        data = api.get_option_chain(
+            exchange="NFO",
+            tradingsymbol="NIFTY",
+            strikeprice="0",
+            count="10"
+        )
+        return data
+    except Exception as e:
+        st.error(f"Option Chain Error: {e}")
         return None
 
 # =============================
-# OPTION CHAIN (SHOONYA)
+# BUTTON
 # =============================
-def get_option_chain(token):
-    url = "https://api.shoonya.com/NorenWClientTP/GetOptionChain"
+if st.button("🔐 Login & Get Data"):
 
-    data = {
-        "uid": userid,
-        "token": token,
-        "exch": "NFO",
-        "tsym": "NIFTY",
-        "cnt": "10"
-    }
+    if login():
 
-    try:
-        res = requests.post(url, data=data)
-        return res.json()
-    except:
-        return []
+        data = get_option_chain()
 
-# =============================
-# LOGIN BUTTON
-# =============================
-if st.sidebar.button("Login"):
-    login_data = shoonya_login()
-
-    if login_data and login_data.get("stat") == "Ok":
-        st.success("✅ Login Success")
-
-        token = login_data.get("susertoken")
-
-        option_data = get_option_chain(token)
-
-        if not option_data:
-            st.error("❌ No Option Data")
+        if not data:
             st.stop()
 
         call_rows, put_rows = [], []
 
-        for row in option_data:
-            if "CE" in row:
-                ce = row["CE"]
+        for row in data.get("values", []):
+
+            if row.get("optt") == "CE":
                 call_rows.append({
-                    "Strike": ce.get("strprc"),
-                    "OI": int(ce.get("oi", 0)),
-                    "Chg OI": int(ce.get("oi_chg", 0)),
-                    "LTP": float(ce.get("lp", 0))
+                    "Strike": row.get("strprc"),
+                    "OI": int(row.get("oi", 0)),
+                    "LTP": float(row.get("lp", 0))
                 })
 
-            if "PE" in row:
-                pe = row["PE"]
+            elif row.get("optt") == "PE":
                 put_rows.append({
-                    "Strike": pe.get("strprc"),
-                    "OI": int(pe.get("oi", 0)),
-                    "Chg OI": int(pe.get("oi_chg", 0)),
-                    "LTP": float(pe.get("lp", 0))
+                    "Strike": row.get("strprc"),
+                    "OI": int(row.get("oi", 0)),
+                    "LTP": float(row.get("lp", 0))
                 })
 
         call_df = pd.DataFrame(call_rows)
         put_df = pd.DataFrame(put_rows)
+
+        if call_df.empty or put_df.empty:
+            st.warning("⚠️ No data")
+            st.stop()
 
         # =============================
         # METRICS
@@ -117,43 +104,30 @@ if st.sidebar.button("Login"):
         call_oi = call_df["OI"].sum()
         put_oi = put_df["OI"].sum()
 
-        call_chg = call_df["Chg OI"].sum()
-        put_chg = put_df["Chg OI"].sum()
+        pcr = round(put_oi / call_oi, 2)
 
-        pcr = round(put_oi / call_oi, 2) if call_oi else 1
-
-        col1, col2, col3, col4, col5 = st.columns(5)
+        col1, col2, col3 = st.columns(3)
         col1.metric("CALL OI", call_oi)
-        col2.metric("CALL OI Chg", call_chg)
-        col3.metric("PUT OI", put_oi)
-        col4.metric("PUT OI Chg", put_chg)
-        col5.metric("PCR", pcr)
+        col2.metric("PUT OI", put_oi)
+        col3.metric("PCR", pcr)
 
         # =============================
-        # TOP STRIKES
+        # TABLE
         # =============================
-        st.subheader("🔥 Top CALL")
-        st.dataframe(call_df.sort_values("OI", ascending=False).head(5))
+        st.subheader("📊 CALL DATA")
+        st.dataframe(call_df)
 
-        st.subheader("🔥 Top PUT")
-        st.dataframe(put_df.sort_values("OI", ascending=False).head(5))
+        st.subheader("📊 PUT DATA")
+        st.dataframe(put_df)
 
         # =============================
-        # SIGNAL LOGIC
+        # SIGNAL
         # =============================
-        bias = "SIDEWAYS"
-        if pcr > 1.2:
-            bias = "BULLISH 🚀"
-        elif pcr < 0.8:
-            bias = "BEARISH 🔻"
-
         signal = "WAIT"
-        if bias == "BULLISH 🚀" and put_chg > call_chg:
+
+        if pcr > 1.2:
             signal = "🔥 CE BUY"
-        elif bias == "BEARISH 🔻" and call_chg > put_chg:
+        elif pcr < 0.8:
             signal = "🔥 PE BUY"
 
-        st.success(f"🤖 AI Signal: {signal}")
-
-    else:
-        st.error("❌ Login Failed")
+        st.success(f"🤖 Signal: {signal}")
