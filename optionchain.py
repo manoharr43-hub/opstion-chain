@@ -26,12 +26,10 @@ except Exception as e:
 def shoonyalogin():
     url = "https://api.shoonya.com/NSE/login"
     payload = {
-       
-user_id = "FA189165"
-password = "sai@2013R"
-api_secret = "bf79a76b06b8bcad20606e00cc5030a2b435532bc4f8811002780b6dc2d4b4c8"
-totp = "37XK47P073UR54P52B64MP250SB6GDER"
-
+        "user_id": user_id,
+        "password": password,
+        "api_secret": api_secret,
+        "totp": totp
     }
     try:
         res = requests.post(url, json=payload)
