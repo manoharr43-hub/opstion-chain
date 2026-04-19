@@ -9,3 +9,6 @@ scipy==1.13.1
 seaborn==0.13.2
 torch==2.2.2
 torchvision==0.17.2
+streamlit
+pandas
+git+https://github.com/Shoonya-Dev/NorenRestApiPy.git
