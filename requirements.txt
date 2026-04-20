@@ -1,6 +1,3 @@
 streamlit
 pandas
 requests
-pyotp
-websocket-client
-git+https://github.com/Shoonya-Dev/ShoonyaApi-py.git
