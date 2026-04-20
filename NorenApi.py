@@ -1,67 +1,61 @@
 import requests
-import websocket
+import hashlib
 import json
-import threading
 
 class NorenApi:
     def __init__(self, host, websocket):
         self.host = host
-        self.ws_url = websocket
         self.ses = requests.Session()
         self.uid = None
 
-    # =============================
-    # LOGIN
-    # =============================
     def login(self, userid, password, twoFA, vendor_code, api_secret, imei):
+
+        # 🔐 Password hashing (IMPORTANT)
+        pwd = hashlib.sha256(password.encode()).hexdigest()
+        appkey = hashlib.sha256((userid + "|" + api_secret).encode()).hexdigest()
+
         url = self.host + "QuickAuth"
-        data = {
+
+        payload = {
             "uid": userid,
-            "pwd": password,
+            "pwd": pwd,
             "factor2": twoFA,
             "vc": vendor_code,
-            "appkey": api_secret,
+            "appkey": appkey,
             "imei": imei
         }
 
-        res = self.ses.post(url, data=data)
+        res = self.ses.post(url, data=payload)
+
         try:
-            js = res.json()
-            if js.get("stat") == "Ok":
+            data = res.json()
+            if data.get("stat") == "Ok":
                 self.uid = userid
-            return js
+            return data
         except:
             return None
 
-    # =============================
-    # SEARCH SCRIP
-    # =============================
     def search_scrip(self, exchange, searchtext):
         url = self.host + "SearchScrip"
-        data = {
+        payload = {
             "uid": self.uid,
             "exch": exchange,
             "stext": searchtext
         }
-
-        res = self.ses.post(url, data=data)
+        res = self.ses.post(url, data=payload)
         try:
             return res.json()
         except:
             return None
 
-    # =============================
-    # GET QUOTES
-    # =============================
     def get_quotes(self, exch, token):
         url = self.host + "GetQuotes"
-        data = {
+        payload = {
             "uid": self.uid,
             "exch": exch,
             "token": token
         }
-
-        res = self.ses.post(url, data=data)
+        res = self.ses.post(url, data=payload)
         try:
             return res.json()
         except:
