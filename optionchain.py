@@ -34,8 +34,8 @@ if "api" not in st.session_state:
 with st.sidebar:
     st.header("🔐 Shoonya Login")
 
-    user_id = st.text_input("User ID", value=st.secrets["shoonya"]["user_id"])
-    password = st.text_input("Password", type="password", value=st.secrets["shoonya"]["password"])
+    user_id = st.text_input("User ID", value=st.secrets["shoony"]["user_id"])
+    password = st.text_input("Password", type="password", value=st.secrets["shoony"]["password"])
     totp = st.text_input("TOTP (6-digit OTP)")
 
     index = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
@@ -52,12 +52,14 @@ if login_btn:
             userid=user_id,
             password=password,
             twoFA=totp,   # current OTP from authenticator app
-            vendor_code=st.secrets["shoonya"]["vendor_code"],
-            api_secret=st.secrets["shoonya"]["api_secret"],
-            imei=st.secrets["shoonya"]["imei"]
+            vendor_code=st.secrets["shoony"]["vendor_code"],
+            api_secret=st.secrets["shoony"]["api_secret"],
+            imei=st.secrets["shoony"]["imei"]
         )
 
-        if ret and ret.get("stat") == "Ok":
+        if not ret:
+            st.error("❌ Empty response from Shoonya API. Check secrets spelling, OTP validity, IMEI.")
+        elif ret.get("stat") == "Ok":
             st.success(f"✅ Welcome {ret.get('uname')}")
             st.session_state.login = True
             st.session_state.api = api
