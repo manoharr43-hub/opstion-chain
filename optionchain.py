@@ -1,59 +1,147 @@
 import streamlit as st
 import pandas as pd
 from NorenRestApiPy.NorenApi import NorenApi
+import time
 
+# =============================
+# API CLASS
+# =============================
 class ShoonyaApiPy(NorenApi):
     def __init__(self):
-        NorenApi.__init__(self, host='https://api.shoonya.com/NorenWSTP/', 
-                         websocket='wss://api.shoonya.com/NorenWSTP/')
+        super().__init__(
+            host='https://api.shoonya.com/NorenWSTP/',
+            websocket='wss://api.shoonya.com/NorenWSTP/'
+        )
 
+# =============================
+# CONFIG
+# =============================
 st.set_page_config(page_title="NSE PRO TERMINAL", layout="wide")
-st.title("📊 Shoonya Live Option Chain - PRO")
+st.title("🚀 Shoonya LIVE OPTION CHAIN PRO")
 
-# --- మీ వివరాలు ఇక్కడ ఫిక్స్ చేస్తున్నాను ---
-MY_USER_ID = "FA189165"
-MY_VENDOR_CODE = "FA189165_U"
-MY_API_KEY = "fHYIfEf8A3CHQGONHONKb2XyGjnl7nLDfQbm2AEkylAy2cf9QdAAgeODl9YB6myN"
-MY_IMEI = "106.222.234.124"
+# =============================
+# SESSION STATE
+# =============================
+if "login" not in st.session_state:
+    st.session_state.login = False
 
+if "api" not in st.session_state:
+    st.session_state.api = None
+
+# =============================
+# SIDEBAR LOGIN
+# =============================
 with st.sidebar:
-    st.header("Shoonya Login")
-    u_pwd  = st.text_input("Password", type="password")
-    u_totp = st.text_input("TOTP (6 Digits)")
-    
-    st.divider()
-    target_idx = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
-    login_btn = st.button("🚀 Login & Load Dashboard")
+    st.header("🔐 Shoonya Login")
 
+    user_id = st.text_input("User ID")
+    password = st.text_input("Password", type="password")
+    totp = st.text_input("TOTP")
+
+    index = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
+    login_btn = st.button("🚀 Login")
+
+# =============================
+# LOGIN
+# =============================
 if login_btn:
     try:
         api = ShoonyaApiPy()
-        # నేరుగా పైన ఉన్న వివరాలతో లాగిన్ అవుతుంది
-        res = api.login(userid=MY_USER_ID, 
-                       password=u_pwd, 
-                       twoFA=u_totp, 
-                       vendor_code=MY_VENDOR_CODE, 
-                       api_secret=MY_API_KEY, 
-                       imei=MY_IMEI)
-        
-        if res and res.get('stat') == 'Ok':
-            st.success(f"Success! Welcome {res.get('fname')}")
-            
-            # 1. Fetch Spot Price
-            idx_token = '26000' if target_idx == 'NIFTY' else '26009'
-            quote = api.get_quotes(exch='NSE', token=idx_token)
-            spot = float(quote['lp'])
-            st.metric(f"{target_idx} Spot Price", f"₹{spot}")
 
-            # 2. Fetch Option Chain
-            st.subheader(f"Option Chain: {target_idx}")
-            search_res = api.search_scrip(exch='NFO', searchtext=target_idx)
-            if search_res and 'values' in search_res:
-                df = pd.DataFrame(search_res['values'])
-                st.dataframe(df[['tsym', 'instname', 'expiry', 'token']], use_container_width=True)
+        ret = api.login(
+            userid=user_id,
+            password=password,
+            twoFA=totp,
+            vendor_code=user_id + "_U",
+            api_secret=st.secrets["shoonya"]["api_key"],
+            imei="abc123"
+        )
+
+        if ret and ret.get("stat") == "Ok":
+            st.success(f"✅ Welcome {ret.get('uname')}")
+            st.session_state.login = True
+            st.session_state.api = api
         else:
-            # ఇక్కడ అసలు కారణం మెసేజ్ లో కనిపిస్తుంది
-            st.error(f"లాగిన్ కాలేదు: {res.get('emsg') if res else 'Server Busy'}")
-            
+            st.error(f"❌ Login Failed: {ret.get('emsg')}")
+
     except Exception as e:
-        st.error(f"Error: {str(e)}")
+        st.error(f"Error: {e}")
+
+# =============================
+# MAIN DASHBOARD
+# =============================
+if st.session_state.login:
+
+    api = st.session_state.api
+
+    # =============================
+    # GET SPOT
+    # =============================
+    token = "26000" if index == "NIFTY" else "26009"
+    quote = api.get_quotes(exch="NSE", token=token)
+
+    if not quote:
+        st.error("❌ Failed to fetch spot")
+        st.stop()
+
+    spot = float(quote["lp"])
+    st.metric(f"{index} Spot", f"₹{spot}")
+
+    # =============================
+    # STRIKE CALCULATION
+    # =============================
+    step = 50 if index == "NIFTY" else 100
+    atm = round(spot / step) * step
+
+    strikes = [atm + i * step for i in range(-5, 6)]
+
+    st.subheader("📊 Option Chain")
+
+    data = []
+
+    # =============================
+    # FETCH OPTION DATA
+    # =============================
+    for strike in strikes:
+        try:
+            ce_symbol = f"{index} {strike} CE"
+            pe_symbol = f"{index} {strike} PE"
+
+            ce = api.search_scrip(exchange="NFO", searchtext=ce_symbol)
+            pe = api.search_scrip(exchange="NFO", searchtext=pe_symbol)
+
+            ce_ltp = "-"
+            pe_ltp = "-"
+
+            if ce and "values" in ce:
+                token_ce = ce["values"][0]["token"]
+                q = api.get_quotes(exch="NFO", token=token_ce)
+                ce_ltp = q["lp"] if q else "-"
+
+            if pe and "values" in pe:
+                token_pe = pe["values"][0]["token"]
+                q = api.get_quotes(exch="NFO", token=token_pe)
+                pe_ltp = q["lp"] if q else "-"
+
+            data.append({
+                "Strike": strike,
+                "CE LTP": ce_ltp,
+                "PE LTP": pe_ltp
+            })
+
+        except:
+            pass
+
+    df = pd.DataFrame(data)
+
+    # =============================
+    # DISPLAY
+    # =============================
+    st.dataframe(df, use_container_width=True)
+
+    # =============================
+    # AUTO REFRESH
+    # =============================
+    st.caption("🔄 Auto Refresh every 10 sec")
+    time.sleep(10)
+    st.rerun()
