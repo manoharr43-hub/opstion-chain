@@ -1,125 +1,70 @@
 import streamlit as st
-import requests
 import pandas as pd
-import time
+from NorenRestApiPy.NorenApi import NorenApi
+import datetime
 
-# =============================
-# 1. PAGE CONFIG
-# =============================
-st.set_page_config(page_title="NSE Option Chain PRO", layout="wide")
-st.title("📊 NSE Option Chain Live (Stable Pro)")
+# --- SHOONYA API CLASS ---
+class ShoonyaApiPy(NorenApi):
+    def __init__(self):
+        NorenApi.__init__(self, host='https://api.shoonya.com/NorenWSTP/', 
+                         websocket='wss://api.shoonya.com/NorenWSTP/')
 
-# =============================
-# 2. SESSION MANAGEMENT
-# =============================
-@st.cache_resource
-def get_nse_session():
-    session = requests.Session()
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-    }
-    session.headers.update(headers)
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="Shoonya Pro Terminal", layout="wide")
+st.title("📊 Shoonya Live Option Chain")
+
+# --- SIDEBAR: LOGIN DETAILS ---
+with st.sidebar:
+    st.header("Shoonya Login")
+    u_id   = st.text_input("User ID", value="FA12345") # మీ User ID ఇవ్వండి
+    u_pwd  = st.text_input("Password", type="password")
+    u_totp = st.text_input("TOTP (From App)")
+    u_vc   = st.text_input("Vendor Code", value="FA12345_U")
+    u_key  = st.text_input("API Key")
+    u_imei = st.text_input("IMEI", value="abc12345")
+    
+    login_btn = st.button("🚀 Login & Fetch Data")
+
+# --- MAIN LOGIC ---
+if login_btn:
     try:
-        # NSE హోమ్ పేజీ విజిట్ చేసి కుకీలు సేకరించడం
-        session.get("https://www.nseindia.com", timeout=10)
-    except:
-        pass
-    return session
-
-# =============================
-# 3. FETCH DATA FUNCTION
-# =============================
-@st.cache_data(ttl=60)
-def fetch_option_chain(symbol):
-    session = get_nse_session()
-    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
-    
-    for _ in range(3):  # 3 సార్లు ప్రయత్నిస్తుంది
-        try:
-            response = session.get(url, timeout=15)
-            if response.status_code == 200:
-                return response.json()
-            time.sleep(1)
-        except:
-            continue
-    return None
-
-# =============================
-# 4. SIDEBAR SETTINGS
-# =============================
-st.sidebar.header("Control Panel")
-symbol = st.sidebar.selectbox("Select Index", ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"])
-load_btn = st.sidebar.button("📥 Load Option Chain")
-
-# =============================
-# 5. MAIN LOGIC
-# =============================
-if load_btn:
-    with st.spinner(f"Fetching {symbol} data..."):
-        data = fetch_option_chain(symbol)
-    
-    if data:
-        # Get Expiry Dates
-        expiries = data.get('records', {}).get('expiryDates', [])
-        selected_expiry = st.sidebar.selectbox("Select Expiry", expiries)
+        api = ShoonyaApiPy()
+        # Login Attempt
+        res = api.login(userid=u_id, password=u_pwd, twoFA=u_totp, 
+                       vendor_code=u_vc, api_secret=u_key, imei=u_imei)
         
-        # Filter Data for Selected Expiry
-        raw_data = data.get('records', {}).get('data', [])
-        filtered_data = [row for row in raw_data if row.get('expiryDate') == selected_expiry]
-        
-        rows = []
-        for item in filtered_data:
-            strike = item.get('strikePrice')
-            ce = item.get('CE', {})
-            pe = item.get('PE', {})
+        if res and res.get('stat') == 'Ok':
+            st.success(f"Welcome {res.get('fname')}! Connection Active.")
             
-            rows.append({
-                "Strike": strike,
-                "CE OI": ce.get('openInterest', 0),
-                "CE Chng OI": ce.get('changeinOpenInterest', 0),
-                "CE LTP": ce.get('lastPrice', 0),
-                "PE LTP": pe.get('lastPrice', 0),
-                "PE Chng OI": pe.get('changeinOpenInterest', 0),
-                "PE OI": pe.get('openInterest', 0),
-            })
-        
-        df = pd.DataFrame(rows)
+            # Index Selection
+            idx = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
+            exch = 'NSE' if idx == 'NIFTY' else 'NSE' # Standard NSE
+            
+            with st.spinner("Fetching Live Option Chain..."):
+                # 1. Get Index Quote for ATM price
+                quote = api.get_quotes(exch='NSE', token='26000' if idx == 'NIFTY' else '26009')
+                lp = float(quote['lp'])
+                st.metric(f"{idx} Spot Price", f"₹{lp}")
 
-        if not df.empty:
-            # --- Metrics ---
-            total_ce_oi = df['CE OI'].sum()
-            total_pe_oi = df['PE OI'].sum()
-            pcr = round(total_pe_oi / total_ce_oi, 2) if total_ce_oi > 0 else 0
-            
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Total CE OI", f"{total_ce_oi:,}")
-            m2.metric("Total PE OI", f"{total_pe_oi:,}")
-            m3.metric("Market PCR", pcr, delta="Bullish" if pcr > 1 else "Bearish")
-
-            # --- Data Table ---
-            st.subheader(f"{symbol} Data for {selected_expiry}")
-            
-            # Highlight Strikes near ATM (వినోదం కోసం కలర్ గ్రేడియంట్)
-            styled_df = df.style.background_gradient(subset=['CE OI', 'PE OI'], cmap='Greens')
-            st.dataframe(styled_df, use_container_width=True, height=500)
-            
-            # --- Support & Resistance ---
-            st.divider()
-            col_s, col_r = st.columns(2)
-            try:
-                max_ce_strike = df.loc[df['CE OI'].idxmax(), 'Strike']
-                max_pe_strike = df.loc[df['PE OI'].idxmax(), 'Strike']
-                col_r.error(f"🚀 Resistance (Max CE OI): {max_ce_strike}")
-                col_s.success(f"⚓ Support (Max PE OI): {max_pe_strike}")
-            except:
-                pass
+                # 2. Search Option Chain (Simplified Example)
+                # గమనిక: Shoonya లో ఆప్షన్ చైన్ కోసం స్క్రిప్ట్స్ సెర్చ్ చేయాలి
+                search_res = api.search_scrip(exch='NFO', searchtext=idx)
+                
+                if search_res:
+                    df = pd.DataFrame(search_res['values'])
+                    # Filter for latest expiry
+                    st.subheader(f"Live Strikes for {idx}")
+                    st.dataframe(df[['tsym', 'instname', 'token']], use_container_width=True)
+                else:
+                    st.warning("No option strikes found. Check API permissions.")
         else:
-            st.warning("No data found for the selected expiry.")
-    else:
-        st.error("NSE సర్వర్ నుండి డేటా రావడం లేదు. కాసేపు ఆగి మళ్ళీ ప్రయత్నించండి (లేదా లోకల్ కంప్యూటర్ లో రన్ చేయండి).")
-else:
-    st.info("పైన ఉన్న 'Load Option Chain' బటన్ నొక్కి డేటాను చూడండి.")
+            st.error(f"Login Failed: {res.get('emsg') if res else 'Unknown Error'}")
+            
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
 
-st.caption("Note: NSE API data is updated every 3-5 minutes.")
+else:
+    st.info("👈 ఎడమవైపు మీ Shoonya వివరాలు ఎంటర్ చేసి 'Login' నొక్కండి.")
+
+st.divider()
+st.caption("Developed for Manohar - Variety Motors | Shoonya API Mode")
