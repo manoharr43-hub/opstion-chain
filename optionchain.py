@@ -1,170 +1,65 @@
 import streamlit as st
 import pandas as pd
+import requests
 import time
-from NorenRestApiPy.NorenApi import NorenApi
-
-# =============================
-# API CLASS
-# =============================
-class ShoonyaApiPy(NorenApi):
-    def __init__(self):
-        super().__init__(
-            host='https://api.shoonya.com/NorenWClientTP/',
-            websocket='wss://api.shoonya.com/NorenWSTP/'
-        )
 
 # =============================
 # CONFIG
 # =============================
-st.set_page_config(page_title="Shoonya Option Chain PRO", layout="wide")
-st.title("🚀 Shoonya LIVE OPTION CHAIN")
+st.set_page_config(page_title="NSE Option Chain", layout="wide")
+st.title("📊 NSE Option Chain (FREE DATA)")
 
 # =============================
-# SESSION STATE
+# FETCH NSE DATA
 # =============================
-if "login" not in st.session_state:
-    st.session_state.login = False
-if "api" not in st.session_state:
-    st.session_state.api = None
+@st.cache_data(ttl=30)
+def get_data():
+    url = "https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY"
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
 
-# =============================
-# SIDEBAR LOGIN
-# =============================
-with st.sidebar:
-    st.header("🔐 Shoonya Login")
+    session = requests.Session()
+    session.get("https://www.nseindia.com", headers=headers)
+    res = session.get(url, headers=headers)
 
-    user_id = st.text_input("User ID", value=st.secrets["shoony"]["user_id"])
-    password = st.text_input("Password", type="password", value=st.secrets["shoony"]["password"])
-    totp = st.text_input("TOTP (6-digit OTP)")
-
-    index = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
-    login_btn = st.button("🚀 Login")
+    return res.json()
 
 # =============================
-# LOGIN
+# MAIN
 # =============================
-if login_btn:
-    try:
-        api = ShoonyaApiPy()
+try:
+    data = get_data()
 
-        ret = api.login(
-            userid=user_id,
-            password=password,
-            twoFA=totp,
-            vendor_code=st.secrets["shoony"]["vendor_code"],
-            api_secret=st.secrets["shoony"]["api_secret"],
-            imei=st.secrets["shoony"]["imei"]
-        )
+    records = data["records"]["data"]
+    spot = data["records"]["underlyingValue"]
 
-        st.write("🔍 Login Response:", ret)  # DEBUG
+    st.metric("NIFTY Spot", f"₹{spot}")
 
-        if ret and ret.get("stat") == "Ok":
-            st.success(f"✅ Welcome {ret.get('uname')}")
-            st.session_state.login = True
-            st.session_state.api = api
-        else:
-            st.error("❌ Login Failed")
+    rows = []
 
-    except Exception as e:
-        st.error(f"Error: {e}")
+    for item in records[:20]:
 
-# =============================
-# CACHE TOKENS
-# =============================
-@st.cache_data(ttl=3600)
-def get_tokens(api, index, strikes):
-    tokens = []
-    for strike in strikes:
-        try:
-            ce = api.searchscrip("NFO", f"{index} {strike} CE")
-            pe = api.searchscrip("NFO", f"{index} {strike} PE")
+        strike = item.get("strikePrice")
 
-            token_ce = ce["values"][0]["token"] if ce and "values" in ce else None
-            token_pe = pe["values"][0]["token"] if pe and "values" in pe else None
+        ce = item.get("CE", {})
+        pe = item.get("PE", {})
 
-            tokens.append((strike, token_ce, token_pe))
-        except:
-            tokens.append((strike, None, None))
+        rows.append({
+            "Strike": strike,
+            "CE LTP": ce.get("lastPrice", "-"),
+            "PE LTP": pe.get("lastPrice", "-"),
+            "CE OI": ce.get("openInterest", "-"),
+            "PE OI": pe.get("openInterest", "-")
+        })
 
-    return tokens
+    df = pd.DataFrame(rows)
 
-# =============================
-# MAIN DASHBOARD
-# =============================
-if st.session_state.login:
+    st.dataframe(df, use_container_width=True)
 
-    api = st.session_state.api
+    st.caption("🔄 Auto refresh 10 sec")
+    time.sleep(10)
+    st.rerun()
 
-    try:
-        # =============================
-        # SPOT PRICE
-        # =============================
-        token = "26000" if index == "NIFTY" else "26009"
-        quote = api.get_quotes("NSE", token)
-
-        if not quote:
-            st.error("❌ Spot fetch failed")
-            st.stop()
-
-        spot = float(quote["lp"])
-        st.metric(f"{index} Spot", f"₹{spot}")
-
-        # =============================
-        # STRIKES
-        # =============================
-        step = 50 if index == "NIFTY" else 100
-        atm = round(spot / step) * step
-        strikes = [atm + i * step for i in range(-5, 6)]
-
-        st.subheader("📊 Option Chain")
-
-        tokens_data = get_tokens(api, index, strikes)
-
-        rows = []
-
-        # =============================
-        # FETCH DATA
-        # =============================
-        for strike, tce, tpe in tokens_data:
-
-            ce_ltp = "-"
-            pe_ltp = "-"
-
-            try:
-                if tce:
-                    q = api.get_quotes("NFO", tce)
-                    ce_ltp = q["lp"] if q else "-"
-
-                if tpe:
-                    q = api.get_quotes("NFO", tpe)
-                    pe_ltp = q["lp"] if q else "-"
-            except:
-                pass
-
-            rows.append({
-                "Strike": strike,
-                "CE LTP": ce_ltp,
-                "PE LTP": pe_ltp
-            })
-
-        df = pd.DataFrame(rows)
-
-        # =============================
-        # ATM Highlight
-        # =============================
-        def highlight(row):
-            if row["Strike"] == atm:
-                return ['background-color: yellow'] * 3
-            return [''] * 3
-
-        st.dataframe(df.style.apply(highlight, axis=1), use_container_width=True)
-
-        # =============================
-        # AUTO REFRESH
-        # =============================
-        st.caption("🔄 Auto Refresh every 10 sec")
-        time.sleep(10)
-        st.rerun()
-
-    except Exception as e:
-        st.error(f"Runtime Error: {e}")
+except Exception as e:
+    st.error(f"Error: {e}")
