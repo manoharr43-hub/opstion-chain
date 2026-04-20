@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
-from NorenRestApiPy.NorenApi import NorenApi
 import time
+from NorenRestApiPy.NorenApi import NorenApi
 
 # =============================
 # API CLASS
@@ -34,9 +34,9 @@ if "api" not in st.session_state:
 with st.sidebar:
     st.header("🔐 Shoonya Login")
 
-    user_id = st.text_input("User ID")
-    password = st.text_input("Password", type="password")
-    totp = st.text_input("TOTP")
+    user_id = st.text_input("User ID", value=st.secrets["shoonya"]["user_id"])
+    password = st.text_input("Password", type="password", value=st.secrets["shoonya"]["password"])
+    totp = st.text_input("TOTP (6-digit OTP)")
 
     index = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
     login_btn = st.button("🚀 Login")
@@ -51,10 +51,10 @@ if login_btn:
         ret = api.login(
             userid=user_id,
             password=password,
-            twoFA=totp,
-            vendor_code=user_id + "_U",
-            api_secret=st.secrets["shoonya"]["api_key"],
-            imei="abc123"
+            twoFA=totp,   # current OTP from authenticator app
+            vendor_code=st.secrets["shoonya"]["vendor_code"],
+            api_secret=st.secrets["shoonya"]["api_secret"],
+            imei=st.secrets["shoonya"]["imei"]
         )
 
         if ret and ret.get("stat") == "Ok":
@@ -129,8 +129,8 @@ if st.session_state.login:
                 "PE LTP": pe_ltp
             })
 
-        except:
-            pass
+        except Exception as e:
+            st.warning(f"⚠️ Error fetching {strike}: {e}")
 
     df = pd.DataFrame(data)
 
