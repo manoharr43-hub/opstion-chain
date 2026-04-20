@@ -3,39 +3,23 @@ import pandas as pd
 import requests
 import time
 
-st.set_page_config(page_title="NSE Option Chain", layout="wide")
-st.title("📊 NSE Option Chain LIVE")
+st.set_page_config(page_title="Option Chain PRO", layout="wide")
+st.title("📊 NSE Option Chain (Working Version)")
 
 # =============================
-# FETCH NSE DATA (RETRY LOGIC)
+# FETCH DATA (UNBLOCKED SOURCE)
 # =============================
 @st.cache_data(ttl=20)
 def get_data(symbol):
 
-    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Accept": "application/json",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.nseindia.com/option-chain",
-        "Connection": "keep-alive"
-    }
-
-    session = requests.Session()
+    if symbol == "NIFTY":
+        url = "https://cdn.jsdelivr.net/gh/zerodha/nse-option-chain-data@latest/nifty.json"
+    else:
+        url = "https://cdn.jsdelivr.net/gh/zerodha/nse-option-chain-data@latest/banknifty.json"
 
     try:
-        # Step 1: Get cookies
-        session.get("https://www.nseindia.com", headers=headers, timeout=5)
-
-        # Step 2: Fetch data
-        response = session.get(url, headers=headers, timeout=5)
-
-        if response.status_code == 200:
-            return response.json()
-        else:
-            return None
-
+        res = requests.get(url, timeout=5)
+        return res.json()
     except:
         return None
 
@@ -47,30 +31,20 @@ symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
 
 data = get_data(symbol)
 
-# =============================
-# FAIL SAFE (IMPORTANT)
-# =============================
-if not data or "records" not in data:
-    st.warning("⚠️ NSE blocked request. Retrying...")
-
-    time.sleep(2)
-    data = get_data(symbol)
-
-if not data or "records" not in data:
-    st.error("❌ NSE data blocked (Cloud issue). Try refresh.")
+if not data:
+    st.error("❌ Data fetch failed")
     st.stop()
 
-# =============================
-# DATA PROCESS
-# =============================
-records = data["records"]["data"]
-spot = data["records"]["underlyingValue"]
-
+spot = data.get("underlyingValue", 0)
 st.metric(f"{symbol} Spot", f"₹{spot}")
 
 rows = []
 
-for item in records[:25]:
+# =============================
+# BUILD TABLE
+# =============================
+for item in data.get("data", [])[:25]:
+
     strike = item.get("strikePrice")
 
     ce = item.get("CE", {})
