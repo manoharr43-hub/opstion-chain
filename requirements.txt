@@ -1,4 +1,4 @@
-NorenRestApi
+NorenRestApiPy
 pyotp
 pandas
-requests
+streamlit
