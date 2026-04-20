@@ -4,24 +4,38 @@ import requests
 import time
 
 st.set_page_config(page_title="Option Chain PRO", layout="wide")
-st.title("📊 NSE Option Chain (Working Version)")
+st.title("📊 Option Chain (Stable Version)")
 
 # =============================
-# FETCH DATA (UNBLOCKED SOURCE)
+# MULTI SOURCE FETCH
 # =============================
-@st.cache_data(ttl=20)
-def get_data(symbol):
+def fetch_data(symbol):
 
-    if symbol == "NIFTY":
-        url = "https://cdn.jsdelivr.net/gh/zerodha/nse-option-chain-data@latest/nifty.json"
-    else:
-        url = "https://cdn.jsdelivr.net/gh/zerodha/nse-option-chain-data@latest/banknifty.json"
+    urls = [
+        # Source 1
+        f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}",
 
-    try:
-        res = requests.get(url, timeout=5)
-        return res.json()
-    except:
-        return None
+        # Source 2 (backup)
+        f"https://query1.finance.yahoo.com/v7/finance/options/{'^NSEI' if symbol=='NIFTY' else '^NSEBANK'}"
+    ]
+
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
+
+    for url in urls:
+        try:
+            session = requests.Session()
+            session.get("https://www.google.com", headers=headers)
+
+            res = session.get(url, headers=headers, timeout=5)
+
+            if res.status_code == 200:
+                return res.json()
+        except:
+            continue
+
+    return None
 
 
 # =============================
@@ -29,42 +43,61 @@ def get_data(symbol):
 # =============================
 symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
 
-data = get_data(symbol)
+data = fetch_data(symbol)
 
 if not data:
-    st.error("❌ Data fetch failed")
+    st.error("❌ All data sources failed (Cloud restriction)")
     st.stop()
-
-spot = data.get("underlyingValue", 0)
-st.metric(f"{symbol} Spot", f"₹{spot}")
 
 rows = []
 
 # =============================
-# BUILD TABLE
+# TRY NSE FORMAT
 # =============================
-for item in data.get("data", [])[:25]:
+try:
+    records = data["records"]["data"]
+    spot = data["records"]["underlyingValue"]
 
-    strike = item.get("strikePrice")
+    for item in records[:20]:
+        rows.append({
+            "Strike": item.get("strikePrice"),
+            "CE LTP": item.get("CE", {}).get("lastPrice", "-"),
+            "PE LTP": item.get("PE", {}).get("lastPrice", "-"),
+        })
 
-    ce = item.get("CE", {})
-    pe = item.get("PE", {})
+except:
+    # =============================
+    # TRY YAHOO FORMAT
+    # =============================
+    try:
+        result = data["optionChain"]["result"][0]
+        spot = result["quote"]["regularMarketPrice"]
 
-    rows.append({
-        "Strike": strike,
-        "CE LTP": ce.get("lastPrice", "-"),
-        "PE LTP": pe.get("lastPrice", "-"),
-        "CE OI": ce.get("openInterest", "-"),
-        "PE OI": pe.get("openInterest", "-")
-    })
+        calls = result["options"][0]["calls"]
+        puts = result["options"][0]["puts"]
+
+        for i in range(min(len(calls), 20)):
+            rows.append({
+                "Strike": calls[i]["strike"],
+                "CE LTP": calls[i]["lastPrice"],
+                "PE LTP": puts[i]["lastPrice"]
+            })
+
+    except:
+        st.error("❌ Data parse failed")
+        st.stop()
+
+# =============================
+# DISPLAY
+# =============================
+st.metric(f"{symbol} Spot", f"₹{spot}")
 
 df = pd.DataFrame(rows)
-
 st.dataframe(df, use_container_width=True)
 
 # =============================
 # AUTO REFRESH
 # =============================
-st.caption("🔄 Auto refresh every 10 sec")
-time.sleep(10)
+st.caption("🔄 Auto refresh every 15 sec")
+time.sleep(15)
 st.rerun()
