@@ -140,3 +140,4 @@ if st.session_state.login:
     st.caption("🔄 Refresh every 10 sec")
     time.sleep(10)
     st.rerun()
+from NorenApi import NorenApi
