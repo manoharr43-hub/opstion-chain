@@ -7,29 +7,35 @@ st.set_page_config(page_title="NSE Option Chain", layout="wide")
 st.title("📊 NSE Option Chain LIVE")
 
 # =============================
-# FETCH DATA
+# FETCH NSE DATA (RETRY LOGIC)
 # =============================
-@st.cache_data(ttl=30)
-def get_data(symbol="NIFTY"):
+@st.cache_data(ttl=20)
+def get_data(symbol):
 
     url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
 
     headers = {
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Accept": "application/json",
-        "Referer": "https://www.nseindia.com/option-chain"
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.nseindia.com/option-chain",
+        "Connection": "keep-alive"
     }
 
     session = requests.Session()
 
-    # IMPORTANT: first hit homepage to get cookies
-    session.get("https://www.nseindia.com", headers=headers)
-
-    res = session.get(url, headers=headers)
-
     try:
-        data = res.json()
-        return data
+        # Step 1: Get cookies
+        session.get("https://www.nseindia.com", headers=headers, timeout=5)
+
+        # Step 2: Fetch data
+        response = session.get(url, headers=headers, timeout=5)
+
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return None
+
     except:
         return None
 
@@ -41,10 +47,22 @@ symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
 
 data = get_data(symbol)
 
+# =============================
+# FAIL SAFE (IMPORTANT)
+# =============================
 if not data or "records" not in data:
-    st.error("❌ NSE data fetch failed. Try again.")
+    st.warning("⚠️ NSE blocked request. Retrying...")
+
+    time.sleep(2)
+    data = get_data(symbol)
+
+if not data or "records" not in data:
+    st.error("❌ NSE data blocked (Cloud issue). Try refresh.")
     st.stop()
 
+# =============================
+# DATA PROCESS
+# =============================
 records = data["records"]["data"]
 spot = data["records"]["underlyingValue"]
 
@@ -52,11 +70,7 @@ st.metric(f"{symbol} Spot", f"₹{spot}")
 
 rows = []
 
-# =============================
-# BUILD TABLE
-# =============================
 for item in records[:25]:
-
     strike = item.get("strikePrice")
 
     ce = item.get("CE", {})
