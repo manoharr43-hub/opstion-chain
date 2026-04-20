@@ -24,7 +24,6 @@ st.title("🚀 Shoonya LIVE OPTION CHAIN PRO")
 # =============================
 if "login" not in st.session_state:
     st.session_state.login = False
-
 if "api" not in st.session_state:
     st.session_state.api = None
 
@@ -47,11 +46,10 @@ with st.sidebar:
 if login_btn:
     try:
         api = ShoonyaApiPy()
-
         ret = api.login(
             userid=user_id,
             password=password,
-            twoFA=totp,   # current OTP from authenticator app
+            twoFA=totp,
             vendor_code=st.secrets["shoony"]["vendor_code"],
             api_secret=st.secrets["shoony"]["api_secret"],
             imei=st.secrets["shoony"]["imei"]
@@ -65,7 +63,6 @@ if login_btn:
             st.session_state.api = api
         else:
             st.error(f"❌ Login Failed: {ret.get('emsg')}")
-
     except Exception as e:
         st.error(f"Error: {e}")
 
@@ -73,7 +70,6 @@ if login_btn:
 # MAIN DASHBOARD
 # =============================
 if st.session_state.login:
-
     api = st.session_state.api
 
     # =============================
@@ -94,11 +90,9 @@ if st.session_state.login:
     # =============================
     step = 50 if index == "NIFTY" else 100
     atm = round(spot / step) * step
-
     strikes = [atm + i * step for i in range(-5, 6)]
 
     st.subheader("📊 Option Chain")
-
     data = []
 
     # =============================
