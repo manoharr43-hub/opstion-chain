@@ -1,5 +1,6 @@
 import requests
 import hashlib
+import json
 
 class NorenApi:
     def __init__(self, host, websocket=None):
@@ -7,6 +8,16 @@ class NorenApi:
         self.session = requests.Session()
         self.uid = None
 
+        # ✅ IMPORTANT HEADERS (without this login fails)
+        self.session.headers.update({
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded"
+        })
+
+    # =============================
+    # LOGIN
+    # =============================
     def login(self, userid, password, twoFA, vendor_code, api_secret, imei):
 
         pwd = hashlib.sha256(password.encode()).hexdigest()
@@ -25,6 +36,8 @@ class NorenApi:
 
         res = self.session.post(url, data=payload)
 
+        print("RAW RESPONSE:", res.text)  # 🔥 DEBUG
+
         try:
             data = res.json()
             if data.get("stat") == "Ok":
@@ -33,6 +46,9 @@ class NorenApi:
         except:
             return None
 
+    # =============================
+    # SEARCH
+    # =============================
     def search_scrip(self, exch, text):
         url = self.host + "SearchScrip"
         payload = {
@@ -42,6 +58,9 @@ class NorenApi:
         }
         return self.session.post(url, data=payload).json()
 
+    # =============================
+    # QUOTES
+    # =============================
     def get_quotes(self, exch, token):
         url = self.host + "GetQuotes"
         payload = {
