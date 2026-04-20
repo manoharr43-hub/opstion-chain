@@ -1,4 +1,4 @@
-NorenRestApiPy==0.0.21
+NorenRestApi
 pyotp
 pandas
 requests
