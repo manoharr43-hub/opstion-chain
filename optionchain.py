@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import time
-from NorenApi import NorenApi
+from NorenRestApiPy.NorenApi import NorenApi
 
 # =============================
 # API CLASS
@@ -9,7 +9,7 @@ from NorenApi import NorenApi
 class ShoonyaApiPy(NorenApi):
     def __init__(self):
         super().__init__(
-            host='https://api.shoonya.com/NorenWClientTP/',   # ✅ correct
+            host='https://api.shoonya.com/NorenWClientTP/',
             websocket='wss://api.shoonya.com/NorenWSTP/'
         )
 
@@ -31,14 +31,14 @@ if "api" not in st.session_state:
 # SIDEBAR LOGIN
 # =============================
 with st.sidebar:
-    st.header("🔐 Login")
+    st.header("🔐 Shoonya Login")
 
     user_id = st.text_input("User ID", value=st.secrets["shoony"]["user_id"])
     password = st.text_input("Password", type="password", value=st.secrets["shoony"]["password"])
     totp = st.text_input("TOTP (6-digit OTP)")
 
     index = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
-    login_btn = st.button("Login")
+    login_btn = st.button("🚀 Login")
 
 # =============================
 # LOGIN
@@ -56,14 +56,14 @@ if login_btn:
             imei=st.secrets["shoony"]["imei"]
         )
 
-        st.write("🔍 Login Response:", ret)   # ✅ DEBUG
+        st.write("🔍 Login Response:", ret)  # DEBUG
 
         if ret and ret.get("stat") == "Ok":
             st.success(f"✅ Welcome {ret.get('uname')}")
             st.session_state.login = True
             st.session_state.api = api
         else:
-            st.error(f"❌ Login Failed")
+            st.error("❌ Login Failed")
 
     except Exception as e:
         st.error(f"Error: {e}")
@@ -73,20 +73,20 @@ if login_btn:
 # =============================
 @st.cache_data(ttl=3600)
 def get_tokens(api, index, strikes):
-    result = []
+    tokens = []
     for strike in strikes:
         try:
-            ce = api.search_scrip("NFO", f"{index} {strike} CE")
-            pe = api.search_scrip("NFO", f"{index} {strike} PE")
+            ce = api.searchscrip("NFO", f"{index} {strike} CE")
+            pe = api.searchscrip("NFO", f"{index} {strike} PE")
 
             token_ce = ce["values"][0]["token"] if ce and "values" in ce else None
             token_pe = pe["values"][0]["token"] if pe and "values" in pe else None
 
-            result.append((strike, token_ce, token_pe))
+            tokens.append((strike, token_ce, token_pe))
         except:
-            result.append((strike, None, None))
+            tokens.append((strike, None, None))
 
-    return result
+    return tokens
 
 # =============================
 # MAIN DASHBOARD
@@ -97,7 +97,7 @@ if st.session_state.login:
 
     try:
         # =============================
-        # GET SPOT
+        # SPOT PRICE
         # =============================
         token = "26000" if index == "NIFTY" else "26009"
         quote = api.get_quotes("NSE", token)
@@ -118,14 +118,14 @@ if st.session_state.login:
 
         st.subheader("📊 Option Chain")
 
-        tokens = get_tokens(api, index, strikes)
+        tokens_data = get_tokens(api, index, strikes)
 
         rows = []
 
         # =============================
         # FETCH DATA
         # =============================
-        for strike, tce, tpe in tokens:
+        for strike, tce, tpe in tokens_data:
 
             ce_ltp = "-"
             pe_ltp = "-"
@@ -150,7 +150,7 @@ if st.session_state.login:
         df = pd.DataFrame(rows)
 
         # =============================
-        # ATM HIGHLIGHT
+        # ATM Highlight
         # =============================
         def highlight(row):
             if row["Strike"] == atm:
@@ -162,7 +162,7 @@ if st.session_state.login:
         # =============================
         # AUTO REFRESH
         # =============================
-        st.caption("🔄 Auto refresh every 10 sec")
+        st.caption("🔄 Auto Refresh every 10 sec")
         time.sleep(10)
         st.rerun()
 
