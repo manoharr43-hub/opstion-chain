@@ -3,63 +3,80 @@ import pandas as pd
 import requests
 import time
 
-# =============================
-# CONFIG
-# =============================
 st.set_page_config(page_title="NSE Option Chain", layout="wide")
-st.title("📊 NSE Option Chain (FREE DATA)")
+st.title("📊 NSE Option Chain LIVE")
 
 # =============================
-# FETCH NSE DATA
+# FETCH DATA
 # =============================
 @st.cache_data(ttl=30)
-def get_data():
-    url = "https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY"
+def get_data(symbol="NIFTY"):
+
+    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+
     headers = {
-        "User-Agent": "Mozilla/5.0"
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+        "Referer": "https://www.nseindia.com/option-chain"
     }
 
     session = requests.Session()
+
+    # IMPORTANT: first hit homepage to get cookies
     session.get("https://www.nseindia.com", headers=headers)
+
     res = session.get(url, headers=headers)
 
-    return res.json()
+    try:
+        data = res.json()
+        return data
+    except:
+        return None
+
 
 # =============================
-# MAIN
+# UI
 # =============================
-try:
-    data = get_data()
+symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
 
-    records = data["records"]["data"]
-    spot = data["records"]["underlyingValue"]
+data = get_data(symbol)
 
-    st.metric("NIFTY Spot", f"₹{spot}")
+if not data or "records" not in data:
+    st.error("❌ NSE data fetch failed. Try again.")
+    st.stop()
 
-    rows = []
+records = data["records"]["data"]
+spot = data["records"]["underlyingValue"]
 
-    for item in records[:20]:
+st.metric(f"{symbol} Spot", f"₹{spot}")
 
-        strike = item.get("strikePrice")
+rows = []
 
-        ce = item.get("CE", {})
-        pe = item.get("PE", {})
+# =============================
+# BUILD TABLE
+# =============================
+for item in records[:25]:
 
-        rows.append({
-            "Strike": strike,
-            "CE LTP": ce.get("lastPrice", "-"),
-            "PE LTP": pe.get("lastPrice", "-"),
-            "CE OI": ce.get("openInterest", "-"),
-            "PE OI": pe.get("openInterest", "-")
-        })
+    strike = item.get("strikePrice")
 
-    df = pd.DataFrame(rows)
+    ce = item.get("CE", {})
+    pe = item.get("PE", {})
 
-    st.dataframe(df, use_container_width=True)
+    rows.append({
+        "Strike": strike,
+        "CE LTP": ce.get("lastPrice", "-"),
+        "PE LTP": pe.get("lastPrice", "-"),
+        "CE OI": ce.get("openInterest", "-"),
+        "PE OI": pe.get("openInterest", "-")
+    })
 
-    st.caption("🔄 Auto refresh 10 sec")
-    time.sleep(10)
-    st.rerun()
+df = pd.DataFrame(rows)
 
-except Exception as e:
-    st.error(f"Error: {e}")
+st.dataframe(df, use_container_width=True)
+
+# =============================
+# AUTO REFRESH
+# =============================
+st.caption("🔄 Auto refresh every 10 sec")
+time.sleep(10)
+st.rerun()
