@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 
 # --- UI Layout ---
-st.set_page_config(page_title="NSE AI PRO - Individual View", layout="wide")
+st.set_page_config(page_title="NSE AI PRO - Individual Analyzer", layout="wide")
 st.title("🚀 NSE AI PRO - Individual Analyzer")
 
 uploaded_file = st.file_uploader("NSE CSV ఫైల్‌ను ఇక్కడ అప్‌లోడ్ చేయండి", type="csv")
@@ -17,46 +17,47 @@ if uploaded_file is not None:
         # Strike Price కాలమ్ ని గుర్తించడం
         strike_col = [col for col in df.columns if 'STRIKE' in col.upper()][0]
         
-        # డేటాను నంబర్స్ లోకి మార్చడం (Cleaning)
+        # డేటాను నంబర్స్ లోకి మార్చడం (Cleaning Logic)
         def clean_data(val):
             if isinstance(val, str):
                 val = val.replace(',', '').replace('-', '0')
             try:
-                return pd.to_numeric(val)
+                num = pd.to_numeric(val)
+                return num
             except:
                 return 0
 
-        df = df.applymap(clean_data)
+        # ఇక్కడ 'applymap' బదులు 'map' వాడుతున్నాను (కొత్త Pandas వెర్షన్ కోసం)
+        df = df.map(clean_data)
 
-        # మధ్యలో ఉండే Strike Price కి ఇటు అటు డేటాను విడదీయడం
+        # Strike Price ఆధారంగా డేటాను విడదీయడం
         strike_idx = df.columns.get_loc(strike_col)
         ce_df = df.iloc[:, :strike_idx]
         pe_df = df.iloc[:, strike_idx+1:]
 
-        # --- మార్కెట్ ట్రెండ్ అనాలిసిస్ ---
-        # సాధారణంగా 2వ కాలమ్ OI ఉంటుంది
+        # --- మార్కెట్ అనాలిసిస్ ---
         total_ce_oi = ce_df.iloc[:, 1].sum() 
         total_pe_oi = pe_df.iloc[:, 1].sum()
         pcr = round(total_pe_oi / total_ce_oi, 2) if total_ce_oi > 0 else 0
         
         direction = "SIDEWAYS"
-        color = "white"
+        color = "#808080" # Gray
         if pcr > 1.2:
-            direction = "BULLISH (పైకి)"
-            color = "#00FF00"
+            direction = "BULLISH (మార్కెట్ పైకి వెళ్ళవచ్చు)"
+            color = "#008000" # Green
         elif pcr < 0.8:
-            direction = "BEARISH (కిందకి)"
-            color = "#FF0000"
+            direction = "BEARISH (మార్కెట్ కిందకి పడవచ్చు)"
+            color = "#FF0000" # Red
 
         st.markdown(f"""
             <div style="background-color:{color}; padding:15px; border-radius:10px; text-align:center;">
-                <h2 style="color:black; margin:0;">Market Direction: {direction} | PCR: {pcr}</h2>
+                <h2 style="color:white; margin:0;">Trend: {direction} | PCR: {pcr}</h2>
             </div>
         """, unsafe_allow_html=True)
         st.divider()
 
-        # --- ఇండివిడ్యువల్ షో (CE | STRIKE | PE) ---
-        st.subheader("📋 Option Chain (Individual View)")
+        # --- టేబుల్ షో ---
+        st.subheader("📋 Individual Option Chain View")
         
         final_view = pd.DataFrame({
             "CALLS_OI": ce_df.iloc[:, 1],
@@ -68,27 +69,27 @@ if uploaded_file is not None:
             "PUTS_OI": pe_df.iloc[:, 1]
         })
 
-        # టేబుల్ ని అందంగా చూపడం
-        def color_oi(val):
-            color = 'green' if val > 0 else 'red'
-            return f'color: {color}'
+        # కలరింగ్ లాజిక్
+        def color_values(val):
+            if isinstance(val, (int, float)):
+                return 'color: green' if val > 0 else 'color: red'
+            return ''
 
-        st.dataframe(final_view.style.applymap(color_oi, subset=['CALLS_CHNG_OI', 'PUTS_CHNG_OI']), use_container_width=True)
+        # ఇక్కడ కూడా కొత్త పద్ధతిలో స్టైలింగ్
+        st.dataframe(final_view.style.map(color_values, subset=['CALLS_CHNG_OI', 'PUTS_CHNG_OI']), use_container_width=True)
 
-        # --- Buy/Sell సిగ్నల్స్ ---
+        # --- Top 5 సిగ్నల్స్ ---
         st.divider()
-        col1, col2 = st.columns(2)
-        with col1:
-            st.success("🟢 Buy Zone (Strong Support)")
-            buy_zone = final_view.nlargest(5, 'PUTS_CHNG_OI')[['STRIKE', 'PUTS_CHNG_OI', 'PUTS_LTP']]
-            st.table(buy_zone)
-        with col2:
-            st.error("🔴 Sell Zone (Strong Resistance)")
-            sell_zone = final_view.nlargest(5, 'CALLS_CHNG_OI')[['STRIKE', 'CALLS_CHNG_OI', 'CALLS_LTP']]
-            st.table(sell_zone)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.success("🟢 Buy/Support Zone")
+            st.table(final_view.nlargest(5, 'PUTS_CHNG_OI')[['STRIKE', 'PUTS_CHNG_OI', 'PUTS_LTP']])
+        with c2:
+            st.error("🔴 Sell/Resistance Zone")
+            st.table(final_view.nlargest(5, 'CALLS_CHNG_OI')[['STRIKE', 'CALLS_CHNG_OI', 'CALLS_LTP']])
 
     except Exception as e:
-        st.error(f"Analysis Error: {e}")
+        st.error(f"Analysis Error: {str(e)}")
 else:
-    st.info("NSE CSV ఫైల్‌ను అప్‌లోడ్ చేయండి. అప్పుడు మీకు Calls మరియు Puts విడివిడిగా కనిపిస్తాయి.")
+    st.info("NSE ఆప్షన్ చైన్ ఫైల్‌ను అప్‌లోడ్ చేయండి.")
     
