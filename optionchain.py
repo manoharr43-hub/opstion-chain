@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 import pyotp
-import time
 from NorenRestApiPy.NorenApi import NorenApi
+from streamlit_autorefresh import st_autorefresh
 
 # ==========================================
 # API CLASS
@@ -10,8 +10,8 @@ from NorenRestApiPy.NorenApi import NorenApi
 class ShoonyaApiPy(NorenApi):
     def __init__(self):
         super().__init__(
-            host='https://api.shoonya.com/NorenWS/',
-            websocket='wss://api.shoonya.com/NorenWSToken/'
+            host='https://api.shoonya.com/NorenWSTP/',
+            websocket='wss://api.shoonya.com/NorenWSTP/'
         )
 
 # ==========================================
@@ -21,11 +21,8 @@ class ShoonyaApiPy(NorenApi):
 def login_shoonya():
     try:
         creds = st.secrets["shoonya"]
-
         otp = pyotp.TOTP(creds["totp_key"]).now()
-
         api = ShoonyaApiPy()
-
         ret = api.login(
             userid=creds["user_id"],
             password=creds["password"],
@@ -34,26 +31,25 @@ def login_shoonya():
             api_secret=creds["api_secret"],
             imei=creds["imei"]
         )
-
         if ret and ret.get("stat") == "Ok":
             return api
         else:
             return None
-
     except Exception as e:
         st.error(f"Login Error: {e}")
         return None
 
 # ==========================================
-# OPTION CHAIN
+# OPTION CHAIN (CUSTOM WRAPPER)
 # ==========================================
 def fetch_data(api, symbol):
     try:
         idx_map = {"NIFTY": "Nifty 50", "BANKNIFTY": "Nifty Bank"}
-
         quote = api.get_quotes("NSE", idx_map[symbol])
         spot = float(quote["lp"])
 
+        # Shoonyaలో direct option chain లేదు → మీరు market quotes వాడాలి
+        # Example: get_option_chain wrapper
         chain = api.get_option_chain("NFO", symbol, spot, 10)
 
         rows = []
@@ -66,18 +62,14 @@ def fetch_data(api, symbol):
             })
 
         df = pd.DataFrame(rows)
-
         ce = df[df["Type"] == "CE"].rename(columns={"LTP": "CE_LTP", "OI": "CE_OI"})
         pe = df[df["Type"] == "PE"].rename(columns={"LTP": "PE_LTP", "OI": "PE_OI"})
-
         final = pd.merge(
             ce[["Strike", "CE_LTP", "CE_OI"]],
             pe[["Strike", "PE_LTP", "PE_OI"]],
             on="Strike"
         ).sort_values("Strike")
-
         return spot, final
-
     except Exception as e:
         st.error(f"Data Error: {e}")
         return None, pd.DataFrame()
@@ -92,9 +84,7 @@ api = login_shoonya()
 
 if api:
     st.success("✅ Connected to Shoonya")
-
     symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
-
     spot, df = fetch_data(api, symbol)
 
     if spot:
@@ -105,9 +95,8 @@ if api:
     else:
         st.warning("No Data")
 
-    # refresh
-    time.sleep(10)
-    st.rerun()
+    # Auto refresh every 10 seconds
+    st_autorefresh(interval=10000, key="refresh")
 
 else:
     st.error("❌ Login Failed")
