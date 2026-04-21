@@ -5,109 +5,109 @@ import time
 from NorenRestApiPy.NorenApi import NorenApi
 
 # ==========================================
-# 1. SHOONYA API CONNECTION CLASS
+# API CLASS
 # ==========================================
 class ShoonyaApiPy(NorenApi):
     def __init__(self):
-        # Direct initialization to avoid login attribute errors
-        NorenApi.__init__(self, host='https://api.shoonya.com/NorenWS/', 
-                         websocket='wss://api.shoonya.com/NorenWSToken/')
+        super().__init__(
+            host='https://api.shoonya.com/NorenWS/',
+            websocket='wss://api.shoonya.com/NorenWSToken/'
+        )
 
-# Cache తీసివేయబడింది - దీనివల్ల ప్రతిసారి కొత్త లాగిన్ ప్రయత్నం జరుగుతుంది
-def get_shoonya_instance():
-    api = ShoonyaApiPy()
+# ==========================================
+# LOGIN (ONLY ONCE)
+# ==========================================
+@st.cache_resource
+def login_shoonya():
     try:
-        # Secrets నుండి డేటాను క్లీన్ గా రీడ్ చేయడం
-        u = st.secrets["user_id"].strip()
-        p = st.secrets["password"].strip()
-        vc = st.secrets["vendor_code"].strip()
-        apikey = st.secrets["api_secret"].strip()
-        im = st.secrets["imei"].strip()
-        t_key = st.secrets["totp_key"].strip()
+        creds = st.secrets["shoonya"]
 
-        # TOTP జనరేషన్ (కీని ఏ మార్పులు లేకుండా అప్పర్ కేస్ కి మార్చడం)
-        clean_key = "".join(t_key.split()).upper()
-        totp_gen = pyotp.TOTP(clean_key)
-        current_otp = totp_gen.now()
+        otp = pyotp.TOTP(creds["totp_key"]).now()
 
-        # Login ప్రయత్నం
-        ret = api.login(userid=u, password=p, twoFA=current_otp, 
-                        vendor_code=vc, api_secret=apikey, imei=im)
-        
-        if ret and isinstance(ret, dict) and ret.get('stat') == 'Ok':
+        api = ShoonyaApiPy()
+
+        ret = api.login(
+            userid=creds["user_id"],
+            password=creds["password"],
+            twoFA=otp,
+            vendor_code=creds["vendor_code"],
+            api_secret=creds["api_secret"],
+            imei=creds["imei"]
+        )
+
+        if ret and ret.get("stat") == "Ok":
             return api
         else:
-            return f"Login Failed: {ret.get('emsg') if ret else 'No Response from Server'}"
+            return None
+
     except Exception as e:
-        return f"System Error: {str(e)}"
+        st.error(f"Login Error: {e}")
+        return None
 
 # ==========================================
-# 2. DATA FETCHING LOGIC
+# OPTION CHAIN
 # ==========================================
-def fetch_option_chain_data(api, index):
-    idx_map = {"NIFTY": "Nifty 50", "BANKNIFTY": "Nifty Bank"}
+def fetch_data(api, symbol):
     try:
-        # 1. లైవ్ స్పాట్ ప్రైస్
-        quote = api.get_quotes('NSE', idx_map[index])
-        if not quote or 'lp' not in quote:
-            return None, None
-        spot_price = float(quote['lp'])
-        
-        # 2. ఆప్షన్ చైన్ డేటా
-        chain = api.get_option_chain('NFO', index, spot_price, 10)
-        if not chain or 'values' not in chain:
-            return spot_price, pd.DataFrame()
+        idx_map = {"NIFTY": "Nifty 50", "BANKNIFTY": "Nifty Bank"}
+
+        quote = api.get_quotes("NSE", idx_map[symbol])
+        spot = float(quote["lp"])
+
+        chain = api.get_option_chain("NFO", symbol, spot, 10)
 
         rows = []
-        for item in chain['values']:
+        for item in chain["values"]:
             rows.append({
-                "Strike": float(item['stlk']),
-                "Type": item['optt'],
-                "LTP": float(item.get('lp', 0)),
-                "OI": int(item.get('oi', 0)),
-                "Vol": int(item.get('v', 0))
+                "Strike": float(item["stlk"]),
+                "Type": item["optt"],
+                "LTP": float(item.get("lp", 0)),
+                "OI": int(item.get("oi", 0)),
             })
-        
+
         df = pd.DataFrame(rows)
-        ce = df[df['Type'] == 'CE'][['Strike', 'LTP', 'OI']].rename(columns={'LTP': 'CE_LTP', 'OI': 'CE_OI'})
-        pe = df[df['Type'] == 'PE'][['Strike', 'LTP', 'OI']].rename(columns={'LTP': 'PE_LTP', 'OI': 'PE_OI'})
-        
-        final_df = pd.merge(ce, pe, on="Strike").sort_values("Strike")
-        return spot_price, final_df
+
+        ce = df[df["Type"] == "CE"].rename(columns={"LTP": "CE_LTP", "OI": "CE_OI"})
+        pe = df[df["Type"] == "PE"].rename(columns={"LTP": "PE_LTP", "OI": "PE_OI"})
+
+        final = pd.merge(
+            ce[["Strike", "CE_LTP", "CE_OI"]],
+            pe[["Strike", "PE_LTP", "PE_OI"]],
+            on="Strike"
+        ).sort_values("Strike")
+
+        return spot, final
+
     except Exception as e:
-        return None, None
+        st.error(f"Data Error: {e}")
+        return None, pd.DataFrame()
 
 # ==========================================
-# 3. STREAMLIT UI SETUP
+# UI
 # ==========================================
-st.set_page_config(page_title="Shoonya Pro Option Chain", layout="wide")
-st.title("📊 Shoonya Pro Option Chain")
+st.set_page_config(layout="wide")
+st.title("📊 Shoonya Option Chain PRO")
 
-# లాగిన్ ప్రయత్నం
-res = get_shoonya_instance()
+api = login_shoonya()
 
-if isinstance(res, str):
-    st.error(f"❌ {res}")
-    st.info("చిట్కా: మీ Secrets మరియు TOTP కీని మరోసారి వెరిఫై చేయండి. మార్కెట్ సమయం: 9:15 AM - 3:30 PM")
-elif res is not None:
-    st.success("✅ Shoonya Connected!")
-    
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
-    
-    spot, df = fetch_option_chain_data(res, symbol)
-    
+if api:
+    st.success("✅ Connected to Shoonya")
+
+    symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
+
+    spot, df = fetch_data(api, symbol)
+
     if spot:
         st.subheader(f"{symbol} Spot: ₹{spot}")
-        if not df.empty:
-            # మొబైల్ లో సరిగ్గా కనిపించడానికి use_container_width వాడాలి
-            st.dataframe(df, use_container_width=True)
-        else:
-            st.warning("ఆప్షన్ చైన్ డేటా లోడ్ కాలేదు.")
-    
-    # ఆటోమేటిక్ రిఫ్రెష్
-    time.sleep(15)
+
+    if not df.empty:
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.warning("No Data")
+
+    # refresh
+    time.sleep(10)
     st.rerun()
+
 else:
-    st.warning("🔄 లాగిన్ కోసం ప్రయత్నిస్తోంది... దయచేసి వేచి ఉండండి.")
+    st.error("❌ Login Failed")
