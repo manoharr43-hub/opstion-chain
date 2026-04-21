@@ -1,7 +1,4 @@
-NorenRestApiPy
-
-websocket-client
-pyotp
-pandas
-streamlit
-streamlit-autorefresh
+streamlit==1.32.0
+pandas==2.2.1
+pyotp==2.9.0
+NorenRestApiPy==0.0.25
