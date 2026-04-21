@@ -1,4 +1,5 @@
 NorenRestApiPy
+
 websocket-client
 pyotp
 pandas
