@@ -1,95 +1,113 @@
 import streamlit as st
 import pandas as pd
+import pyotp
+import time
+from NorenRestApiPy.NorenApi import NorenApi
 
-# --- UI Header ---
-st.set_page_config(page_title="NSE AI PRO - Advanced Report", layout="wide")
-st.title("🤖 AI Market Analysis & Greeks Report")
+# ==========================================
+# API CLASS
+# ==========================================
+class ShoonyaApiPy(NorenApi):
+    def __init__(self):
+        super().__init__(
+            host='https://api.shoonya.com/NorenWS/',
+            websocket='wss://api.shoonya.com/NorenWSToken/'
+        )
 
-# --- Cleaning Function ---
-def clean_numeric(val):
-    if isinstance(val, str):
-        val = val.replace(',', '').replace('-', '0')
+# ==========================================
+# LOGIN (ONLY ONCE)
+# ==========================================
+@st.cache_resource
+def login_shoonya():
     try:
-        return pd.to_numeric(val)
-    except:
-        return 0
+        creds = st.secrets["shoonya"]
 
-# Side bar for file upload
-st.sidebar.header("📁 Upload NSE Data")
-file = st.sidebar.file_uploader("Option Chain CSV అప్‌లోడ్ చేయండి", type="csv")
+        otp = pyotp.TOTP(creds["totp_key"]).now()
 
-if file is not None:
-    try:
-        df = pd.read_csv(file, skiprows=1)
-        df.columns = df.columns.str.strip()
-        df = df.map(clean_numeric)
+        api = ShoonyaApiPy()
 
-        # Strike identification
-        strike_col = [col for col in df.columns if 'STRIKE' in col.upper()][0]
-        strike_idx = df.columns.get_loc(strike_col)
-        
-        # CE & PE Data split
-        ce_df = df.iloc[:, :strike_idx]
-        pe_df = df.iloc[:, strike_idx+1:]
+        ret = api.login(
+            userid=creds["user_id"],
+            password=creds["password"],
+            twoFA=otp,
+            vendor_code=creds["vendor_code"],
+            api_secret=creds["api_secret"],
+            imei=creds["imei"]
+        )
 
-        # --- AI ANALYSIS REPORT BOX ---
-        st.subheader("📋 AI Market Observation Report")
-        
-        total_ce_oi_chng = ce_df.iloc[:, 2].sum()
-        total_pe_oi_chng = pe_df.iloc[:, 2].sum()
-        
-        # Market Direction Logic
-        if total_ce_oi_chng > total_pe_oi_chng * 1.2:
-            report_msg = "🔴 MARKET DIRECTION: DOWN SIDE (Bearish)"
-            note = "Call Side లో అమ్మకాలు ఎక్కువగా ఉన్నాయి, మార్కెట్ పైకి వెళ్లడం కష్టం."
-            color = "#FF4B4B"
-        elif total_pe_oi_chng > total_ce_oi_chng * 1.2:
-            report_msg = "🟢 MARKET DIRECTION: UP SIDE (Bullish)"
-            note = "Put Side లో సపోర్ట్ బలంగా ఉంది, మార్కెట్ పెరిగే అవకాశం ఉంది."
-            color = "#28A745"
+        if ret and ret.get("stat") == "Ok":
+            return api
         else:
-            report_msg = "⚪ MARKET DIRECTION: SIDEWAYS"
-            note = "రెండు వైపులా పోటీ సమానంగా ఉంది, మార్కెట్ రేంజ్ లోనే ఉంటుంది."
-            color = "#808080"
-
-        st.markdown(f"""
-            <div style="background-color:{color}; padding:20px; border-radius:10px;">
-                <h2 style="color:white; margin:0;">{report_msg}</h2>
-                <p style="color:white; font-size:18px;">{note}</p>
-            </div>
-        """, unsafe_allow_html=True)
-
-        # --- GREEKS & STRIKE STRENGTH (Theta/Gamma Observation) ---
-        st.divider()
-        st.subheader("🎯 Strong Strike Observation (Greeks Analysis)")
-        
-        # Strike Strength Logic (Highest OI Change as Strong Point)
-        strong_ce_strike = df.loc[ce_df.iloc[:, 2].idxmax(), strike_col]
-        strong_pe_strike = df.loc[pe_df.iloc[:, 2].idxmax(), strike_col]
-
-        col1, col2 = st.columns(2)
-        with col1:
-            st.info(f"⚡ **Strong Resistance:** {strong_ce_strike}")
-            st.write("Theta Decay ఇక్కడ ఎక్కువగా ఉంది, Sellers కి లాభం.")
-        with col2:
-            st.success(f"🛡️ **Strong Support:** {strong_pe_strike}")
-            st.write("Gamma Movement ఇక్కడ బాగుంది, Buyers కి వేగంగా లాభం రావచ్చు.")
-
-        # --- DETAILED TABLE ---
-        st.divider()
-        final_df = pd.DataFrame({
-            "CE_OI_CHNG": ce_df.iloc[:, 2],
-            "CE_LTP": ce_df.iloc[:, 5],
-            "STRIKE": df[strike_col],
-            "PE_LTP": pe_df.iloc[:, 5],
-            "PE_OI_CHNG": pe_df.iloc[:, 2]
-        })
-        
-        st.write("📊 **Live Data Table:**")
-        st.dataframe(final_df, use_container_width=True)
+            return None
 
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Login Error: {e}")
+        return None
+
+# ==========================================
+# OPTION CHAIN
+# ==========================================
+def fetch_data(api, symbol):
+    try:
+        idx_map = {"NIFTY": "Nifty 50", "BANKNIFTY": "Nifty Bank"}
+
+        quote = api.get_quotes("NSE", idx_map[symbol])
+        spot = float(quote["lp"])
+
+        chain = api.get_option_chain("NFO", symbol, spot, 10)
+
+        rows = []
+        for item in chain["values"]:
+            rows.append({
+                "Strike": float(item["stlk"]),
+                "Type": item["optt"],
+                "LTP": float(item.get("lp", 0)),
+                "OI": int(item.get("oi", 0)),
+            })
+
+        df = pd.DataFrame(rows)
+
+        ce = df[df["Type"] == "CE"].rename(columns={"LTP": "CE_LTP", "OI": "CE_OI"})
+        pe = df[df["Type"] == "PE"].rename(columns={"LTP": "PE_LTP", "OI": "PE_OI"})
+
+        final = pd.merge(
+            ce[["Strike", "CE_LTP", "CE_OI"]],
+            pe[["Strike", "PE_LTP", "PE_OI"]],
+            on="Strike"
+        ).sort_values("Strike")
+
+        return spot, final
+
+    except Exception as e:
+        st.error(f"Data Error: {e}")
+        return None, pd.DataFrame()
+
+# ==========================================
+# UI
+# ==========================================
+st.set_page_config(layout="wide")
+st.title("📊 Shoonya Option Chain PRO")
+
+api = login_shoonya()
+
+if api:
+    st.success("✅ Connected to Shoonya")
+
+    symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
+
+    spot, df = fetch_data(api, symbol)
+
+    if spot:
+        st.subheader(f"{symbol} Spot: ₹{spot}")
+
+    if not df.empty:
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.warning("No Data")
+
+    # refresh
+    time.sleep(10)
+    st.rerun()
+
 else:
-    st.info("మనోహర్ గారు, AI రిపోర్ట్ కోసం NSE ఫైల్ అప్‌లోడ్ చేయండి.")
-    
+    st.error("❌ Login Failed")
