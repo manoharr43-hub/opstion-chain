@@ -9,37 +9,35 @@ from NorenRestApiPy.NorenApi import NorenApi
 # ==========================================
 class ShoonyaApiPy(NorenApi):
     def __init__(self):
-        # నేరుగా ఇనిషియలైజ్ చేయడం వల్ల 'login' ఎర్రర్ రాదు
+        # Direct initialization to avoid login attribute errors
         NorenApi.__init__(self, host='https://api.shoonya.com/NorenWS/', 
                          websocket='wss://api.shoonya.com/NorenWSToken/')
 
-@st.cache_resource
+# Cache తీసివేయబడింది - దీనివల్ల ప్రతిసారి కొత్త లాగిన్ ప్రయత్నం జరుగుతుంది
 def get_shoonya_instance():
     api = ShoonyaApiPy()
     try:
-        # Secrets నుండి డేటా రీడ్ చేయడం
-        u = st.secrets["user_id"]
-        p = st.secrets["password"]
-        vc = st.secrets["vendor_code"]
-        key = st.secrets["api_secret"]
-        im = st.secrets["imei"]
-        t_key = st.secrets["totp_key"]
+        # Secrets నుండి డేటాను క్లీన్ గా రీడ్ చేయడం
+        u = st.secrets["user_id"].strip()
+        p = st.secrets["password"].strip()
+        vc = st.secrets["vendor_code"].strip()
+        apikey = st.secrets["api_secret"].strip()
+        im = st.secrets["imei"].strip()
+        t_key = st.secrets["totp_key"].strip()
 
-        # --- TOTP కీని ఏ మార్పులు లేకుండా నేరుగా క్లీన్ చేయడం ---
-        clean_key = "".join(t_key.split()).strip().upper()
-        
-        # TOTP జనరేషన్
+        # TOTP జనరేషన్ (కీని ఏ మార్పులు లేకుండా అప్పర్ కేస్ కి మార్చడం)
+        clean_key = "".join(t_key.split()).upper()
         totp_gen = pyotp.TOTP(clean_key)
         current_otp = totp_gen.now()
 
         # Login ప్రయత్నం
         ret = api.login(userid=u, password=p, twoFA=current_otp, 
-                        vendor_code=vc, api_secret=key, imei=im)
+                        vendor_code=vc, api_secret=apikey, imei=im)
         
         if ret and isinstance(ret, dict) and ret.get('stat') == 'Ok':
             return api
         else:
-            return f"Error: {ret.get('emsg') if ret else 'No Response'}"
+            return f"Login Failed: {ret.get('emsg') if ret else 'No Response from Server'}"
     except Exception as e:
         return f"System Error: {str(e)}"
 
@@ -49,13 +47,13 @@ def get_shoonya_instance():
 def fetch_option_chain_data(api, index):
     idx_map = {"NIFTY": "Nifty 50", "BANKNIFTY": "Nifty Bank"}
     try:
-        # 1. స్పాట్ ప్రైస్
+        # 1. లైవ్ స్పాట్ ప్రైస్
         quote = api.get_quotes('NSE', idx_map[index])
         if not quote or 'lp' not in quote:
             return None, None
         spot_price = float(quote['lp'])
         
-        # 2. ఆప్షన్ చైన్ (ATM కి అటు ఇటు 10 స్ట్రైక్స్)
+        # 2. ఆప్షన్ చైన్ డేటా
         chain = api.get_option_chain('NFO', index, spot_price, 10)
         if not chain or 'values' not in chain:
             return spot_price, pd.DataFrame()
@@ -76,7 +74,7 @@ def fetch_option_chain_data(api, index):
         
         final_df = pd.merge(ce, pe, on="Strike").sort_values("Strike")
         return spot_price, final_df
-    except:
+    except Exception as e:
         return None, None
 
 # ==========================================
@@ -85,13 +83,14 @@ def fetch_option_chain_data(api, index):
 st.set_page_config(page_title="Shoonya Pro Option Chain", layout="wide")
 st.title("📊 Shoonya Pro Option Chain")
 
+# లాగిన్ ప్రయత్నం
 res = get_shoonya_instance()
 
 if isinstance(res, str):
-    st.error(f"❌ లాగిన్ ఫెయిల్ అయ్యింది: {res}")
-    st.info("చిట్కా: మీ Secrets లో TOTP కీని మరోసారి వెరిఫై చేయండి.")
+    st.error(f"❌ {res}")
+    st.info("చిట్కా: మీ Secrets మరియు TOTP కీని మరోసారి వెరిఫై చేయండి. మార్కెట్ సమయం: 9:15 AM - 3:30 PM")
 elif res is not None:
-    st.success("✅ Shoonya Connected Successfully!")
+    st.success("✅ Shoonya Connected!")
     
     col1, col2 = st.columns([1, 2])
     with col1:
@@ -100,15 +99,15 @@ elif res is not None:
     spot, df = fetch_option_chain_data(res, symbol)
     
     if spot:
-        st.metric(f"{symbol} Spot Price", f"₹{spot}")
+        st.subheader(f"{symbol} Spot: ₹{spot}")
         if not df.empty:
+            # మొబైల్ లో సరిగ్గా కనిపించడానికి use_container_width వాడాలి
             st.dataframe(df, use_container_width=True)
         else:
-            st.warning("ఆప్షన్ చైన్ డేటా అందుబాటులో లేదు.")
+            st.warning("ఆప్షన్ చైన్ డేటా లోడ్ కాలేదు.")
     
-    st.caption("🔄 Auto-refreshing every 15 seconds...")
+    # ఆటోమేటిక్ రిఫ్రెష్
     time.sleep(15)
     st.rerun()
 else:
-    st.warning("🔄 లాగిన్ కోసం ప్రయత్నిస్తోంది...")
-    
+    st.warning("🔄 లాగిన్ కోసం ప్రయత్నిస్తోంది... దయచేసి వేచి ఉండండి.")
