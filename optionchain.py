@@ -100,3 +100,20 @@ if api:
 
 else:
     st.error("❌ Login Failed")
+ret = api.login(
+    userid=creds["user_id"],
+    password=creds["password"],
+    twoFA=otp,
+    vendor_code=creds["vendor_code"],
+    api_secret=creds["api_secret"],
+    imei=creds["imei"]
+)
+
+if not ret:
+    st.error("❌ Empty response from Shoonya API. Check secrets section name, OTP validity, IMEI.")
+elif ret.get("stat") == "Ok":
+    st.success(f"✅ Welcome {ret.get('uname')}")
+    st.session_state.login = True
+    st.session_state.api = api
+else:
+    st.error(f"❌ Login Failed: {ret.get('emsg')}")
