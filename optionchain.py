@@ -1,49 +1,84 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="NSE Option Chain Analyzer", layout="wide")
-st.title("📊 NSE Option Chain Analyzer (Automatic Fix)")
+# --- UI Layout ---
+st.set_page_config(page_title="NSE AI PRO Terminal", layout="wide")
+st.title("🚀 NSE AI PRO - Individual Index Analyzer")
 
-uploaded_file = st.file_uploader("NSE నుండి డౌన్లోడ్ చేసిన CSV ఫైల్‌ను ఇక్కడ అప్‌లోడ్ చేయండి", type="csv")
+uploaded_file = st.file_uploader("NSE CSV ఫైల్‌ను ఇక్కడ అప్‌లోడ్ చేయండి", type="csv")
 
 if uploaded_file is not None:
     try:
-        # NSE ఫైల్‌లో పైన ఉన్న అదనపు లైన్లను తీసేసి డేటాను రీడ్ చేయడం
+        # NSE CSV రీడింగ్
         df = pd.read_csv(uploaded_file, skiprows=1)
-        
-        # కాలమ్ పేర్లలో స్పేస్‌లు ఉంటే తీసేయడం
         df.columns = df.columns.str.strip()
 
-        # కాలమ్ పేర్లు ఏవైనా సరే, వాటి స్థానాన్ని (Index) బట్టి డేటా తీసుకోవడం
-        # సాధారణంగా NSE ఫైల్‌లో Strike Price 11వ కాలమ్ (index 11) లో ఉంటుంది
-        # మనం ఆ కాలమ్ పేర్లను వెతకకుండా ఇలా పట్టుకుందాం:
+        # Strike Price కాలమ్ ని గుర్తించడం
+        strike_col = [col for col in df.columns if 'STRIKE' in col.upper()][0]
         
-        # 'Strike Price' అనే పదం ఉన్న కాలమ్ ని వెతకడం
-        strike_col = [col for col in df.columns if 'STRIKE' in col.upper()]
+        # డేటా లోడింగ్ (మధ్యలో ఉండే Strike Price కి ఇటు అటు డేటాను విడదీయడం)
+        # సాధారణంగా NSE ఫైల్ లో Strike Price కి ఎడమ వైపు CE, కుడి వైపు PE ఉంటాయి.
         
-        if strike_col:
-            strike_name = strike_col[0]
+        # 1. కాల్ సైడ్ డేటా (Call Side)
+        ce_data = df.iloc[:, :df.columns.get_loc(strike_col)].copy()
+        
+        # 2. పుట్ సైడ్ డేటా (Put Side)
+        pe_data = df.iloc[:, df.columns.get_loc(strike_col)+1:].copy()
+        
+        # --- మార్కెట్ అనాలిసిస్ బానర్ ---
+        total_ce_oi = ce_data.iloc[:, 1].sum() # 2nd column as OI
+        total_pe_oi = pe_data.iloc[:, 1].sum() # 2nd column as OI
+        pcr = round(total_pe_oi / total_ce_oi, 2) if total_ce_oi > 0 else 0
+        
+        direction = "SIDEWAYS"
+        color = "gray"
+        if pcr > 1.2:
+            direction = "BULLISH (పైకి)"
+            color = "green"
+        elif pcr < 0.8:
+            direction = "BEARISH (కిందకి)"
+            color = "red"
+
+        st.subheader(f"📈 మార్కెట్ ట్రెండ్: :{color}[{direction}] | PCR: {pcr}")
+        st.divider()
+
+        # --- ఇండివిడ్యువల్ షో (CE | STRIKE | PE) ---
+        st.subheader("📋 Option Chain (Individual View)")
+        
+        # మనం స్ట్రైక్ ప్రైస్ ని సెంటర్ లో పెట్టి ఒక కొత్త టేబుల్ లాగా చూపిద్దాం
+        final_view = pd.DataFrame({
+            "CALLS_OI": ce_data.iloc[:, 1],
+            "CALLS_CHNG_OI": ce_data.iloc[:, 2],
+            "CALLS_LTP": ce_data.iloc[:, 5], # LTP position usually 5 or 6
+            "STRIKE": df[strike_col],
+            "PUTS_LTP": pe_data.iloc[:, 5],
+            "PUTS_CHNG_OI": pe_data.iloc[:, 2],
+            "PUTS_OI": pe_data.iloc[:, 1]
+        })
+
+        # టేబుల్ ని అందంగా చూపడం
+        def color_map(val):
+            if isinstance(val, str): return ''
+            return 'color: green' if val > 0 else 'color: red'
+
+        st.dataframe(final_view.style.applymap(color_map, subset=['CALLS_CHNG_OI', 'PUTS_CHNG_OI']), use_container_width=True)
+
+        # --- Buy/Sell సిగ్నల్స్ ---
+        st.divider()
+        st.subheader("🎯 Active Strike Signals")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("🟢 **Buy Zone (Strong Support)**")
+            buy_strikes = final_view[final_view['PUTS_CHNG_OI'] > final_view['CALLS_CHNG_OI']].head(5)
+            st.table(buy_strikes[['STRIKE', 'PUTS_CHNG_OI', 'PUTS_LTP']])
             
-            # మనకు కావలసిన ముఖ్యమైన డేటాను ఫిల్టర్ చేయడం
-            # CE OI మార్పు మరియు PE OI మార్పును బట్టి మూమెంట్ కనిపెట్టడం
-            st.success(f"ఫైల్ విజయవంతంగా ప్రాసెస్ చేయబడింది! ({strike_name} గుర్తించబడింది)")
-            
-            # అనాలిసిస్ కోసం క్లీన్ డేటా
-            analysis_df = df[[strike_name]].copy()
-            
-            # మిగతా కాలమ్స్ ని కూడా డైనమిక్ గా పట్టుకోవడం
-            ce_oi_chng = [col for col in df.columns if 'CHNG' in col.upper() and 'OI' in col.upper()]
-            
-            # డేటా ప్రదర్శన
-            st.subheader("📋 Option Chain Data Summary")
-            st.dataframe(df.head(20), use_container_width=True)
-            
-            st.info("చిట్కా: పైన ఉన్న టేబుల్‌లో ఏ స్ట్రైక్ దగ్గర 'CHNG IN OI' ఎక్కువగా ఉందో గమనించండి. అదే మార్కెట్ మూమెంట్‌ని సూచిస్తుంది.")
-        else:
-            st.error("ఫైల్‌లో 'Strike Price' కాలమ్ కనిపించలేదు. దయచేసి NSE ఒరిజినల్ CSV నే వాడండి.")
+        with col2:
+            st.write("🔴 **Sell Zone (Strong Resistance)**")
+            sell_strikes = final_view[final_view['CALLS_CHNG_OI'] > final_view['PUTS_CHNG_OI']].head(5)
+            st.table(sell_strikes[['STRIKE', 'CALLS_CHNG_OI', 'CALLS_LTP']])
 
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Analysis Error: {e}")
 else:
-    st.info("NSE వెబ్‌సైట్ నుండి డౌన్లోడ్ చేసిన CSV ఫైల్‌ను అప్‌లోడ్ చేయండి.")
-    
+    st.info("NSE CSV ఫైల్‌ను అప్‌లోడ్ చేయండి. అప్పుడు మీకు Calls మరియు Puts డేటా విడివిడిగా కనిపిస్తుంది.")
