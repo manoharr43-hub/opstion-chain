@@ -3,3 +3,4 @@ websocket-client
 pyotp
 pandas
 streamlit
+streamlit-autorefresh
