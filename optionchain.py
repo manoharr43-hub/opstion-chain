@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
 import pyotp
-from NorenRestApiPy.NorenApi import NorenApi
-from streamlit_autorefresh import st_autorefresh
+from NorenRestApiPy import NorenApi
 
 # ==========================================
 # API CLASS
@@ -22,6 +21,7 @@ def login_shoonya():
     try:
         creds = st.secrets["shoonya"]
         otp = pyotp.TOTP(creds["totp_key"]).now()
+
         api = ShoonyaApiPy()
         ret = api.login(
             userid=creds["user_id"],
@@ -31,9 +31,11 @@ def login_shoonya():
             api_secret=creds["api_secret"],
             imei=creds["imei"]
         )
+
         if ret and ret.get("stat") == "Ok":
             return api
         else:
+            st.error(f"Login Failed: {ret.get('emsg')}")
             return None
     except Exception as e:
         st.error(f"Login Error: {e}")
@@ -49,7 +51,7 @@ def fetch_data(api, symbol):
         spot = float(quote["lp"])
 
         # Shoonyaలో direct option chain లేదు → మీరు market quotes వాడాలి
-        # Example: get_option_chain wrapper
+        # Example wrapper (pseudo)
         chain = api.get_option_chain("NFO", symbol, spot, 10)
 
         rows = []
@@ -96,24 +98,7 @@ if api:
         st.warning("No Data")
 
     # Auto refresh every 10 seconds
-    st_autorefresh(interval=10000, key="refresh")
+    st.experimental_rerun()
 
 else:
     st.error("❌ Login Failed")
-ret = api.login(
-    userid=creds["user_id"],
-    password=creds["password"],
-    twoFA=otp,
-    vendor_code=creds["vendor_code"],
-    api_secret=creds["api_secret"],
-    imei=creds["imei"]
-)
-
-if not ret:
-    st.error("❌ Empty response from Shoonya API. Check secrets section name, OTP validity, IMEI.")
-elif ret.get("stat") == "Ok":
-    st.success(f"✅ Welcome {ret.get('uname')}")
-    st.session_state.login = True
-    st.session_state.api = api
-else:
-    st.error(f"❌ Login Failed: {ret.get('emsg')}")
