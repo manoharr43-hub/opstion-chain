@@ -1,14 +1,14 @@
 import streamlit as st
 import pandas as pd
 import pyotp
-from NorenRestApiPy import NorenApi
+from NorenRestApiPy.NorenApi import NorenApi
 from streamlit_autorefresh import st_autorefresh
 
 # ==========================================
-# 1. API INITIALIZATION (Error-Free Method)
+# 1. API INITIALIZATION
 # ==========================================
 def get_api_instance():
-    # Class lekunda direct ga NorenApi instance ni create chestunnam
+    # Direct ga NorenApi class instance ni create chestunnam
     api = NorenApi(host='https://api.shoonya.com/NorenWS/', 
                    websocket='wss://api.shoonya.com/NorenWSToken/')
     return api
@@ -19,6 +19,10 @@ def get_api_instance():
 @st.cache_resource
 def login_shoonya():
     try:
+        if "shoonya" not in st.secrets:
+            st.error("Secrets.toml lo [shoonya] section ledu!")
+            return None
+            
         creds = st.secrets["shoonya"]
         otp = pyotp.TOTP(creds["totp_key"]).now()
         
@@ -39,7 +43,7 @@ def login_shoonya():
             st.error(f"Login Failed: {ret.get('emsg')}")
             return None
     except Exception as e:
-        st.error(f"Login setup error: {e}")
+        st.error(f"Login Error: {e}")
         return None
 
 # ==========================================
@@ -49,8 +53,11 @@ def get_option_chain(api, symbol):
     try:
         idx_map = {"NIFTY": "Nifty 50", "BANKNIFTY": "Nifty Bank"}
         quote = api.get_quotes("NSE", idx_map[symbol])
-        spot = float(quote["lp"])
         
+        if not quote or 'lp' not in quote:
+            return None, pd.DataFrame()
+            
+        spot = float(quote["lp"])
         chain = api.get_option_chain("NFO", symbol, spot, 10)
         
         if not chain or 'values' not in chain:
@@ -87,8 +94,11 @@ st_autorefresh(interval=10000, key="datarefresh")
 api = login_shoonya()
 
 if api:
-    st.sidebar.success("Connected to Shoonya")
-    symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
+    st.sidebar.success("✅ Connected to Shoonya")
+    
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
     
     spot, df = get_option_chain(api, symbol)
     
@@ -96,8 +106,12 @@ if api:
         st.subheader(f"{symbol} Spot Price: ₹{spot}")
         
     if not df.empty:
-        st.dataframe(df, use_container_width=True, height=500)
+        # Table format lo data chupinchadam
+        st.dataframe(df.style.format({
+            "CE_LTP": "{:.2f}", "PE_LTP": "{:.2f}",
+            "Strike": "{:.0f}", "CE_OI": "{:,}", "PE_OI": "{:,}"
+        }), use_container_width=True, height=600)
     else:
-        st.info("Market data load avvaledu. Refresh ayye varaku vechi chudandi.")
+        st.info("Market data kosam wait chestunnam... Refresh avvaneevvandi.")
 else:
     st.error("Login Failed! Secrets correctly enter chesaro ledo chuskoindi.")
