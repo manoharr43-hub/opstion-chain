@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import pyotp
+import requests
 from NorenRestApiPy.NorenApi import NorenApi
 from streamlit_autorefresh import st_autorefresh
 
@@ -8,26 +9,32 @@ from streamlit_autorefresh import st_autorefresh
 # 1. API INITIALIZATION
 # ==========================================
 def get_api_instance():
-    # Direct ga NorenApi class instance ni create chestunnam
     api = NorenApi(host='https://api.shoonya.com/NorenWS/', 
                    websocket='wss://api.shoonya.com/NorenWSToken/')
     return api
 
 # ==========================================
-# 2. LOGIN FUNCTION
+# 2. LOGIN FUNCTION (Enhanced Error Checking)
 # ==========================================
 @st.cache_resource
 def login_shoonya():
     try:
         if "shoonya" not in st.secrets:
-            st.error("Secrets.toml lo [shoonya] section ledu!")
+            st.error("Secrets.toml లో [shoonya] సెక్షన్ లేదు!")
             return None
             
         creds = st.secrets["shoonya"]
-        otp = pyotp.TOTP(creds["totp_key"]).now()
         
+        # TOTP Generation
+        try:
+            otp = pyotp.TOTP(creds["totp_key"].replace(" ", "")).now()
+        except Exception as e:
+            st.error(f"TOTP Key లో లోపం ఉంది: {e}")
+            return None
+
         api = get_api_instance()
         
+        # Login Attempt
         ret = api.login(
             userid=creds["user_id"], 
             password=creds["password"],
@@ -37,13 +44,18 @@ def login_shoonya():
             imei=creds["imei"]
         )
         
-        if ret and ret.get("stat") == "Ok":
+        if ret is None:
+            st.error("Shoonya సర్వర్ నుండి ఎలాంటి రెస్పాన్స్ రావడం లేదు. దయచేసి కాసేపు ఆగి ప్రయత్నించండి.")
+            return None
+            
+        if ret.get("stat") == "Ok":
             return api
         else:
-            st.error(f"Login Failed: {ret.get('emsg')}")
+            st.error(f"లాగిన్ ఫెయిల్ అయ్యింది: {ret.get('emsg')}")
             return None
+            
     except Exception as e:
-        st.error(f"Login Error: {e}")
+        st.error(f"నెట్‌వర్క్ లేదా సెటప్ ఎర్రర్: {e}")
         return None
 
 # ==========================================
@@ -79,7 +91,7 @@ def get_option_chain(api, symbol):
         final = pd.merge(ce[["Strike", "CE_LTP", "CE_OI"]], 
                          pe[["Strike", "PE_LTP", "PE_OI"]], on="Strike").sort_values("Strike")
         return spot, final
-    except Exception as e:
+    except:
         return None, pd.DataFrame()
 
 # ==========================================
@@ -88,30 +100,24 @@ def get_option_chain(api, symbol):
 st.set_page_config(page_title="Shoonya Option Chain", layout="wide")
 st.title("📊 Live Option Chain")
 
-# 10 seconds Auto Refresh
+# 10 Seconds Refresh
 st_autorefresh(interval=10000, key="datarefresh")
 
 api = login_shoonya()
 
 if api:
-    st.sidebar.success("✅ Connected to Shoonya")
-    
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
+    st.sidebar.success("✅ Connected")
+    symbol = st.selectbox("ఇండెక్స్ ఎంచుకోండి", ["NIFTY", "BANKNIFTY"])
     
     spot, df = get_option_chain(api, symbol)
     
     if spot:
-        st.subheader(f"{symbol} Spot Price: ₹{spot}")
+        st.subheader(f"{symbol} Spot: ₹{spot}")
         
     if not df.empty:
-        # Table format lo data chupinchadam
         st.dataframe(df.style.format({
             "CE_LTP": "{:.2f}", "PE_LTP": "{:.2f}",
             "Strike": "{:.0f}", "CE_OI": "{:,}", "PE_OI": "{:,}"
         }), use_container_width=True, height=600)
     else:
-        st.info("Market data kosam wait chestunnam... Refresh avvaneevvandi.")
-else:
-    st.error("Login Failed! Secrets correctly enter chesaro ledo chuskoindi.")
+        st.info("డేటా లోడ్ అవుతోంది... దయచేసి వేచి ఉండండి.")
