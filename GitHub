@@ -1,3 +1,0 @@
-git add app.py requirements.txt .streamlit/secrets.toml
-git commit -m "Add app.py, requirements.txt, secrets.toml"
-git push origin main
