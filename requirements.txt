@@ -1,7 +1,6 @@
 streamlit
 pandas
 pyotp
-NorenRestApiPy
 streamlit-autorefresh
 websocket-client
 requests
