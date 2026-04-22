@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import pyotp
 from NorenRestApiPy import NorenApi
+from streamlit_autorefresh import st_autorefresh
 
 # ==========================================
 # API CLASS
@@ -9,8 +10,8 @@ from NorenRestApiPy import NorenApi
 class ShoonyaApiPy(NorenApi):
     def __init__(self):
         super().__init__(
-            host='https://api.shoonya.com/NorenWSTP/',
-            websocket='wss://api.shoonya.com/NorenWSTP/'
+            host='https://api.shoonya.com/NorenWS/',
+            websocket='wss://api.shoonya.com/NorenWSToken/'
         )
 
 # ==========================================
@@ -50,8 +51,6 @@ def fetch_data(api, symbol):
         quote = api.get_quotes("NSE", idx_map[symbol])
         spot = float(quote["lp"])
 
-        # Shoonyaలో direct option chain లేదు → మీరు market quotes వాడాలి
-        # Example wrapper (pseudo)
         chain = api.get_option_chain("NFO", symbol, spot, 10)
 
         rows = []
@@ -98,7 +97,7 @@ if api:
         st.warning("No Data")
 
     # Auto refresh every 10 seconds
-    st.experimental_rerun()
+    st_autorefresh(interval=10 * 1000, key="refresh")
 
 else:
     st.error("❌ Login Failed")
