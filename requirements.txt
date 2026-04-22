@@ -1,0 +1,5 @@
+streamlit
+pandas
+pyotp
+NorenRestApiPy
+streamlit-autorefresh
