@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
 import pyotp
-from NorenRestApiPy import NorenApi
+from NorenRestApiPy import NorenApi   # Correct import
 
 # ==========================================
-# API CLASS
+# Subclass Definition
 # ==========================================
 class ShoonyaApiPy(NorenApi):
     def __init__(self):
@@ -14,7 +14,7 @@ class ShoonyaApiPy(NorenApi):
         )
 
 # ==========================================
-# LOGIN (ONLY ONCE)
+# LOGIN FUNCTION
 # ==========================================
 @st.cache_resource
 def login_shoonya():
@@ -42,7 +42,7 @@ def login_shoonya():
         return None
 
 # ==========================================
-# OPTION CHAIN (CUSTOM WRAPPER)
+# OPTION CHAIN FETCH (Wrapper)
 # ==========================================
 def fetch_data(api, symbol):
     try:
@@ -50,8 +50,7 @@ def fetch_data(api, symbol):
         quote = api.get_quotes("NSE", idx_map[symbol])
         spot = float(quote["lp"])
 
-        # Shoonyaలో direct option chain లేదు → మీరు market quotes వాడాలి
-        # Example wrapper (pseudo)
+        # Example wrapper (pseudo, adjust as per API)
         chain = api.get_option_chain("NFO", symbol, spot, 10)
 
         rows = []
@@ -77,7 +76,7 @@ def fetch_data(api, symbol):
         return None, pd.DataFrame()
 
 # ==========================================
-# UI
+# STREAMLIT UI
 # ==========================================
 st.set_page_config(layout="wide")
 st.title("📊 Shoonya Option Chain PRO")
@@ -96,16 +95,5 @@ if api:
         st.dataframe(df, use_container_width=True)
     else:
         st.warning("No Data")
-
-    # Auto refresh every 10 seconds
-    st.experimental_rerun()
-
 else:
     st.error("❌ Login Failed")
-    class ShoonyaApiPy(NorenApi):
-    def __init__(self):
-        super().__init__(
-            host='https://api.shoonya.com/NorenWSTP/',
-            websocket='wss://api.shoonya.com/NorenWSTP/'
-        )
-
