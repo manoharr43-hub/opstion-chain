@@ -1,4 +1,3 @@
-git add requirements.txt runtime.txt optionchain.py
-git commit -m "Fix dependency version and import path"
-git push origin main
-
+git add .
+git commit -m "fix requirements"
+git push
