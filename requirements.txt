@@ -3,3 +3,4 @@ pandas
 pyotp
 NorenRestApiPy==0.0.22
 websocket-client
+streamlit-autorefresh
