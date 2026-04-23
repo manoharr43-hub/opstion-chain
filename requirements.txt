@@ -4,3 +4,4 @@ pyotp
 streamlit-autorefresh
 websocket-client
 requests
+NorenRestApiPy==0.0.25
