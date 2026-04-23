@@ -102,3 +102,10 @@ if api:
 
 else:
     st.error("❌ Login Failed")
+    class ShoonyaApiPy(NorenApi):
+    def __init__(self):
+        super().__init__(
+            host='https://api.shoonya.com/NorenWSTP/',
+            websocket='wss://api.shoonya.com/NorenWSTP/'
+        )
+
