@@ -1,5 +1,4 @@
-streamlit==1.33.0
-pandas==2.2.2
-pyotp==2.9.0
-websocket-client==1.7.0
-streamlit-autorefresh==1.0.1
+streamlit
+pandas
+requests
+pyotp
