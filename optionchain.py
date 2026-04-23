@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pyotp
 import pandas as pd
+import json
 
 # =========================
 # PAGE CONFIG
@@ -10,18 +11,13 @@ st.set_page_config(layout="wide")
 st.title("🚀 Shoonya Direct API Option Chain")
 
 # =========================
-# LOGIN FUNCTION
+# LOGIN FUNCTION (FIXED)
 # =========================
 def login():
     creds = st.secrets["shoonya"]
     otp = pyotp.TOTP(creds["totp_key"]).now()
 
     url = "https://api.shoonya.com/NorenWSTP/QuickAuth"
-
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": "Mozilla/5.0"
-    }
 
     payload = {
         "uid": creds["user_id"],
@@ -32,8 +28,19 @@ def login():
         "imei": creds["imei"]
     }
 
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "Mozilla/5.0"
+    }
+
     try:
-        res = requests.post(url, data=payload, headers=headers, timeout=10)
+        res = requests.post(
+            url,
+            data={"jData": json.dumps(payload)},  # 🔥 FIX
+            headers=headers,
+            timeout=10
+        )
+
         data = res.json()
 
         if data.get("stat") == "Ok":
@@ -57,19 +64,26 @@ def get_spot(token):
         "uid": st.secrets["shoonya"]["user_id"],
         "exch": "NSE",
         "token": "26000",  # NIFTY
-        "susertoken": token
     }
 
     try:
-        res = requests.post(url, data=payload, timeout=10)
+        res = requests.post(
+            url,
+            data={
+                "jData": json.dumps(payload),
+                "jKey": token
+            }
+        )
+
         data = res.json()
         return float(data.get("lp", 0))
+
     except:
         return 0
 
 
 # =========================
-# OPTION CHAIN (SAFE DEMO)
+# OPTION CHAIN (DEMO)
 # =========================
 def option_chain(spot):
     base = int(round(spot / 50) * 50)
@@ -94,18 +108,18 @@ def option_chain(spot):
 token = login()
 
 if token:
-    st.success("✅ Connected to Shoonya")
+    st.success("✅ Login Successful")
 
     spot = get_spot(token)
 
     if spot > 0:
         st.subheader(f"NIFTY Spot: ₹{spot}")
     else:
-        st.warning("⚠️ Spot data not available")
+        st.warning("⚠️ Spot fetch failed")
 
     df = option_chain(spot)
 
-    # PCR Calculation
+    # PCR
     total_ce = df["CE_OI"].sum()
     total_pe = df["PE_OI"].sum()
     pcr = total_pe / total_ce if total_ce != 0 else 0
@@ -115,7 +129,7 @@ if token:
     col2.metric("Total CE OI", total_ce)
     col3.metric("Total PE OI", total_pe)
 
-    # Signal
+    # SIGNAL
     if pcr > 1:
         st.success("🟢 BUY SIGNAL")
     else:
