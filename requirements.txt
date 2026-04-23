@@ -1,6 +1,6 @@
 streamlit
 pandas
 pyotp
-NorenRestApiPy==0.0.22
 websocket-client
 streamlit-autorefresh
+git+https://github.com/Shoonya-Dev/NorenRestApiPy.git
