@@ -3,4 +3,3 @@ pandas==2.2.2
 pyotp==2.9.0
 websocket-client==1.7.0
 streamlit-autorefresh==1.0.1
-NorenRestApiPy==0.0.22
