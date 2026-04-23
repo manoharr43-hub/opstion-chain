@@ -5,4 +5,3 @@ NorenRestApiPy==0.0.22
 websocket-client==1.9.0
 requests==2.33.1
 streamlit-autorefresh==1.0.1
-
