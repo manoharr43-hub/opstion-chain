@@ -1,4 +1,6 @@
 streamlit
 pandas
-requests
 pyotp
+websocket-client
+streamlit-autorefresh
+git+https://github.com/manoharr43-hub/NorenRestApiPy.git
