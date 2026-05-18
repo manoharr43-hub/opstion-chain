@@ -1,37 +1,56 @@
 # =========================================================
-# 🚀 OPTION CHAIN ANALYZER - NSE AI PRO MAX
+# 🚀 NSE AI PRO MAX - OPTION CHAIN ANALYZER V2
+# FULL WORKING VERSION
 # =========================================================
 
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import plotly.graph_objects as go
 
 # =========================================================
-# PAGE TITLE
+# PAGE CONFIG
+# =========================================================
+
+st.set_page_config(
+    page_title="NSE OPTION CHAIN ANALYZER",
+    layout="wide"
+)
+
+# =========================================================
+# TITLE
 # =========================================================
 
 st.title("📊 NSE OPTION CHAIN ANALYZER")
+st.caption("AI BASED NSE OPTION CHAIN ANALYSIS")
 
 # =========================================================
 # STOCK LIST
 # =========================================================
 
 option_stocks = {
-    "NIFTY": "^NSEI",
-    "BANKNIFTY": "^NSEBANK",
+
     "RELIANCE": "RELIANCE.NS",
     "SBIN": "SBIN.NS",
+    "ICICIBANK": "ICICIBANK.NS",
+    "HDFCBANK": "HDFCBANK.NS",
+    "INFY": "INFY.NS",
     "TCS": "TCS.NS",
-    "INFY": "INFY.NS"
+    "ITC": "ITC.NS",
+    "LT": "LT.NS",
+    "AXISBANK": "AXISBANK.NS",
+    "TATAMOTORS": "TATAMOTORS.NS"
 }
 
 # =========================================================
 # SIDEBAR
 # =========================================================
 
+st.sidebar.header("⚙️ SETTINGS")
+
 selected_stock = st.sidebar.selectbox(
-    "SELECT SYMBOL",
+    "SELECT STOCK",
     list(option_stocks.keys())
 )
 
@@ -44,15 +63,32 @@ ticker_symbol = option_stocks[selected_stock]
 ticker = yf.Ticker(ticker_symbol)
 
 # =========================================================
-# EXPIRY DATES
+# OPTION EXPIRY FETCH
 # =========================================================
 
-expiry_dates = ticker.options
+try:
 
-if len(expiry_dates) == 0:
+    expiry_dates = ticker.options
 
-    st.error("NO OPTION DATA AVAILABLE")
+    if expiry_dates is None or len(expiry_dates) == 0:
+
+        st.error("❌ NO OPTION DATA AVAILABLE")
+
+        st.info("TRY ANOTHER STOCK")
+
+        st.stop()
+
+except Exception as e:
+
+    st.error("❌ OPTION CHAIN FETCH FAILED")
+
+    st.code(str(e))
+
     st.stop()
+
+# =========================================================
+# EXPIRY SELECTION
+# =========================================================
 
 selected_expiry = st.sidebar.selectbox(
     "SELECT EXPIRY",
@@ -60,16 +96,36 @@ selected_expiry = st.sidebar.selectbox(
 )
 
 # =========================================================
-# OPTION CHAIN DATA
+# DOWNLOAD OPTION CHAIN
 # =========================================================
 
-option_chain = ticker.option_chain(selected_expiry)
+try:
 
-calls = option_chain.calls
-puts = option_chain.puts
+    option_chain = ticker.option_chain(selected_expiry)
+
+    calls = option_chain.calls
+    puts = option_chain.puts
+
+except Exception as e:
+
+    st.error("OPTION CHAIN DOWNLOAD FAILED")
+
+    st.code(str(e))
+
+    st.stop()
 
 # =========================================================
-# CLEAN DATA
+# EMPTY CHECK
+# =========================================================
+
+if calls.empty or puts.empty:
+
+    st.error("EMPTY OPTION CHAIN")
+
+    st.stop()
+
+# =========================================================
+# CALL DATA
 # =========================================================
 
 call_df = calls[[
@@ -80,16 +136,6 @@ call_df = calls[[
     'impliedVolatility'
 ]]
 
-put_df = puts[[
-    'strike',
-    'lastPrice',
-    'volume',
-    'openInterest',
-    'impliedVolatility'
-]]
-
-# RENAME
-
 call_df.columns = [
     'STRIKE',
     'CALL_LTP',
@@ -97,6 +143,18 @@ call_df.columns = [
     'CALL_OI',
     'CALL_IV'
 ]
+
+# =========================================================
+# PUT DATA
+# =========================================================
+
+put_df = puts[[
+    'strike',
+    'lastPrice',
+    'volume',
+    'openInterest',
+    'impliedVolatility'
+]]
 
 put_df.columns = [
     'STRIKE',
@@ -107,7 +165,7 @@ put_df.columns = [
 ]
 
 # =========================================================
-# MERGE DATA
+# MERGE OPTION DATA
 # =========================================================
 
 merged_df = pd.merge(
@@ -125,7 +183,7 @@ hist = ticker.history(period="1d")
 live_price = hist['Close'].iloc[-1]
 
 # =========================================================
-# PCR CALCULATION
+# PCR
 # =========================================================
 
 total_call_oi = merged_df['CALL_OI'].sum()
@@ -133,8 +191,11 @@ total_call_oi = merged_df['CALL_OI'].sum()
 total_put_oi = merged_df['PUT_OI'].sum()
 
 if total_call_oi != 0:
+
     pcr = total_put_oi / total_call_oi
+
 else:
+
     pcr = 0
 
 # =========================================================
@@ -152,16 +213,16 @@ max_pain = merged_df.loc[
 ]
 
 # =========================================================
-# HIGHEST OI
+# SUPPORT / RESISTANCE
 # =========================================================
 
-highest_call_oi = merged_df.loc[
-    merged_df['CALL_OI'].idxmax(),
+support = merged_df.loc[
+    merged_df['PUT_OI'].idxmax(),
     'STRIKE'
 ]
 
-highest_put_oi = merged_df.loc[
-    merged_df['PUT_OI'].idxmax(),
+resistance = merged_df.loc[
+    merged_df['CALL_OI'].idxmax(),
     'STRIKE'
 ]
 
@@ -172,18 +233,20 @@ highest_put_oi = merged_df.loc[
 market_view = "SIDEWAYS"
 
 if pcr > 1.2:
+
     market_view = "🚀 BULLISH"
 
 elif pcr < 0.8:
+
     market_view = "🔻 BEARISH"
 
 # =========================================================
-# DISPLAY METRICS
+# METRICS
 # =========================================================
 
 st.subheader("📈 OPTION CHAIN METRICS")
 
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 
 col1.metric(
     "LIVE PRICE",
@@ -201,37 +264,32 @@ col3.metric(
 )
 
 col4.metric(
-    "MARKET VIEW",
-    market_view
+    "SUPPORT",
+    support
+)
+
+col5.metric(
+    "RESISTANCE",
+    resistance
 )
 
 # =========================================================
-# SUPPORT / RESISTANCE
+# MARKET VIEW
 # =========================================================
 
-st.subheader("📊 SUPPORT & RESISTANCE")
+st.subheader("🤖 AI MARKET VIEW")
 
-col5, col6 = st.columns(2)
+if "BULLISH" in market_view:
 
-col5.success(
-    f"🟢 SUPPORT : {highest_put_oi}"
-)
+    st.success(market_view)
 
-col6.error(
-    f"🔴 RESISTANCE : {highest_call_oi}"
-)
+elif "BEARISH" in market_view:
 
-# =========================================================
-# OI BUILDUP
-# =========================================================
+    st.error(market_view)
 
-merged_df['CALL_OI_CHANGE'] = (
-    merged_df['CALL_OI'].diff()
-)
+else:
 
-merged_df['PUT_OI_CHANGE'] = (
-    merged_df['PUT_OI'].diff()
-)
+    st.warning(market_view)
 
 # =========================================================
 # ATM STRIKE
@@ -249,26 +307,26 @@ atm_row = merged_df.loc[
 # ATM ANALYSIS
 # =========================================================
 
-st.subheader("🎯 ATM OPTION ANALYSIS")
+st.subheader("🎯 ATM ANALYSIS")
 
-col7, col8, col9, col10 = st.columns(4)
+col6, col7, col8, col9 = st.columns(4)
 
-col7.metric(
+col6.metric(
     "ATM STRIKE",
     atm_row['STRIKE']
 )
 
-col8.metric(
+col7.metric(
     "CALL OI",
     int(atm_row['CALL_OI'])
 )
 
-col9.metric(
+col8.metric(
     "PUT OI",
     int(atm_row['PUT_OI'])
 )
 
-col10.metric(
+col9.metric(
     "TOTAL OI",
     int(atm_row['TOTAL_OI'])
 )
@@ -277,15 +335,15 @@ col10.metric(
 # AI SIGNAL
 # =========================================================
 
-st.subheader("🤖 OPTION CHAIN AI SIGNAL")
+st.subheader("🚀 OPTION CHAIN AI SIGNAL")
 
-if pcr > 1.2 and live_price > highest_put_oi:
+if pcr > 1.2 and live_price > support:
 
-    st.success("🚀 STRONG BULLISH SIGNAL")
+    st.success("🚀 STRONG BULLISH")
 
-elif pcr < 0.8 and live_price < highest_call_oi:
+elif pcr < 0.8 and live_price < resistance:
 
-    st.error("🔻 STRONG BEARISH SIGNAL")
+    st.error("🔻 STRONG BEARISH")
 
 else:
 
@@ -350,3 +408,84 @@ st.dataframe(
     ]],
     use_container_width=True
 )
+
+# =========================================================
+# OI CHART
+# =========================================================
+
+st.subheader("📊 OPEN INTEREST CHART")
+
+chart_df = near_atm.copy()
+
+fig = go.Figure()
+
+# CALL OI
+
+fig.add_trace(go.Bar(
+    x=chart_df['STRIKE'],
+    y=chart_df['CALL_OI'],
+    name='CALL OI'
+))
+
+# PUT OI
+
+fig.add_trace(go.Bar(
+    x=chart_df['STRIKE'],
+    y=chart_df['PUT_OI'],
+    name='PUT OI'
+))
+
+fig.update_layout(
+
+    height=600,
+
+    barmode='group',
+
+    xaxis_title='STRIKE PRICE',
+
+    yaxis_title='OPEN INTEREST'
+)
+
+st.plotly_chart(
+    fig,
+    use_container_width=True
+)
+
+# =========================================================
+# IV ANALYSIS
+# =========================================================
+
+st.subheader("📉 IMPLIED VOLATILITY")
+
+avg_call_iv = merged_df['CALL_IV'].mean()
+
+avg_put_iv = merged_df['PUT_IV'].mean()
+
+col10, col11 = st.columns(2)
+
+col10.metric(
+    "AVG CALL IV",
+    round(avg_call_iv, 2)
+)
+
+col11.metric(
+    "AVG PUT IV",
+    round(avg_put_iv, 2)
+)
+
+# =========================================================
+# RAW DATA
+# =========================================================
+
+with st.expander("📄 FULL OPTION CHAIN DATA"):
+
+    st.dataframe(
+        merged_df,
+        use_container_width=True
+    )
+
+# =========================================================
+# FOOTER
+# =========================================================
+
+st.caption("🚀 NSE AI PRO MAX OPTION CHAIN ANALYZER")
