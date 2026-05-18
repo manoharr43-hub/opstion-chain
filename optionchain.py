@@ -1,5 +1,5 @@
 # ============================================
-# 🚀 NSE OPTION CHAIN AI PRO MAX
+# 🚀 NSE AI OPTION CHAIN PRO MAX
 # ============================================
 
 import streamlit as st
@@ -14,16 +14,27 @@ from datetime import datetime
 # ============================================
 
 st.set_page_config(
-    page_title="NSE AI OPTION PRO",
+    page_title="NSE AI SIGNAL",
     layout="wide"
 )
 
+st.title("♟️ AI SIGNAL")
+
 # ============================================
-# TITLE
+# STOCK LIST
 # ============================================
 
-st.title("🚀 NSE AI OPTION PRO MAX")
-st.markdown("### LIVE AI Trading Dashboard")
+stocks = {
+    "RELIANCE": "RELIANCE.NS",
+    "TCS": "TCS.NS",
+    "INFY": "INFY.NS",
+    "HDFCBANK": "HDFCBANK.NS",
+    "ICICIBANK": "ICICIBANK.NS",
+    "SBIN": "SBIN.NS",
+    "LT": "LT.NS",
+    "ITC": "ITC.NS",
+    "BHARTIARTL": "BHARTIARTL.NS"
+}
 
 # ============================================
 # SIDEBAR
@@ -31,299 +42,208 @@ st.markdown("### LIVE AI Trading Dashboard")
 
 st.sidebar.header("⚙️ SETTINGS")
 
-symbol = st.sidebar.selectbox(
-    "Select Symbol",
-    [
-        "RELIANCE.NS",
-        "TCS.NS",
-        "INFY.NS",
-        "HDFCBANK.NS",
-        "ICICIBANK.NS",
-        "^NSEI",
-        "^BANKNIFTY"
-    ]
+stock_name = st.sidebar.selectbox(
+    "Select Stock",
+    list(stocks.keys())
 )
 
 interval = st.sidebar.selectbox(
-    "Interval",
+    "Select Interval",
     ["5m", "15m", "30m", "1h"]
 )
 
 period = st.sidebar.selectbox(
-    "Period",
+    "Select Period",
     ["1d", "5d", "1mo"]
 )
+
+ticker = stocks[stock_name]
 
 # ============================================
 # DATA DOWNLOAD
 # ============================================
 
-@st.cache_data(ttl=60)
-def load_data(symbol, period, interval):
+try:
 
     df = yf.download(
-        tickers=symbol,
-        period=period,
+        ticker,
         interval=interval,
+        period=period,
         auto_adjust=True,
         progress=False
     )
 
-    if df.empty:
-        return pd.DataFrame()
-
     # ============================================
-    # FIX MULTI INDEX COLUMNS
+    # FIX MULTIINDEX ISSUE
     # ============================================
 
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
-    df = df.copy()
+    df = df.reset_index()
 
     # ============================================
-    # FORCE SERIES
+    # REQUIRED COLUMNS CHECK
     # ============================================
 
-    close = df["Close"].squeeze()
-    high = df["High"].squeeze()
-    low = df["Low"].squeeze()
-    volume = df["Volume"].squeeze()
+    needed = ['Open', 'High', 'Low', 'Close', 'Volume']
+
+    for col in needed:
+        if col not in df.columns:
+            st.error(f"Missing Column: {col}")
+            st.stop()
 
     # ============================================
+    # INDICATORS
+    # ============================================
+
     # EMA
-    # ============================================
+    df['EMA20'] = df['Close'].ewm(span=20).mean()
+    df['EMA50'] = df['Close'].ewm(span=50).mean()
 
-    df["EMA20"] = close.ewm(span=20).mean()
-    df["EMA50"] = close.ewm(span=50).mean()
-
-    # ============================================
-    # VWAP
-    # ============================================
-
-    df["VWAP"] = (
-        (close * volume).cumsum()
-        / volume.cumsum()
-    )
-
-    # ============================================
     # RSI
-    # ============================================
+    delta = df['Close'].diff()
 
-    delta = close.diff()
+    gain = np.where(delta > 0, delta, 0)
+    loss = np.where(delta < 0, -delta, 0)
 
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
+    gain = pd.Series(gain)
+    loss = pd.Series(loss)
 
     avg_gain = gain.rolling(14).mean()
     avg_loss = loss.rolling(14).mean()
 
     rs = avg_gain / avg_loss
 
-    df["RSI"] = 100 - (100 / (1 + rs))
+    df['RSI'] = 100 - (100 / (1 + rs))
 
-    df["RSI"] = df["RSI"].fillna(50)
-
-    # ============================================
-    # ATR
-    # ============================================
-
-    tr1 = high - low
-    tr2 = abs(high - close.shift())
-    tr3 = abs(low - close.shift())
-
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-
-    df["ATR"] = tr.rolling(14).mean()
+    # FIX FILLNA ERROR
+    df['RSI'] = df['RSI'].fillna(50)
 
     # ============================================
-    # BUY SIGNAL
+    # VWAP FIX
     # ============================================
 
-    df["BUY"] = (
-        (df["EMA20"] > df["EMA50"]) &
-        (close > df["VWAP"]) &
-        (df["RSI"] > 55)
+    close = df['Close'].astype(float)
+    volume = df['Volume'].astype(float)
+
+    df['VWAP'] = (
+        (close * volume).cumsum()
+        / volume.cumsum()
     )
 
     # ============================================
-    # SELL SIGNAL
+    # BUY / SELL SIGNALS
     # ============================================
 
-    df["SELL"] = (
-        (df["EMA20"] < df["EMA50"]) &
-        (close < df["VWAP"]) &
-        (df["RSI"] < 45)
+    df['BUY'] = (
+        (df['EMA20'] > df['EMA50']) &
+        (df['Close'] > df['VWAP']) &
+        (df['RSI'] > 55)
     )
 
-    return df
+    df['SELL'] = (
+        (df['EMA20'] < df['EMA50']) &
+        (df['Close'] < df['VWAP']) &
+        (df['RSI'] < 45)
+    )
 
-# ============================================
-# LOAD DATA
-# ============================================
+    latest = df.iloc[-1]
 
-df = load_data(symbol, period, interval)
+    # ============================================
+    # SIGNAL DISPLAY
+    # ============================================
 
-# ============================================
-# EMPTY CHECK
-# ============================================
+    if latest['BUY']:
+        st.success("🚀 BUY SIGNAL DETECTED")
 
-if df.empty:
-    st.error("❌ No Data Found")
-    st.stop()
+    elif latest['SELL']:
+        st.error("🔻 SELL SIGNAL DETECTED")
 
-# ============================================
-# LATEST VALUES
-# ============================================
+    else:
+        st.warning("⚠️ NO CLEAR SIGNAL")
 
-latest = df.iloc[-1]
+    # ============================================
+    # LIVE PRICE
+    # ============================================
 
-ltp = round(float(latest["Close"]), 2)
-rsi = round(float(latest["RSI"]), 2)
-vwap = round(float(latest["VWAP"]), 2)
-ema20 = round(float(latest["EMA20"]), 2)
-ema50 = round(float(latest["EMA50"]), 2)
-atr = round(float(latest["ATR"]), 2)
+    st.metric(
+        label=f"{stock_name} LIVE PRICE",
+        value=f"₹ {round(latest['Close'], 2)}"
+    )
 
-# ============================================
-# SIGNAL
-# ============================================
+    # ============================================
+    # CHART
+    # ============================================
 
-signal = "SIDEWAYS"
+    fig = go.Figure()
 
-if latest["BUY"]:
-    signal = "BUY"
-
-if latest["SELL"]:
-    signal = "SELL"
-
-# ============================================
-# METRICS
-# ============================================
-
-col1, col2, col3, col4, col5, col6 = st.columns(6)
-
-col1.metric("LTP", ltp)
-col2.metric("RSI", rsi)
-col3.metric("VWAP", vwap)
-col4.metric("EMA20", ema20)
-col5.metric("EMA50", ema50)
-col6.metric("ATR", atr)
-
-# ============================================
-# SIGNAL DISPLAY
-# ============================================
-
-st.subheader("📡 AI SIGNAL")
-
-if signal == "BUY":
-    st.success("🚀 BUY SIGNAL DETECTED")
-
-elif signal == "SELL":
-    st.error("🔻 SELL SIGNAL DETECTED")
-
-else:
-    st.warning("⚠️ SIDEWAYS MARKET")
-
-# ============================================
-# CHART
-# ============================================
-
-fig = go.Figure()
-
-# PRICE
-fig.add_trace(
-    go.Scatter(
+    fig.add_trace(go.Scatter(
         x=df.index,
-        y=df["Close"],
-        mode="lines",
-        name="Close"
-    )
-)
+        y=df['Close'],
+        mode='lines',
+        name='Close'
+    ))
 
-# EMA20
-fig.add_trace(
-    go.Scatter(
+    fig.add_trace(go.Scatter(
         x=df.index,
-        y=df["EMA20"],
-        mode="lines",
-        name="EMA20"
-    )
-)
+        y=df['EMA20'],
+        mode='lines',
+        name='EMA20'
+    ))
 
-# EMA50
-fig.add_trace(
-    go.Scatter(
+    fig.add_trace(go.Scatter(
         x=df.index,
-        y=df["EMA50"],
-        mode="lines",
-        name="EMA50"
-    )
-)
+        y=df['EMA50'],
+        mode='lines',
+        name='EMA50'
+    ))
 
-# VWAP
-fig.add_trace(
-    go.Scatter(
+    fig.add_trace(go.Scatter(
         x=df.index,
-        y=df["VWAP"],
-        mode="lines",
-        name="VWAP"
+        y=df['VWAP'],
+        mode='lines',
+        name='VWAP'
+    ))
+
+    fig.update_layout(
+        title=f"{stock_name} LIVE CHART",
+        height=600,
+        xaxis_title="Time",
+        yaxis_title="Price"
     )
-)
 
-fig.update_layout(
-    title=f"{symbol} LIVE CHART",
-    height=600,
-    xaxis_title="Time",
-    yaxis_title="Price"
-)
+    st.plotly_chart(fig, use_container_width=True)
 
-st.plotly_chart(fig, use_container_width=True)
+    # ============================================
+    # DATA TABLE
+    # ============================================
 
-# ============================================
-# LAST SIGNALS
-# ============================================
+    st.subheader("📊 LIVE DATA")
 
-st.subheader("📋 LAST 10 SIGNALS")
+    st.dataframe(
+        df.tail(20),
+        use_container_width=True
+    )
 
-signals_df = df[
-    (df["BUY"] == True) |
-    (df["SELL"] == True)
-].copy()
+    # ============================================
+    # RSI METER
+    # ============================================
 
-signals_df["Signal"] = np.where(
-    signals_df["BUY"],
-    "BUY",
-    "SELL"
-)
+    st.subheader("📈 RSI STATUS")
 
-show_df = signals_df[
-    ["Close", "RSI", "VWAP", "Signal"]
-].tail(10)
+    rsi = round(latest['RSI'], 2)
 
-st.dataframe(show_df, use_container_width=True)
+    if rsi > 70:
+        st.error(f"RSI : {rsi} → OVERBOUGHT")
 
-# ============================================
-# MARKET STATUS
-# ============================================
+    elif rsi < 30:
+        st.success(f"RSI : {rsi} → OVERSOLD")
 
-st.subheader("📈 MARKET STATUS")
+    else:
+        st.info(f"RSI : {rsi} → NORMAL")
 
-if rsi > 70:
-    st.error("🔥 OVERBOUGHT MARKET")
+except Exception as e:
 
-elif rsi < 30:
-    st.success("💎 OVERSOLD MARKET")
-
-else:
-    st.info("⚖️ NORMAL MARKET")
-
-# ============================================
-# FOOTER
-# ============================================
-
-st.markdown("---")
-
-st.caption(
-    f"Updated: {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}"
-)
+    st.error("APP ERROR")
+    st.code(str(e))
