@@ -60,8 +60,8 @@ rs = avg_gain / avg_loss
 df['RSI'] = 100 - (100 / (1 + rs))
 df['RSI'].fillna(50, inplace=True)
 
-# VWAP Calculation
-df['VWAP'] = (df['Close'] * df['Volume']).cumsum() / df['Volume'].cumsum()
+# Safe VWAP Calculation (Series)
+df['VWAP'] = ((df['Close'] * df['Volume']).cumsum() / df['Volume'].cumsum()).astype(float)
 
 # ATR Calculation
 df['TR'] = np.maximum(df['High'] - df['Low'],
@@ -74,8 +74,17 @@ df.dropna(inplace=True)
 # =============================
 # Signal Logic
 # =============================
-df['BUY'] = (df['EMA20'] > df['EMA50']) & (df['Close'] > df['VWAP']) & (df['RSI'] > 55)
-df['SELL'] = (df['EMA20'] < df['EMA50']) & (df['Close'] < df['VWAP']) & (df['RSI'] < 45)
+df['BUY'] = (
+    (df['EMA20'] > df['EMA50']) &
+    (df['Close'] > df['VWAP']) &
+    (df['RSI'] > 55)
+)
+
+df['SELL'] = (
+    (df['EMA20'] < df['EMA50']) &
+    (df['Close'] < df['VWAP']) &
+    (df['RSI'] < 45)
+)
 
 # =============================
 # Dashboard
