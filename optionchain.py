@@ -35,8 +35,7 @@ period = st.sidebar.selectbox("Period", ["5d", "1mo", "3mo"])
 # =============================
 @st.cache_data(ttl=3600)
 def get_data(symbol, period, interval):
-    data = yf.download(symbol + ".NS", period=period, interval=interval)
-    return data
+    return yf.download(symbol + ".NS", period=period, interval=interval)
 
 df = get_data(selected_stock, period, interval)
 
@@ -60,8 +59,9 @@ rs = avg_gain / avg_loss
 df['RSI'] = 100 - (100 / (1 + rs))
 df['RSI'].fillna(50, inplace=True)
 
-# Safe VWAP Calculation (Series)
-df['VWAP'] = ((df['Close'] * df['Volume']).cumsum() / df['Volume'].cumsum()).astype(float)
+# Safe VWAP Calculation (force Series)
+vwap_series = (df['Close'] * df['Volume']).cumsum() / df['Volume'].cumsum()
+df['VWAP'] = pd.Series(vwap_series, index=df.index)
 
 # ATR Calculation
 df['TR'] = np.maximum(df['High'] - df['Low'],
