@@ -1,5 +1,6 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX - ALL NSE STOCKS SCANNER
+# 🚀 NSE AI PRO MAX V2 - MULTI STOCK SCANNER
+# OLD CODE DISTURB KAKUNDA NEW VERSION
 # =========================================================
 
 import streamlit as st
@@ -7,18 +8,19 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+from concurrent.futures import ThreadPoolExecutor
 
 # =========================================================
 # PAGE CONFIG
 # =========================================================
 
 st.set_page_config(
-    page_title="NSE AI PRO MAX",
+    page_title="NSE AI PRO MAX V2",
     layout="wide"
 )
 
-st.title("🚀 NSE AI PRO MAX")
-st.caption("AI BASED NSE STOCK SIGNAL SCANNER")
+st.title("🚀 NSE AI PRO MAX V2")
+st.caption("AI BASED MULTI STOCK NSE SCANNER")
 
 # =========================================================
 # NSE STOCK LIST
@@ -64,24 +66,130 @@ nse_stocks = {
 st.sidebar.header("⚙️ SETTINGS")
 
 selected_stock = st.sidebar.selectbox(
-    "SELECT NSE STOCK",
+    "SELECT STOCK",
     list(nse_stocks.keys())
 )
 
 interval = st.sidebar.selectbox(
-    "SELECT INTERVAL",
+    "INTERVAL",
     ["5m", "15m", "30m", "1h"]
 )
 
 period = st.sidebar.selectbox(
-    "SELECT PERIOD",
+    "PERIOD",
     ["1d", "5d", "1mo"]
 )
 
 ticker = nse_stocks[selected_stock]
 
 # =========================================================
-# DOWNLOAD DATA
+# INDICATOR FUNCTION
+# =========================================================
+
+def calculate_indicators(df):
+
+    if df.empty:
+        return df
+
+    # FIX MULTI INDEX
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+
+    df = df.reset_index()
+
+    # EMA
+    df['EMA20'] = df['Close'].ewm(span=20).mean()
+    df['EMA50'] = df['Close'].ewm(span=50).mean()
+
+    # VWAP
+    df['VWAP'] = (
+        (df['Close'] * df['Volume']).cumsum()
+        / df['Volume'].cumsum()
+    )
+
+    # RSI
+    delta = df['Close'].diff()
+
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+
+    avg_gain = gain.rolling(14).mean()
+    avg_loss = loss.rolling(14).mean()
+
+    rs = avg_gain / avg_loss
+
+    df['RSI'] = 100 - (100 / (1 + rs))
+    df['RSI'] = df['RSI'].fillna(50)
+
+    # ATR
+    df['H-L'] = df['High'] - df['Low']
+    df['H-PC'] = abs(df['High'] - df['Close'].shift(1))
+    df['L-PC'] = abs(df['Low'] - df['Close'].shift(1))
+
+    df['TR'] = df[['H-L', 'H-PC', 'L-PC']].max(axis=1)
+
+    df['ATR'] = df['TR'].rolling(14).mean()
+
+    # MACD
+    exp1 = df['Close'].ewm(span=12).mean()
+    exp2 = df['Close'].ewm(span=26).mean()
+
+    df['MACD'] = exp1 - exp2
+    df['MACD_SIGNAL'] = df['MACD'].ewm(span=9).mean()
+
+    # VOLUME BREAKOUT
+    df['VOL_AVG'] = df['Volume'].rolling(20).mean()
+
+    df['VOL_BREAKOUT'] = (
+        df['Volume'] > df['VOL_AVG'] * 1.5
+    )
+
+    return df
+
+# =========================================================
+# SIGNAL FUNCTION
+# =========================================================
+
+def generate_signal(df):
+
+    latest = df.iloc[-1]
+
+    score = 0
+
+    # EMA
+    if latest['EMA20'] > latest['EMA50']:
+        score += 25
+
+    # VWAP
+    if latest['Close'] > latest['VWAP']:
+        score += 25
+
+    # RSI
+    if 55 < latest['RSI'] < 70:
+        score += 25
+
+    # MACD
+    if latest['MACD'] > latest['MACD_SIGNAL']:
+        score += 25
+
+    # FINAL SIGNAL
+
+    if score >= 75:
+        signal = "🚀 STRONG BUY"
+
+    elif score >= 50:
+        signal = "✅ BUY"
+
+    elif score >= 25:
+        signal = "⚠️ SIDEWAYS"
+
+    else:
+        signal = "🔻 SELL"
+
+    return signal, score
+
+# =========================================================
+# SINGLE STOCK DATA
 # =========================================================
 
 try:
@@ -94,89 +202,13 @@ try:
         auto_adjust=True
     )
 
-    # =====================================================
-    # EMPTY DATA FIX
-    # =====================================================
-
     if df.empty:
         st.error("NO DATA FOUND")
         st.stop()
 
-    # =====================================================
-    # FIX MULTI INDEX
-    # =====================================================
+    df = calculate_indicators(df)
 
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-
-    # =====================================================
-    # RESET INDEX
-    # =====================================================
-
-    df = df.reset_index()
-
-    # =====================================================
-    # INDICATORS
-    # =====================================================
-
-    # EMA
-
-    df['EMA20'] = df['Close'].ewm(span=20).mean()
-
-    df['EMA50'] = df['Close'].ewm(span=50).mean()
-
-    # VWAP
-
-    df['VWAP'] = (
-        (df['Close'] * df['Volume']).cumsum()
-        / df['Volume'].cumsum()
-    )
-
-    # RSI
-
-    delta = df['Close'].diff()
-
-    gain = delta.clip(lower=0)
-
-    loss = -delta.clip(upper=0)
-
-    avg_gain = gain.rolling(14).mean()
-
-    avg_loss = loss.rolling(14).mean()
-
-    rs = avg_gain / avg_loss
-
-    df['RSI'] = 100 - (100 / (1 + rs))
-
-    df['RSI'] = df['RSI'].fillna(50)
-
-    # ATR
-
-    df['H-L'] = df['High'] - df['Low']
-
-    df['H-PC'] = abs(df['High'] - df['Close'].shift(1))
-
-    df['L-PC'] = abs(df['Low'] - df['Close'].shift(1))
-
-    df['TR'] = df[['H-L', 'H-PC', 'L-PC']].max(axis=1)
-
-    df['ATR'] = df['TR'].rolling(14).mean()
-
-    # =====================================================
-    # AI SIGNAL LOGIC
-    # =====================================================
-
-    df['BUY'] = (
-        (df['EMA20'] > df['EMA50']) &
-        (df['Close'] > df['VWAP']) &
-        (df['RSI'] > 55)
-    )
-
-    df['SELL'] = (
-        (df['EMA20'] < df['EMA50']) &
-        (df['Close'] < df['VWAP']) &
-        (df['RSI'] < 45)
-    )
+    signal, score = generate_signal(df)
 
     latest = df.iloc[-1]
 
@@ -186,26 +218,26 @@ try:
 
     st.subheader("🤖 AI SIGNAL")
 
-    if latest['BUY']:
+    if "STRONG BUY" in signal:
+        st.success(signal)
 
-        st.success("🚀 STRONG BUY SIGNAL DETECTED")
+    elif "BUY" in signal:
+        st.info(signal)
 
-    elif latest['SELL']:
-
-        st.error("🔻 STRONG SELL SIGNAL DETECTED")
+    elif "SELL" in signal:
+        st.error(signal)
 
     else:
-
-        st.warning("⚠️ SIDEWAYS / WAIT")
+        st.warning(signal)
 
     # =====================================================
     # LIVE METRICS
     # =====================================================
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
 
     col1.metric(
-        "LIVE PRICE",
+        "PRICE",
         f"₹ {round(latest['Close'], 2)}"
     )
 
@@ -224,6 +256,11 @@ try:
         round(latest['ATR'], 2)
     )
 
+    col5.metric(
+        "AI SCORE",
+        score
+    )
+
     # =====================================================
     # CHART
     # =====================================================
@@ -232,29 +269,32 @@ try:
 
     fig = go.Figure()
 
+    # TIME COLUMN FIX
+    time_col = df.columns[0]
+
     fig.add_trace(go.Scatter(
-        x=df.index,
+        x=df[time_col],
         y=df['Close'],
         mode='lines',
         name='Close'
     ))
 
     fig.add_trace(go.Scatter(
-        x=df.index,
+        x=df[time_col],
         y=df['EMA20'],
         mode='lines',
         name='EMA20'
     ))
 
     fig.add_trace(go.Scatter(
-        x=df.index,
+        x=df[time_col],
         y=df['EMA50'],
         mode='lines',
         name='EMA50'
     ))
 
     fig.add_trace(go.Scatter(
-        x=df.index,
+        x=df[time_col],
         y=df['VWAP'],
         mode='lines',
         name='VWAP'
@@ -262,9 +302,9 @@ try:
 
     fig.update_layout(
         height=650,
+        hovermode="x unified",
         xaxis_title="TIME",
-        yaxis_title="PRICE",
-        hovermode="x unified"
+        yaxis_title="PRICE"
     )
 
     st.plotly_chart(
@@ -284,7 +324,8 @@ try:
         'EMA50',
         'VWAP',
         'RSI',
-        'ATR'
+        'ATR',
+        'MACD'
     ]].tail(20)
 
     st.dataframe(
@@ -311,6 +352,105 @@ try:
     else:
 
         st.info(f"RSI {round(rsi,2)} → NORMAL")
+
+    # =====================================================
+    # MULTI STOCK AI SCANNER
+    # =====================================================
+
+    st.subheader("🔥 LIVE AI STOCK SCANNER")
+
+    def scan_stock(item):
+
+        stock_name, stock_ticker = item
+
+        try:
+
+            data = yf.download(
+                stock_ticker,
+                interval=interval,
+                period=period,
+                progress=False,
+                auto_adjust=True
+            )
+
+            if data.empty:
+                return None
+
+            data = calculate_indicators(data)
+
+            signal, score = generate_signal(data)
+
+            latest = data.iloc[-1]
+
+            return {
+                "STOCK": stock_name,
+                "PRICE": round(latest['Close'], 2),
+                "RSI": round(latest['RSI'], 2),
+                "MACD": round(latest['MACD'], 2),
+                "SIGNAL": signal,
+                "SCORE": score
+            }
+
+        except:
+            return None
+
+    results = []
+
+    # FAST SCANNER
+    with ThreadPoolExecutor(max_workers=10) as executor:
+
+        scanned = executor.map(
+            scan_stock,
+            nse_stocks.items()
+        )
+
+    for item in scanned:
+
+        if item is not None:
+            results.append(item)
+
+    scanner_df = pd.DataFrame(results)
+
+    # SORT BY SCORE
+    scanner_df = scanner_df.sort_values(
+        by="SCORE",
+        ascending=False
+    )
+
+    st.dataframe(
+        scanner_df,
+        use_container_width=True
+    )
+
+    # =====================================================
+    # TOP BUY STOCKS
+    # =====================================================
+
+    st.subheader("🚀 TOP BUY STOCKS")
+
+    top_buy = scanner_df[
+        scanner_df['SIGNAL'].str.contains("BUY")
+    ]
+
+    st.dataframe(
+        top_buy.head(10),
+        use_container_width=True
+    )
+
+    # =====================================================
+    # TOP SELL STOCKS
+    # =====================================================
+
+    st.subheader("🔻 TOP SELL STOCKS")
+
+    top_sell = scanner_df[
+        scanner_df['SIGNAL'].str.contains("SELL")
+    ]
+
+    st.dataframe(
+        top_sell.head(10),
+        use_container_width=True
+    )
 
 except Exception as e:
 
