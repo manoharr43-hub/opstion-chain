@@ -1,108 +1,157 @@
-# ==========================================
-# optionchain.py — NSE Option Chain Dashboard
-# ==========================================
 import streamlit as st
-import pandas as pd
 import yfinance as yf
-import numpy as np
+import pandas as pd
 
-st.set_page_config(page_title="NSE Option Chain AI PRO", layout="wide")
+from indicators import add_indicators
+from option_signals import generate_signal
+from oi_analysis import calculate_pcr, max_pain
+from greeks import estimate_greeks
 
-# =============================
-# Load NSE Top 500 Stocks
-# =============================
-@st.cache_data(ttl=86400)
-def load_nse500():
-    try:
-        url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
-        df = pd.read_csv(url)
-        return df['Symbol'].tolist()
-    except Exception:
-        return ["RELIANCE", "HDFCBANK", "INFY"]
+# =========================
+# NSE STOCK LIST
+# =========================
+stocks = [
+    "RELIANCE",
+    "HDFCBANK",
+    "INFY",
+    "TCS",
+    "ICICIBANK",
+    "SBIN",
+    "LT",
+    "ITC",
+    "AXISBANK"
+]
 
-stocks = load_nse500()
+# =========================
+# MAIN DASHBOARD
+# =========================
+def option_chain_dashboard():
 
-# =============================
-# Sidebar Settings
-# =============================
-st.sidebar.header("Scanner Settings")
-selected_stock = st.sidebar.selectbox("Choose Stock", stocks)
-interval = st.sidebar.selectbox("Interval", ["5m", "15m", "30m", "1h", "1d"])
-period = st.sidebar.selectbox("Period", ["5d", "1mo", "3mo"])
+    st.sidebar.header("⚙️ Scanner Settings")
 
-# =============================
-# Fetch Data
-# =============================
-@st.cache_data(ttl=3600)
-def get_data(symbol, period, interval):
-    return yf.download(symbol + ".NS", period=period, interval=interval)
+    stock = st.sidebar.selectbox("Select Stock", stocks)
 
-df = get_data(selected_stock, period, interval)
+    interval = st.sidebar.selectbox(
+        "Interval",
+        ["5m", "15m", "30m", "1h", "1d"]
+    )
 
-if df.empty:
-    st.error("⚠️ No data available for selected stock or interval.")
-    st.stop()
+    period = st.sidebar.selectbox(
+        "Period",
+        ["5d", "1mo", "3mo"]
+    )
 
-# =============================
-# Indicators
-# =============================
-df['EMA20'] = df['Close'].ewm(span=20).mean()
-df['EMA50'] = df['Close'].ewm(span=50).mean()
+    # =========================
+    # STOCK DATA
+    # =========================
+    df = yf.download(
+        stock + ".NS",
+        period=period,
+        interval=interval,
+        progress=False
+    )
 
-# Safe RSI Calculation
-delta = df['Close'].diff()
-gain = delta.clip(lower=0)
-loss = -delta.clip(upper=0)
-avg_gain = gain.rolling(14).mean()
-avg_loss = loss.rolling(14).mean()
-rs = avg_gain / avg_loss
-df['RSI'] = 100 - (100 / (1 + rs))
-df['RSI'].fillna(50, inplace=True)
+    if df.empty:
+        st.error("No data found")
+        return
 
-# Safe VWAP Calculation (force Series)
-vwap_series = (df['Close'] * df['Volume']).cumsum() / df['Volume'].cumsum()
-df['VWAP'] = pd.Series(vwap_series, index=df.index)
+    # =========================
+    # INDICATORS
+    # =========================
+    df = add_indicators(df)
 
-# ATR Calculation
-df['TR'] = np.maximum(df['High'] - df['Low'],
-                      np.maximum(abs(df['High'] - df['Close'].shift()),
-                                 abs(df['Low'] - df['Close'].shift())))
-df['ATR'] = df['TR'].rolling(14).mean()
+    latest = df.iloc[-1]
 
-df.dropna(inplace=True)
+    # =========================
+    # OPTION CHAIN
+    # =========================
+    ticker = yf.Ticker(stock + ".NS")
 
-# =============================
-# Signal Logic
-# =============================
-df['BUY'] = (
-    (df['EMA20'] > df['EMA50']) &
-    (df['Close'] > df['VWAP']) &
-    (df['RSI'] > 55)
-)
+    expiries = ticker.options
 
-df['SELL'] = (
-    (df['EMA20'] < df['EMA50']) &
-    (df['Close'] < df['VWAP']) &
-    (df['RSI'] < 45)
-)
+    if len(expiries) == 0:
+        st.warning("No option chain available")
+        return
 
-# =============================
-# Dashboard
-# =============================
-st.title("📊 NSE Option Chain AI PRO")
-st.subheader(f"Stock: {selected_stock}")
+    expiry = st.selectbox(
+        "Select Expiry",
+        expiries
+    )
 
-latest = df.iloc[-1]
-trend = "BULLISH" if latest['EMA20'] > latest['EMA50'] else "BEARISH"
-signal = "🚀 BUY" if latest['BUY'] else "🔻 SELL" if latest['SELL'] else "WAIT"
+    opt = ticker.option_chain(expiry)
 
-col1, col2, col3, col4, col5, col6 = st.columns(6)
-col1.metric("Trend", trend)
-col2.metric("RSI", f"{latest['RSI']:.2f}")
-col3.metric("VWAP", "ABOVE" if latest['Close'] > latest['VWAP'] else "BELOW")
-col4.metric("Signal", signal)
-col5.metric("ATR", f"{latest['ATR']:.2f}")
-col6.metric("Volume", f"{latest['Volume']:.0f}")
+    calls = opt.calls
+    puts = opt.puts
 
-st.line_chart(df[['Close', 'EMA20', 'EMA50', 'VWAP']])
-st.dataframe(df.tail(10))
+    # =========================
+    # OI ANALYSIS
+    # =========================
+    pcr = calculate_pcr(calls, puts)
+
+    mp = max_pain(calls, puts)
+
+    # =========================
+    # SIGNAL
+    # =========================
+    signal = generate_signal(latest)
+
+    # =========================
+    # GREEKS
+    # =========================
+    greeks = estimate_greeks()
+
+    # =========================
+    # METRICS
+    # =========================
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    col1.metric("Close", round(latest['Close'], 2))
+    col2.metric("RSI", round(latest['RSI'], 2))
+    col3.metric("PCR", round(pcr, 2))
+    col4.metric("Max Pain", mp)
+    col5.metric("Signal", signal)
+
+    # =========================
+    # CHART
+    # =========================
+    st.subheader("📈 Price Chart")
+
+    st.line_chart(
+        df[['Close', 'EMA20', 'EMA50', 'VWAP']]
+    )
+
+    # =========================
+    # OPTION CHAIN
+    # =========================
+    st.subheader("📊 CALL OPTION DATA")
+
+    st.dataframe(
+        calls[
+            [
+                'strike',
+                'openInterest',
+                'volume',
+                'impliedVolatility'
+            ]
+        ]
+    )
+
+    st.subheader("📊 PUT OPTION DATA")
+
+    st.dataframe(
+        puts[
+            [
+                'strike',
+                'openInterest',
+                'volume',
+                'impliedVolatility'
+            ]
+        ]
+    )
+
+    # =========================
+    # GREEKS DISPLAY
+    # =========================
+    st.subheader("⚡ Greeks")
+
+    st.write(greeks)
