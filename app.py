@@ -1,141 +1,70 @@
+# =============================
+# app.py – NSE TOP 500 Scanner
+# =============================
 import streamlit as st
-import requests
-import pyotp
 import pandas as pd
-import json
+import yfinance as yf
+import numpy as np
+import datetime
 
-# =========================
-# PAGE CONFIG
-# =========================
-st.set_page_config(layout="wide")
-st.title("🚀 Shoonya Direct API Option Chain")
+st.set_page_config(page_title="NSE AI PRO V54.0", layout="wide")
 
-# =========================
-# LOGIN FUNCTION (FIXED)
-# =========================
-def login():
-    creds = st.secrets["shoonya"]
-    otp = pyotp.TOTP(creds["totp_key"]).now()
-
-    url = "https://api.shoonya.com/NorenWSTP/QuickAuth"
-
-    payload = {
-        "uid": creds["user_id"],
-        "pwd": creds["password"],
-        "factor2": otp,
-        "vc": creds["vendor_code"],
-        "appkey": creds["api_secret"],
-        "imei": creds["imei"]
-    }
-
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": "Mozilla/5.0"
-    }
-
+# =============================
+# Load NSE Top 500 Stocks
+# =============================
+@st.cache_data(ttl=86400)
+def load_nse500():
     try:
-        res = requests.post(
-            url,
-            data={"jData": json.dumps(payload)},  # 🔥 FIX
-            headers=headers,
-            timeout=10
-        )
-
-        data = res.json()
-
-        if data.get("stat") == "Ok":
-            return data["susertoken"]
-        else:
-            st.error(f"Login Failed: {data}")
-            return None
-
-    except Exception as e:
-        st.error(f"Login Error: {e}")
-        return None
-
-
-# =========================
-# GET SPOT PRICE
-# =========================
-def get_spot(token):
-    url = "https://api.shoonya.com/NorenWSTP/GetQuotes"
-
-    payload = {
-        "uid": st.secrets["shoonya"]["user_id"],
-        "exch": "NSE",
-        "token": "26000",  # NIFTY
-    }
-
-    try:
-        res = requests.post(
-            url,
-            data={
-                "jData": json.dumps(payload),
-                "jKey": token
-            }
-        )
-
-        data = res.json()
-        return float(data.get("lp", 0))
-
+        url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
+        df = pd.read_csv(url)
+        return df['Symbol'].tolist()
     except:
-        return 0
+        return ["RELIANCE","HDFCBANK","INFY"]  # fallback
 
+stocks = load_nse500()
 
-# =========================
-# OPTION CHAIN (DEMO)
-# =========================
-def option_chain(spot):
-    base = int(round(spot / 50) * 50)
-    strikes = [base + i * 50 for i in range(-5, 6)]
+# =============================
+# User Inputs
+# =============================
+st.sidebar.header("Scanner Settings")
+selected_stock = st.sidebar.selectbox("Choose Stock", stocks)
+interval = st.sidebar.selectbox("Interval", ["5m","15m","30m","1h","1d"])
+period = st.sidebar.selectbox("Period", ["5d","1mo","3mo"])
 
-    rows = []
-    for s in strikes:
-        rows.append({
-            "Strike": s,
-            "CE_OI": 1000 + s,
-            "PE_OI": 1200 + s,
-            "CE_LTP": 100,
-            "PE_LTP": 120
-        })
+# =============================
+# Fetch Data
+# =============================
+@st.cache_data(ttl=3600)
+def get_data(symbol, period, interval):
+    return yf.download(symbol+".NS", period=period, interval=interval)
 
-    return pd.DataFrame(rows)
+df = get_data(selected_stock, period, interval)
 
+# =============================
+# Indicators
+# =============================
+df['EMA20'] = df['Close'].ewm(span=20).mean()
+df['EMA50'] = df['Close'].ewm(span=50).mean()
+df['RSI'] = 100 - (100/(1+df['Close'].pct_change().rolling(14).apply(
+    lambda x: (x[x>0].mean()/-x[x<0].mean()) if -x[x<0].mean()!=0 else 0)))
+df['VWAP'] = (df['Close']*df['Volume']).cumsum()/df['Volume'].cumsum()
 
-# =========================
-# MAIN APP
-# =========================
-token = login()
+# =============================
+# Signal Logic
+# =============================
+df['BUY'] = (df['EMA20'] > df['EMA50']) & (df['Close'] > df['VWAP']) & (df['RSI'] > 55)
+df['SELL'] = (df['EMA20'] < df['EMA50']) & (df['Close'] < df['VWAP']) & (df['RSI'] < 45)
 
-if token:
-    st.success("✅ Login Successful")
+# =============================
+# Dashboard
+# =============================
+st.title("📊 NSE AI PRO V54.0 – TOP 500 Scanner")
+st.write(f"Selected Stock: **{selected_stock}**")
 
-    spot = get_spot(token)
+latest = df.iloc[-1]
+st.metric("Trend", "BULLISH" if latest['EMA20']>latest['EMA50'] else "BEARISH")
+st.metric("RSI", f"{latest['RSI']:.2f}")
+st.metric("VWAP Position", "ABOVE" if latest['Close']>latest['VWAP'] else "BELOW")
+st.metric("Signal", "🚀 BUY" if latest['BUY'] else "🔻 SELL" if latest['SELL'] else "WAIT")
 
-    if spot > 0:
-        st.subheader(f"NIFTY Spot: ₹{spot}")
-    else:
-        st.warning("⚠️ Spot fetch failed")
-
-    df = option_chain(spot)
-
-    # PCR
-    total_ce = df["CE_OI"].sum()
-    total_pe = df["PE_OI"].sum()
-    pcr = total_pe / total_ce if total_ce != 0 else 0
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("PCR", round(pcr, 2))
-    col2.metric("Total CE OI", total_ce)
-    col3.metric("Total PE OI", total_pe)
-
-    # SIGNAL
-    if pcr > 1:
-        st.success("🟢 BUY SIGNAL")
-    else:
-        st.error("🔴 SELL SIGNAL")
-
-    st.dataframe(df, use_container_width=True)
-
-else:
-    st.error("❌ Login Failed")
+st.line_chart(df[['Close','EMA20','EMA50','VWAP']])
