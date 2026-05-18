@@ -1,459 +1,352 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V2 - MULTI STOCK SCANNER
-# OLD CODE DISTURB KAKUNDA NEW VERSION
+# 🚀 OPTION CHAIN ANALYZER - NSE AI PRO MAX
 # =========================================================
 
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
-from concurrent.futures import ThreadPoolExecutor
 
 # =========================================================
-# PAGE CONFIG
+# PAGE TITLE
 # =========================================================
 
-st.set_page_config(
-    page_title="NSE AI PRO MAX V2",
-    layout="wide"
-)
-
-st.title("🚀 NSE AI PRO MAX V2")
-st.caption("AI BASED MULTI STOCK NSE SCANNER")
+st.title("📊 NSE OPTION CHAIN ANALYZER")
 
 # =========================================================
-# NSE STOCK LIST
+# STOCK LIST
 # =========================================================
 
-nse_stocks = {
+option_stocks = {
+    "NIFTY": "^NSEI",
+    "BANKNIFTY": "^NSEBANK",
     "RELIANCE": "RELIANCE.NS",
-    "TCS": "TCS.NS",
-    "INFY": "INFY.NS",
-    "HDFCBANK": "HDFCBANK.NS",
-    "ICICIBANK": "ICICIBANK.NS",
     "SBIN": "SBIN.NS",
-    "LT": "LT.NS",
-    "ITC": "ITC.NS",
-    "BHARTIARTL": "BHARTIARTL.NS",
-    "ASIANPAINT": "ASIANPAINT.NS",
-    "AXISBANK": "AXISBANK.NS",
-    "BAJFINANCE": "BAJFINANCE.NS",
-    "HCLTECH": "HCLTECH.NS",
-    "MARUTI": "MARUTI.NS",
-    "SUNPHARMA": "SUNPHARMA.NS",
-    "TATAMOTORS": "TATAMOTORS.NS",
-    "WIPRO": "WIPRO.NS",
-    "ULTRACEMCO": "ULTRACEMCO.NS",
-    "POWERGRID": "POWERGRID.NS",
-    "NTPC": "NTPC.NS",
-    "ONGC": "ONGC.NS",
-    "ADANIENT": "ADANIENT.NS",
-    "ADANIPORTS": "ADANIPORTS.NS",
-    "COALINDIA": "COALINDIA.NS",
-    "HINDUNILVR": "HINDUNILVR.NS",
-    "KOTAKBANK": "KOTAKBANK.NS",
-    "BAJAJFINSV": "BAJAJFINSV.NS",
-    "NESTLEIND": "NESTLEIND.NS",
-    "TECHM": "TECHM.NS",
-    "TITAN": "TITAN.NS"
+    "TCS": "TCS.NS",
+    "INFY": "INFY.NS"
 }
 
 # =========================================================
 # SIDEBAR
 # =========================================================
 
-st.sidebar.header("⚙️ SETTINGS")
-
 selected_stock = st.sidebar.selectbox(
-    "SELECT STOCK",
-    list(nse_stocks.keys())
+    "SELECT SYMBOL",
+    list(option_stocks.keys())
 )
 
-interval = st.sidebar.selectbox(
-    "INTERVAL",
-    ["5m", "15m", "30m", "1h"]
+ticker_symbol = option_stocks[selected_stock]
+
+# =========================================================
+# GET TICKER
+# =========================================================
+
+ticker = yf.Ticker(ticker_symbol)
+
+# =========================================================
+# EXPIRY DATES
+# =========================================================
+
+expiry_dates = ticker.options
+
+if len(expiry_dates) == 0:
+
+    st.error("NO OPTION DATA AVAILABLE")
+    st.stop()
+
+selected_expiry = st.sidebar.selectbox(
+    "SELECT EXPIRY",
+    expiry_dates
 )
 
-period = st.sidebar.selectbox(
-    "PERIOD",
-    ["1d", "5d", "1mo"]
+# =========================================================
+# OPTION CHAIN DATA
+# =========================================================
+
+option_chain = ticker.option_chain(selected_expiry)
+
+calls = option_chain.calls
+puts = option_chain.puts
+
+# =========================================================
+# CLEAN DATA
+# =========================================================
+
+call_df = calls[[
+    'strike',
+    'lastPrice',
+    'volume',
+    'openInterest',
+    'impliedVolatility'
+]]
+
+put_df = puts[[
+    'strike',
+    'lastPrice',
+    'volume',
+    'openInterest',
+    'impliedVolatility'
+]]
+
+# RENAME
+
+call_df.columns = [
+    'STRIKE',
+    'CALL_LTP',
+    'CALL_VOLUME',
+    'CALL_OI',
+    'CALL_IV'
+]
+
+put_df.columns = [
+    'STRIKE',
+    'PUT_LTP',
+    'PUT_VOLUME',
+    'PUT_OI',
+    'PUT_IV'
+]
+
+# =========================================================
+# MERGE DATA
+# =========================================================
+
+merged_df = pd.merge(
+    call_df,
+    put_df,
+    on='STRIKE'
 )
 
-ticker = nse_stocks[selected_stock]
-
 # =========================================================
-# INDICATOR FUNCTION
+# LIVE PRICE
 # =========================================================
 
-def calculate_indicators(df):
+hist = ticker.history(period="1d")
 
-    if df.empty:
-        return df
-
-    # FIX MULTI INDEX
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-
-    df = df.reset_index()
-
-    # EMA
-    df['EMA20'] = df['Close'].ewm(span=20).mean()
-    df['EMA50'] = df['Close'].ewm(span=50).mean()
-
-    # VWAP
-    df['VWAP'] = (
-        (df['Close'] * df['Volume']).cumsum()
-        / df['Volume'].cumsum()
-    )
-
-    # RSI
-    delta = df['Close'].diff()
-
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-
-    avg_gain = gain.rolling(14).mean()
-    avg_loss = loss.rolling(14).mean()
-
-    rs = avg_gain / avg_loss
-
-    df['RSI'] = 100 - (100 / (1 + rs))
-    df['RSI'] = df['RSI'].fillna(50)
-
-    # ATR
-    df['H-L'] = df['High'] - df['Low']
-    df['H-PC'] = abs(df['High'] - df['Close'].shift(1))
-    df['L-PC'] = abs(df['Low'] - df['Close'].shift(1))
-
-    df['TR'] = df[['H-L', 'H-PC', 'L-PC']].max(axis=1)
-
-    df['ATR'] = df['TR'].rolling(14).mean()
-
-    # MACD
-    exp1 = df['Close'].ewm(span=12).mean()
-    exp2 = df['Close'].ewm(span=26).mean()
-
-    df['MACD'] = exp1 - exp2
-    df['MACD_SIGNAL'] = df['MACD'].ewm(span=9).mean()
-
-    # VOLUME BREAKOUT
-    df['VOL_AVG'] = df['Volume'].rolling(20).mean()
-
-    df['VOL_BREAKOUT'] = (
-        df['Volume'] > df['VOL_AVG'] * 1.5
-    )
-
-    return df
+live_price = hist['Close'].iloc[-1]
 
 # =========================================================
-# SIGNAL FUNCTION
+# PCR CALCULATION
 # =========================================================
 
-def generate_signal(df):
+total_call_oi = merged_df['CALL_OI'].sum()
 
-    latest = df.iloc[-1]
+total_put_oi = merged_df['PUT_OI'].sum()
 
-    score = 0
-
-    # EMA
-    if latest['EMA20'] > latest['EMA50']:
-        score += 25
-
-    # VWAP
-    if latest['Close'] > latest['VWAP']:
-        score += 25
-
-    # RSI
-    if 55 < latest['RSI'] < 70:
-        score += 25
-
-    # MACD
-    if latest['MACD'] > latest['MACD_SIGNAL']:
-        score += 25
-
-    # FINAL SIGNAL
-
-    if score >= 75:
-        signal = "🚀 STRONG BUY"
-
-    elif score >= 50:
-        signal = "✅ BUY"
-
-    elif score >= 25:
-        signal = "⚠️ SIDEWAYS"
-
-    else:
-        signal = "🔻 SELL"
-
-    return signal, score
+if total_call_oi != 0:
+    pcr = total_put_oi / total_call_oi
+else:
+    pcr = 0
 
 # =========================================================
-# SINGLE STOCK DATA
+# MAX PAIN
 # =========================================================
 
-try:
+merged_df['TOTAL_OI'] = (
+    merged_df['CALL_OI'] +
+    merged_df['PUT_OI']
+)
 
-    df = yf.download(
-        ticker,
-        interval=interval,
-        period=period,
-        progress=False,
-        auto_adjust=True
-    )
-
-    if df.empty:
-        st.error("NO DATA FOUND")
-        st.stop()
-
-    df = calculate_indicators(df)
-
-    signal, score = generate_signal(df)
-
-    latest = df.iloc[-1]
-
-    # =====================================================
-    # SIGNAL DISPLAY
-    # =====================================================
-
-    st.subheader("🤖 AI SIGNAL")
-
-    if "STRONG BUY" in signal:
-        st.success(signal)
-
-    elif "BUY" in signal:
-        st.info(signal)
-
-    elif "SELL" in signal:
-        st.error(signal)
-
-    else:
-        st.warning(signal)
-
-    # =====================================================
-    # LIVE METRICS
-    # =====================================================
-
-    col1, col2, col3, col4, col5 = st.columns(5)
-
-    col1.metric(
-        "PRICE",
-        f"₹ {round(latest['Close'], 2)}"
-    )
-
-    col2.metric(
-        "RSI",
-        round(latest['RSI'], 2)
-    )
-
-    col3.metric(
-        "VWAP",
-        round(latest['VWAP'], 2)
-    )
+max_pain = merged_df.loc[
+    merged_df['TOTAL_OI'].idxmax(),
+    'STRIKE'
+]
 
-    col4.metric(
-        "ATR",
-        round(latest['ATR'], 2)
-    )
+# =========================================================
+# HIGHEST OI
+# =========================================================
 
-    col5.metric(
-        "AI SCORE",
-        score
-    )
+highest_call_oi = merged_df.loc[
+    merged_df['CALL_OI'].idxmax(),
+    'STRIKE'
+]
 
-    # =====================================================
-    # CHART
-    # =====================================================
+highest_put_oi = merged_df.loc[
+    merged_df['PUT_OI'].idxmax(),
+    'STRIKE'
+]
 
-    st.subheader(f"📈 {selected_stock} LIVE CHART")
+# =========================================================
+# MARKET VIEW
+# =========================================================
 
-    fig = go.Figure()
+market_view = "SIDEWAYS"
 
-    # TIME COLUMN FIX
-    time_col = df.columns[0]
+if pcr > 1.2:
+    market_view = "🚀 BULLISH"
 
-    fig.add_trace(go.Scatter(
-        x=df[time_col],
-        y=df['Close'],
-        mode='lines',
-        name='Close'
-    ))
+elif pcr < 0.8:
+    market_view = "🔻 BEARISH"
 
-    fig.add_trace(go.Scatter(
-        x=df[time_col],
-        y=df['EMA20'],
-        mode='lines',
-        name='EMA20'
-    ))
+# =========================================================
+# DISPLAY METRICS
+# =========================================================
 
-    fig.add_trace(go.Scatter(
-        x=df[time_col],
-        y=df['EMA50'],
-        mode='lines',
-        name='EMA50'
-    ))
+st.subheader("📈 OPTION CHAIN METRICS")
 
-    fig.add_trace(go.Scatter(
-        x=df[time_col],
-        y=df['VWAP'],
-        mode='lines',
-        name='VWAP'
-    ))
+col1, col2, col3, col4 = st.columns(4)
 
-    fig.update_layout(
-        height=650,
-        hovermode="x unified",
-        xaxis_title="TIME",
-        yaxis_title="PRICE"
-    )
+col1.metric(
+    "LIVE PRICE",
+    round(live_price, 2)
+)
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
+col2.metric(
+    "PCR",
+    round(pcr, 2)
+)
 
-    # =====================================================
-    # DATA TABLE
-    # =====================================================
+col3.metric(
+    "MAX PAIN",
+    max_pain
+)
 
-    st.subheader("📊 LIVE MARKET DATA")
+col4.metric(
+    "MARKET VIEW",
+    market_view
+)
 
-    show_df = df[[
-        'Close',
-        'EMA20',
-        'EMA50',
-        'VWAP',
-        'RSI',
-        'ATR',
-        'MACD'
-    ]].tail(20)
+# =========================================================
+# SUPPORT / RESISTANCE
+# =========================================================
 
-    st.dataframe(
-        show_df,
-        use_container_width=True
-    )
+st.subheader("📊 SUPPORT & RESISTANCE")
 
-    # =====================================================
-    # RSI STATUS
-    # =====================================================
+col5, col6 = st.columns(2)
 
-    st.subheader("📈 RSI STATUS")
+col5.success(
+    f"🟢 SUPPORT : {highest_put_oi}"
+)
 
-    rsi = latest['RSI']
+col6.error(
+    f"🔴 RESISTANCE : {highest_call_oi}"
+)
 
-    if rsi > 70:
+# =========================================================
+# OI BUILDUP
+# =========================================================
 
-        st.error(f"RSI {round(rsi,2)} → OVERBOUGHT")
+merged_df['CALL_OI_CHANGE'] = (
+    merged_df['CALL_OI'].diff()
+)
 
-    elif rsi < 30:
+merged_df['PUT_OI_CHANGE'] = (
+    merged_df['PUT_OI'].diff()
+)
 
-        st.success(f"RSI {round(rsi,2)} → OVERSOLD")
+# =========================================================
+# ATM STRIKE
+# =========================================================
 
-    else:
+merged_df['DISTANCE'] = abs(
+    merged_df['STRIKE'] - live_price
+)
 
-        st.info(f"RSI {round(rsi,2)} → NORMAL")
+atm_row = merged_df.loc[
+    merged_df['DISTANCE'].idxmin()
+]
 
-    # =====================================================
-    # MULTI STOCK AI SCANNER
-    # =====================================================
+# =========================================================
+# ATM ANALYSIS
+# =========================================================
 
-    st.subheader("🔥 LIVE AI STOCK SCANNER")
+st.subheader("🎯 ATM OPTION ANALYSIS")
 
-    def scan_stock(item):
+col7, col8, col9, col10 = st.columns(4)
 
-        stock_name, stock_ticker = item
+col7.metric(
+    "ATM STRIKE",
+    atm_row['STRIKE']
+)
 
-        try:
+col8.metric(
+    "CALL OI",
+    int(atm_row['CALL_OI'])
+)
 
-            data = yf.download(
-                stock_ticker,
-                interval=interval,
-                period=period,
-                progress=False,
-                auto_adjust=True
-            )
+col9.metric(
+    "PUT OI",
+    int(atm_row['PUT_OI'])
+)
 
-            if data.empty:
-                return None
+col10.metric(
+    "TOTAL OI",
+    int(atm_row['TOTAL_OI'])
+)
 
-            data = calculate_indicators(data)
+# =========================================================
+# AI SIGNAL
+# =========================================================
 
-            signal, score = generate_signal(data)
+st.subheader("🤖 OPTION CHAIN AI SIGNAL")
 
-            latest = data.iloc[-1]
+if pcr > 1.2 and live_price > highest_put_oi:
 
-            return {
-                "STOCK": stock_name,
-                "PRICE": round(latest['Close'], 2),
-                "RSI": round(latest['RSI'], 2),
-                "MACD": round(latest['MACD'], 2),
-                "SIGNAL": signal,
-                "SCORE": score
-            }
+    st.success("🚀 STRONG BULLISH SIGNAL")
 
-        except:
-            return None
+elif pcr < 0.8 and live_price < highest_call_oi:
 
-    results = []
+    st.error("🔻 STRONG BEARISH SIGNAL")
 
-    # FAST SCANNER
-    with ThreadPoolExecutor(max_workers=10) as executor:
+else:
 
-        scanned = executor.map(
-            scan_stock,
-            nse_stocks.items()
-        )
+    st.warning("⚠️ SIDEWAYS MARKET")
 
-    for item in scanned:
+# =========================================================
+# FILTER NEAR ATM
+# =========================================================
 
-        if item is not None:
-            results.append(item)
+near_atm = merged_df[
+    (merged_df['STRIKE'] > live_price - 1000) &
+    (merged_df['STRIKE'] < live_price + 1000)
+]
 
-    scanner_df = pd.DataFrame(results)
+# =========================================================
+# OPTION CHAIN TABLE
+# =========================================================
 
-    # SORT BY SCORE
-    scanner_df = scanner_df.sort_values(
-        by="SCORE",
-        ascending=False
-    )
+st.subheader("📋 LIVE OPTION CHAIN")
 
-    st.dataframe(
-        scanner_df,
-        use_container_width=True
-    )
+st.dataframe(
+    near_atm,
+    use_container_width=True
+)
 
-    # =====================================================
-    # TOP BUY STOCKS
-    # =====================================================
+# =========================================================
+# TOP CALL WRITING
+# =========================================================
 
-    st.subheader("🚀 TOP BUY STOCKS")
+st.subheader("🔴 TOP CALL WRITING")
 
-    top_buy = scanner_df[
-        scanner_df['SIGNAL'].str.contains("BUY")
-    ]
+top_calls = merged_df.sort_values(
+    by='CALL_OI',
+    ascending=False
+).head(10)
 
-    st.dataframe(
-        top_buy.head(10),
-        use_container_width=True
-    )
+st.dataframe(
+    top_calls[[
+        'STRIKE',
+        'CALL_OI',
+        'CALL_VOLUME'
+    ]],
+    use_container_width=True
+)
 
-    # =====================================================
-    # TOP SELL STOCKS
-    # =====================================================
+# =========================================================
+# TOP PUT WRITING
+# =========================================================
 
-    st.subheader("🔻 TOP SELL STOCKS")
+st.subheader("🟢 TOP PUT WRITING")
 
-    top_sell = scanner_df[
-        scanner_df['SIGNAL'].str.contains("SELL")
-    ]
+top_puts = merged_df.sort_values(
+    by='PUT_OI',
+    ascending=False
+).head(10)
 
-    st.dataframe(
-        top_sell.head(10),
-        use_container_width=True
-    )
-
-except Exception as e:
-
-    st.error("APP ERROR")
-
-    st.code(str(e))
+st.dataframe(
+    top_puts[[
+        'STRIKE',
+        'PUT_OI',
+        'PUT_VOLUME'
+    ]],
+    use_container_width=True
+)
