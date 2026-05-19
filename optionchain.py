@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V2.2 - FIXED DATE/DATETIME KEYERROR
+# 🚀 NSE AI PRO MAX V2.2 - EXCEL DOWNLOAD FEATURES ADDED
 # OLD CODE DISTURB KAKUNDA NEW COLUMNS ADDED
 # =========================================================
 
@@ -8,6 +8,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import io  # Excel ఫైల్ మెమరీలో కన్వర్ట్ చేయడానికి
 from concurrent.futures import ThreadPoolExecutor
 
 # =========================================================
@@ -60,13 +61,21 @@ period = st.sidebar.selectbox("PERIOD", ["1d", "5d", "1mo"])
 ticker = nse_stocks[selected_stock]
 
 # =========================================================
+# HELPER FUNCTION: EXCEL CONVERTER
+# =========================================================
+def to_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Sheet1')
+    return output.getvalue()
+
+# =========================================================
 # INDICATOR FUNCTION (OLD LOGIC PRESERVED)
 # =========================================================
 
 def calculate_indicators(df):
     if df.empty: return df
     
-    # Safety Check for MultiIndex Columns
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
     
@@ -125,7 +134,6 @@ try:
         st.error("NO DATA FOUND")
         st.stop()
 
-    # Fix MultiIndex immediately after download
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
@@ -133,7 +141,6 @@ try:
     signal, score = generate_signal(df)
     latest = df.iloc[-1]
     
-    # Extract as clean scalar float value
     current_price = float(latest['Close'].iloc[0]) if isinstance(latest['Close'], pd.Series) else float(latest['Close'])
 
     # Display Technical Signal & Metrics
@@ -168,7 +175,6 @@ try:
             opt_chain = yf_ticker.option_chain(nearest_expiry)
             calls_df = opt_chain.calls
             
-            # Filter rows near current spot price (+/- 10% range)
             buffer = current_price * 0.10
             filtered_calls = calls_df[
                 (calls_df['strike'] >= (current_price - buffer)) & 
@@ -185,22 +191,32 @@ try:
                 
                 filtered_calls = filtered_calls.fillna(0)
                 
-                # Formatter
                 filtered_calls['STRIKE PRICE'] = filtered_calls['STRIKE PRICE'].astype(float).round(2)
                 filtered_calls['CALL LTP (Price)'] = filtered_calls['CALL LTP (Price)'].astype(float).round(2)
                 filtered_calls['CALL OI (Total)'] = filtered_calls['CALL OI (Total)'].astype(int)
                 filtered_calls['CALL VOLUME'] = filtered_calls['CALL VOLUME'].astype(int)
                 
-                # Find Highest OI Strike
                 max_oi_idx = filtered_calls['CALL OI (Total)'].idxmax()
                 highest_oi_strike = filtered_calls.loc[max_oi_idx, 'STRIKE PRICE']
                 
                 st.info(f"🎯 **Highest Call OI Concentration:** Strike **{highest_oi_strike}** (Acts as a strong Resistance line)")
                 
+                # Final table slice
+                option_excel_df = filtered_calls[['STRIKE PRICE', 'CALL LTP (Price)', 'CALL OI (Total)', 'CALL VOLUME']]
+                
                 st.dataframe(
-                    filtered_calls[['STRIKE PRICE', 'CALL LTP (Price)', 'CALL OI (Total)', 'CALL VOLUME']], 
+                    option_excel_df, 
                     use_container_width=True,
                     hide_index=True
+                )
+                
+                # 📥 NEW: Option Chain Excel Download Button
+                option_excel_data = to_excel(option_excel_df)
+                st.download_button(
+                    label="📥 DOWNLOAD OPTION CHAIN AS EXCEL",
+                    data=option_excel_data,
+                    file_name=f"{selected_stock}_call_oi_{nearest_expiry}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
             else:
                 st.warning("No call options data available in this price range.")
@@ -213,14 +229,10 @@ try:
     st.subheader(f"📈 {selected_stock} LIVE CHART")
     fig = go.Figure()
     
-    # 🛠️ FIXED: Auto detect the time column regardless of what yfinance names it
     time_col = df.columns[0] 
-    if 'index' in df.columns:
-        time_col = 'index'
-    elif 'Date' in df.columns:
-        time_col = 'Date'
-    elif 'Datetime' in df.columns:
-        time_col = 'Datetime'
+    if 'index' in df.columns: time_col = 'index'
+    elif 'Date' in df.columns: time_col = 'Date'
+    elif 'Datetime' in df.columns: time_col = 'Datetime'
     
     fig.add_trace(go.Scatter(x=df[time_col], y=df['Close'], mode='lines', name='Close'))
     fig.add_trace(go.Scatter(x=df[time_col], y=df['EMA20'], mode='lines', name='EMA20'))
@@ -257,6 +269,15 @@ try:
     
     scanner_df = pd.DataFrame(results).sort_values(by="SCORE", ascending=False)
     st.dataframe(scanner_df, use_container_width=True, hide_index=True)
+    
+    # 📥 NEW: Live Scanner Excel Download Button
+    scanner_excel_data = to_excel(scanner_df)
+    st.download_button(
+        label="📥 DOWNLOAD SCANNER REPORT AS EXCEL",
+        data=scanner_excel_data,
+        file_name="Nifty50_AI_Scanner_Report.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 except Exception as e:
     st.error("APP ERROR")
