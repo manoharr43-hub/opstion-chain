@@ -126,7 +126,7 @@ try:
     df = calculate_indicators(df)
     signal, score = generate_signal(df)
     latest = df.iloc[-1]
-    current_price = latest['Close']
+    current_price = float(latest['Close'])
 
     # Display Technical Signal & Metrics
     st.subheader("🤖 AI SIGNAL")
@@ -142,24 +142,27 @@ try:
     col5.metric("AI SCORE", f"{score} PTS")
 
     # =====================================================
-    # 🌟 NEW FEATURE: CALL SIDE OPTION CHAIN ANALYSIS
+    # 🌟 OPTIMIZED FEATURE: CALL SIDE OPTION CHAIN ANALYSIS
     # =====================================================
-    st.subheader(f"🔥 {selected_stock} CALL SIDE OPTION CHAIN (OI & OI CHANGE)")
+    st.subheader(f"🔥 {selected_stock} CALL SIDE OPTION CHAIN (OI ANALYSIS)")
     
     with st.spinner("Fetching Option Chain Data..."):
         yf_ticker = yf.Ticker(ticker)
-        expiries = yf_ticker.options
+        try:
+            expiries = yf_ticker.options
+        except:
+            expiries = []
         
         if expiries:
-            # Get nearest expiry date
+            # Nearest expiry date
             nearest_expiry = expiries[0]
-            st.caption(f"📅 Showing Nearest Expiry Data: **{nearest_expiry}**")
+            st.caption(f"📅 Nearest Expiry: **{nearest_expiry}**")
             
-            # Fetch option chain for that expiry
+            # Fetch option chain
             opt_chain = yf_ticker.option_chain(nearest_expiry)
             calls_df = opt_chain.calls
             
-            # Filter rows near the current spot price (+/- 10% range for readability)
+            # Filter rows near the current spot price (+/- 10% range)
             buffer = current_price * 0.10
             filtered_calls = calls_df[
                 (calls_df['strike'] >= (current_price - buffer)) & 
@@ -167,48 +170,59 @@ try:
             ].copy()
             
             if not filtered_calls.empty:
-                # yfinance standard columns map: 
-                # 'openInterest' -> OI, 'volume' -> Vol, 'strike' -> Strike
-                # Note: yfinance doesn't always provide real-time intraday "Change in OI" directly for NSE,
-                # so we use 'impliedVolatility' or standard data available to keep it clean.
-                
-                # Rename and clean columns for user requirement
+                # Cleaning and renaming columns
                 filtered_calls = filtered_calls.rename(columns={
                     'strike': 'STRIKE PRICE',
                     'openInterest': 'CALL OI (Total)',
                     'volume': 'CALL VOLUME',
-                    'lastPrice': 'CALL LMP (Price)'
+                    'lastPrice': 'CALL LTP (Price)'
                 })
                 
-                # Fill NaNs with 0
                 filtered_calls = filtered_calls.fillna(0)
+                
+                # Format numbers for clean look
+                filtered_calls['STRIKE PRICE'] = filtered_calls['STRIKE PRICE'].astype(float).round(2)
+                filtered_calls['CALL LTP (Price)'] = filtered_calls['CALL LTP (Price)'].astype(float).round(2)
+                filtered_calls['CALL OI (Total)'] = filtered_calls['CALL OI (Total)'].astype(int)
+                filtered_calls['CALL VOLUME'] = filtered_calls['CALL VOLUME'].fillna(0).astype(int)
                 
                 # Highlight highest OI Strike (Resistance Zone)
                 max_oi_idx = filtered_calls['CALL OI (Total)'].idxmax()
                 highest_oi_strike = filtered_calls.loc[max_oi_idx, 'STRIKE PRICE']
+                highest_oi_value = filtered_calls.loc[max_oi_idx, 'CALL OI (Total)']
                 
-                st.info(f"🎯 **Highest Call OI Concentration:** Strike **{highest_oi_strike}** (Acts as a strong Resistance line)")
+                st.info(f"🎯 **Highest Call OI:** Strike **{highest_oi_strike}** (OI: {highest_oi_value:,}) కింద యాక్ట్ అవుతుంది. ఇది మార్కెట్‌కు బలమైన **Resistance Zone** కావచ్చు.")
                 
-                # Display the Table with requested Call columns
+                # Target columns display
+                display_cols = ['STRIKE PRICE', 'CALL LTP (Price)', 'CALL OI (Total)', 'CALL VOLUME']
+                
                 st.dataframe(
-                    filtered_calls[['STRIKE PRICE', 'CALL LMP (Price)', 'CALL OI (Total)', 'CALL VOLUME']], 
+                    filtered_calls[display_cols], 
                     use_container_width=True,
                     hide_index=True
                 )
             else:
-                st.warning("No call options data available in this price range.")
+                st.warning("ఈ ప్రైస్ రేంజ్‌లో కాల్ ఆప్షన్ డేటా అందుబాటులో లేదు.")
         else:
-            st.warning("Option chain data not available for this stock on Yahoo Finance.")
+            st.warning("Yahoo Finance లో ఈ స్టాక్‌కు సంబంధించిన ఆప్షన్ చైన్ డేటా దొరకలేదు.")
 
     # =====================================================
     # CHART & DATA TABLES (REST OF OLD CODE UNTOUCHED)
     # =====================================================
     st.subheader(f"📈 {selected_stock} LIVE CHART")
     fig = go.Figure()
-    time_col = df.columns[0]
-    fig.add_trace(go.Scatter(x=df[time_col], y=df['Close'], mode='lines', name='Close'))
-    fig.add_trace(go.Scatter(x=df[time_col], y=df['EMA20'], mode='lines', name='EMA20'))
-    fig.add_trace(go.Scatter(x=df[time_col], y=df['EMA50'], mode='lines', name='EMA50'))
+    
+    # Ensuring time column or index is handled properly
+    if 'Date' in df.columns:
+        x_axis = df['Date']
+    elif 'Datetime' in df.columns:
+        x_axis = df['Datetime']
+    else:
+        x_axis = df.index
+        
+    fig.add_trace(go.Scatter(x=x_axis, y=df['Close'], mode='lines', name='Close'))
+    fig.add_trace(go.Scatter(x=x_axis, y=df['EMA20'], mode='lines', name='EMA20'))
+    fig.add_trace(go.Scatter(x=x_axis, y=df['EMA50'], mode='lines', name='EMA50'))
     fig.update_layout(height=400, hovermode="x unified")
     st.plotly_chart(fig, use_container_width=True)
 
@@ -222,7 +236,7 @@ try:
             data = calculate_indicators(data)
             sig, scr = generate_signal(data)
             lat = data.iloc[-1]
-            return {"STOCK": s_name, "PRICE": round(lat['Close'], 2), "RSI": round(lat['RSI'], 2), "SIGNAL": sig, "SCORE": scr}
+            return {"STOCK": s_name, "PRICE": round(float(lat['Close']), 2), "RSI": round(float(lat['RSI']), 2), "SIGNAL": sig, "SCORE": scr}
         except: return None
 
     results = []
