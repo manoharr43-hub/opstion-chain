@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V2.2 - SCANNER WITH SIGNAL TIME COLUMN
+# 🚀 NSE AI PRO MAX V2.2 - FIXED SIGNAL TIME & OPTION CHAIN
 # OLD CODE DISTURB KAKUNDA NEW COLUMNS ADDED
 # =========================================================
 
@@ -68,6 +68,10 @@ ticker = nse_stocks[selected_stock]
 def get_current_ist_time():
     ist = pytz.timezone('Asia/Kolkata')
     return datetime.datetime.now(ist).strftime('%Y-%m-%d %H:%M:%S')
+
+def get_current_ist_time_only():
+    ist = pytz.timezone('Asia/Kolkata')
+    return datetime.datetime.now(ist).strftime('%H:%M:%S')
 
 def to_excel(df):
     output = io.BytesIO()
@@ -163,7 +167,7 @@ try:
     col5.metric("AI SCORE", f"{score} PTS")
 
     # =====================================================
-    # 🌟 CALL SIDE OPTION CHAIN ANALYSIS
+    # CALL SIDE OPTION CHAIN ANALYSIS
     # =====================================================
     st.subheader(f"🔥 {selected_stock} CALL SIDE OPTION CHAIN (OI ANALYSIS)")
     
@@ -179,55 +183,58 @@ try:
             option_fetched_time = get_current_ist_time()
             st.caption(f"📅 Expiry: **{nearest_expiry}** | 🕒 Last Updated (IST): `{option_fetched_time}`")
             
-            opt_chain = yf_ticker.option_chain(nearest_expiry)
-            calls_df = opt_chain.calls
-            
-            buffer = current_price * 0.10
-            filtered_calls = calls_df[
-                (calls_df['strike'] >= (current_price - buffer)) & 
-                (calls_df['strike'] <= (current_price + buffer))
-            ].copy()
-            
-            if not filtered_calls.empty:
-                filtered_calls = filtered_calls.rename(columns={
-                    'strike': 'STRIKE PRICE',
-                    'openInterest': 'CALL OI (Total)',
-                    'volume': 'CALL VOLUME',
-                    'lastPrice': 'CALL LTP (Price)'
-                })
+            try:
+                opt_chain = yf_ticker.option_chain(nearest_expiry)
+                calls_df = opt_chain.calls
                 
-                filtered_calls = filtered_calls.fillna(0)
+                buffer = current_price * 0.10
+                filtered_calls = calls_df[
+                    (calls_df['strike'] >= (current_price - buffer)) & 
+                    (calls_df['strike'] <= (current_price + buffer))
+                ].copy()
                 
-                filtered_calls['STRIKE PRICE'] = filtered_calls['STRIKE PRICE'].astype(float).round(2)
-                filtered_calls['CALL LTP (Price)'] = filtered_calls['CALL LTP (Price)'].astype(float).round(2)
-                filtered_calls['CALL OI (Total)'] = filtered_calls['CALL OI (Total)'].astype(int)
-                filtered_calls['CALL VOLUME'] = filtered_calls['CALL VOLUME'].astype(int)
-                
-                max_oi_idx = filtered_calls['CALL OI (Total)'].idxmax()
-                highest_oi_strike = filtered_calls.loc[max_oi_idx, 'STRIKE PRICE']
-                
-                st.info(f"🎯 **Highest Call OI Concentration:** Strike **{highest_oi_strike}** (Acts as a strong Resistance line)")
-                
-                option_excel_df = filtered_calls[['STRIKE PRICE', 'CALL LTP (Price)', 'CALL OI (Total)', 'CALL VOLUME']].copy()
-                
-                st.dataframe(
-                    option_excel_df, 
-                    use_container_width=True,
-                    hide_index=True
-                )
-                
-                option_excel_df['FETCHED TIME (IST)'] = option_fetched_time
-                option_excel_data = to_excel(option_excel_df)
-                st.download_button(
-                    label="📥 DOWNLOAD OPTION CHAIN AS EXCEL",
-                    data=option_excel_data,
-                    file_name=f"{selected_stock}_call_oi_{nearest_expiry}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            else:
-                st.warning("No call options data available in this price range.")
+                if not filtered_calls.empty:
+                    filtered_calls = filtered_calls.rename(columns={
+                        'strike': 'STRIKE PRICE',
+                        'openInterest': 'CALL OI (Total)',
+                        'volume': 'CALL VOLUME',
+                        'lastPrice': 'CALL LTP (Price)'
+                    })
+                    
+                    filtered_calls = filtered_calls.fillna(0)
+                    
+                    filtered_calls['STRIKE PRICE'] = filtered_calls['STRIKE PRICE'].astype(float).round(2)
+                    filtered_calls['CALL LTP (Price)'] = filtered_calls['CALL LTP (Price)'].astype(float).round(2)
+                    filtered_calls['CALL OI (Total)'] = filtered_calls['CALL OI (Total)'].astype(int)
+                    filtered_calls['CALL VOLUME'] = filtered_calls['CALL VOLUME'].astype(int)
+                    
+                    max_oi_idx = filtered_calls['CALL OI (Total)'].idxmax()
+                    highest_oi_strike = filtered_calls.loc[max_oi_idx, 'STRIKE PRICE']
+                    
+                    st.info(f"🎯 **Highest Call OI Concentration:** Strike **{highest_oi_strike}** (Acts as a strong Resistance line)")
+                    
+                    option_excel_df = filtered_calls[['STRIKE PRICE', 'CALL LTP (Price)', 'CALL OI (Total)', 'CALL VOLUME']].copy()
+                    
+                    st.dataframe(
+                        option_excel_df, 
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                    
+                    option_excel_df['FETCHED TIME (IST)'] = option_fetched_time
+                    option_excel_data = to_excel(option_excel_df)
+                    st.download_button(
+                        label="📥 DOWNLOAD OPTION CHAIN AS EXCEL",
+                        data=option_excel_data,
+                        file_name=f"{selected_stock}_call_oi_{nearest_expiry}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                else:
+                    st.warning("No call options data available in this price range.")
+            except Exception as opt_err:
+                st.warning("Yahoo Finance లో ఈ స్టాక్‌కు సంబంధించిన ఆప్షన్ చైన్ డేటా దొరకలేదు లేదా ప్రస్తుతం లోడ్ అవ్వడం లేదు.")
         else:
-            st.warning("Option chain data not available for this stock on Yahoo Finance.")
+            st.warning("Yahoo Finance లో ఈ స్టాక్‌కు సంబంధించిన ఆప్షన్ చైన్ డేటా దొరకలేదు.")
 
     # =====================================================
     # CHART & DATA TABLES (FIXED DATE/DATETIME DYNAMICALLY)
@@ -247,7 +254,7 @@ try:
     st.plotly_chart(fig, use_container_width=True)
 
     # =====================================================
-    # LIVE AI SCANNER SECTION WITH PER-STOCK SIGNAL TIME
+    # LIVE AI SCANNER SECTION WITH CORRECT LIVE TIMESTAMPS
     # =====================================================
     scanner_fetched_time = get_current_ist_time()
     st.subheader("🔥 LIVE AI NIFTY 50 SCANNER")
@@ -266,18 +273,8 @@ try:
             sig, scr = generate_signal(data)
             lat = data.iloc[-1]
             
-            # 🛠️ 🌟 🛠️ SIGNAL TIME EXTRACTION (IST CONVERSATION)
-            # లేటెస్ట్ క్యాండిల్ టైమ్‌స్టాంప్‌ను రీడ్ చేసి క్లీన్ ఫార్మాట్‌కి మారుస్తుంది
-            raw_time = lat['index'] if 'index' in lat else (lat['Date'] if 'Date' in lat else (lat['Datetime'] if 'Datetime' in lat else data.index[-1]))
-            
-            if isinstance(raw_time, (pd.Timestamp, datetime.datetime)):
-                # ఒకవేళ టైమ్ జోన్ ఉంటే లోకల్ (IST) కి మారుస్తుంది
-                if raw_time.tzinfo is not None:
-                    sig_time = raw_time.astimezone(pytz.timezone('Asia/Kolkata')).strftime('%H:%M:%S')
-                else:
-                    sig_time = raw_time.strftime('%H:%M:%S')
-            else:
-                sig_time = str(raw_time).split()[-1] if ' ' in str(raw_time) else str(raw_time)
+            # 🛠️ 🌟 FIXED: పాత ఫిక్స్‌డ్ క్యాండిల్ టైమ్ కాకుండా, కరెంట్ అప్‌డేట్ రన్ అవుతున్న కచ్చితమైన లైవ్ టైమ్ ఇక్కడ యాడ్ చేశాను.
+            sig_time = get_current_ist_time_only()
             
             c_p = float(lat['Close'].iloc[0]) if isinstance(lat['Close'], pd.Series) else float(lat['Close'])
             r_s = float(lat['RSI'].iloc[0]) if isinstance(lat['RSI'], pd.Series) else float(lat['RSI'])
@@ -288,7 +285,7 @@ try:
                 "RSI": round(r_s, 2), 
                 "SIGNAL": sig, 
                 "SCORE": scr,
-                "SIGNAL TIME": sig_time  # 🌟 కొత్త కాలమ్ జోడించబడింది
+                "SIGNAL TIME": sig_time  # కరెంట్ రన్నింగ్ టైమ్ పక్కాగా కనిపిస్తుంది
             }
         except: return None
 
@@ -300,14 +297,11 @@ try:
     
     scanner_df = pd.DataFrame(results).sort_values(by="SCORE", ascending=False)
     
-    # కాలమ్స్ ఆర్డర్ నీట్‌గా సెట్ చేశాను
     ordered_cols = ["STOCK", "PRICE", "RSI", "SIGNAL", "SCORE", "SIGNAL TIME"]
     scanner_df = scanner_df[ordered_cols]
     
-    # UI లో డిస్‌ప్లే చేయడం
     st.dataframe(scanner_df, use_container_width=True, hide_index=True)
     
-    # ఎక్సెల్ షీట్‌లో రిపోర్ట్ జనరేట్ అయిన ఓవరాల్ టైమ్ కూడా స్టోర్ అవుతుంది
     scanner_df['REPORT GENERATED (IST)'] = scanner_fetched_time
     scanner_excel_data = to_excel(scanner_df)
     st.download_button(
