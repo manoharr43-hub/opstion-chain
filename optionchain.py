@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V2.2 - FIXED MULTI-INDEX KEYERROR
+# 🚀 NSE AI PRO MAX V2.2 - FIXED DATE/DATETIME KEYERROR
 # OLD CODE DISTURB KAKUNDA NEW COLUMNS ADDED
 # =========================================================
 
@@ -150,7 +150,7 @@ try:
     col5.metric("AI SCORE", f"{score} PTS")
 
     # =====================================================
-    # 🌟 NEW FEATURE: CALL SIDE OPTION CHAIN ANALYSIS
+    # 🌟 CALL SIDE OPTION CHAIN ANALYSIS
     # =====================================================
     st.subheader(f"🔥 {selected_stock} CALL SIDE OPTION CHAIN (OI ANALYSIS)")
     
@@ -208,17 +208,23 @@ try:
             st.warning("Option chain data not available for this stock on Yahoo Finance.")
 
     # =====================================================
-    # CHART & DATA TABLES (REST OF OLD CODE UNTOUCHED)
+    # CHART & DATA TABLES (FIXED DATE/DATETIME DYNAMICALLY)
     # =====================================================
     st.subheader(f"📈 {selected_stock} LIVE CHART")
     fig = go.Figure()
     
-    # Safe handling of datetime axis
-    x_axis = df['Date'] if 'Date' in df.columns else (df['Datetime'] if 'Datetime' in df.columns else df.index)
+    # 🛠️ FIXED: Auto detect the time column regardless of what yfinance names it
+    time_col = df.columns[0] 
+    if 'index' in df.columns:
+        time_col = 'index'
+    elif 'Date' in df.columns:
+        time_col = 'Date'
+    elif 'Datetime' in df.columns:
+        time_col = 'Datetime'
     
-    fig.add_trace(go.Scatter(x=x_axis, y=df['Close'], mode='lines', name='Close'))
-    fig.add_trace(go.Scatter(x=x_axis, y=df['EMA20'], mode='lines', name='EMA20'))
-    fig.add_trace(go.Scatter(x=x_axis, y=df['EMA50'], mode='lines', name='EMA50'))
+    fig.add_trace(go.Scatter(x=df[time_col], y=df['Close'], mode='lines', name='Close'))
+    fig.add_trace(go.Scatter(x=df[time_col], y=df['EMA20'], mode='lines', name='EMA20'))
+    fig.add_trace(go.Scatter(x=df[time_col], y=df['EMA50'], mode='lines', name='EMA50'))
     fig.update_layout(height=400, hovermode="x unified")
     st.plotly_chart(fig, use_container_width=True)
 
