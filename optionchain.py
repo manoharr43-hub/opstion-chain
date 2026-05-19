@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V2.2 - EXCEL DOWNLOAD FEATURES ADDED
+# 🚀 NSE AI PRO MAX V2.2 - SCANNER WITH SIGNAL TIME COLUMN
 # OLD CODE DISTURB KAKUNDA NEW COLUMNS ADDED
 # =========================================================
 
@@ -8,7 +8,9 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import io  # Excel ఫైల్ మెమరీలో కన్వర్ట్ చేయడానికి
+import io 
+import datetime
+import pytz  # IST టైమ్ జోన్ కోసం
 from concurrent.futures import ThreadPoolExecutor
 
 # =========================================================
@@ -61,8 +63,12 @@ period = st.sidebar.selectbox("PERIOD", ["1d", "5d", "1mo"])
 ticker = nse_stocks[selected_stock]
 
 # =========================================================
-# HELPER FUNCTION: EXCEL CONVERTER
+# HELPER FUNCTIONS: TIME & EXCEL
 # =========================================================
+def get_current_ist_time():
+    ist = pytz.timezone('Asia/Kolkata')
+    return datetime.datetime.now(ist).strftime('%Y-%m-%d %H:%M:%S')
+
 def to_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -170,7 +176,8 @@ try:
         
         if expiries:
             nearest_expiry = expiries[0]
-            st.caption(f"📅 Showing Nearest Expiry Data: **{nearest_expiry}**")
+            option_fetched_time = get_current_ist_time()
+            st.caption(f"📅 Expiry: **{nearest_expiry}** | 🕒 Last Updated (IST): `{option_fetched_time}`")
             
             opt_chain = yf_ticker.option_chain(nearest_expiry)
             calls_df = opt_chain.calls
@@ -201,8 +208,7 @@ try:
                 
                 st.info(f"🎯 **Highest Call OI Concentration:** Strike **{highest_oi_strike}** (Acts as a strong Resistance line)")
                 
-                # Final table slice
-                option_excel_df = filtered_calls[['STRIKE PRICE', 'CALL LTP (Price)', 'CALL OI (Total)', 'CALL VOLUME']]
+                option_excel_df = filtered_calls[['STRIKE PRICE', 'CALL LTP (Price)', 'CALL OI (Total)', 'CALL VOLUME']].copy()
                 
                 st.dataframe(
                     option_excel_df, 
@@ -210,7 +216,7 @@ try:
                     hide_index=True
                 )
                 
-                # 📥 NEW: Option Chain Excel Download Button
+                option_excel_df['FETCHED TIME (IST)'] = option_fetched_time
                 option_excel_data = to_excel(option_excel_df)
                 st.download_button(
                     label="📥 DOWNLOAD OPTION CHAIN AS EXCEL",
@@ -240,8 +246,13 @@ try:
     fig.update_layout(height=400, hovermode="x unified")
     st.plotly_chart(fig, use_container_width=True)
 
-    # LIVE AI SCANNER SECTION
+    # =====================================================
+    # LIVE AI SCANNER SECTION WITH PER-STOCK SIGNAL TIME
+    # =====================================================
+    scanner_fetched_time = get_current_ist_time()
     st.subheader("🔥 LIVE AI NIFTY 50 SCANNER")
+    st.caption(f"🕒 Scanner Last Run (IST): `{scanner_fetched_time}`")
+    
     def scan_stock(item):
         s_name, s_ticker = item
         try:
@@ -255,10 +266,30 @@ try:
             sig, scr = generate_signal(data)
             lat = data.iloc[-1]
             
+            # 🛠️ 🌟 🛠️ SIGNAL TIME EXTRACTION (IST CONVERSATION)
+            # లేటెస్ట్ క్యాండిల్ టైమ్‌స్టాంప్‌ను రీడ్ చేసి క్లీన్ ఫార్మాట్‌కి మారుస్తుంది
+            raw_time = lat['index'] if 'index' in lat else (lat['Date'] if 'Date' in lat else (lat['Datetime'] if 'Datetime' in lat else data.index[-1]))
+            
+            if isinstance(raw_time, (pd.Timestamp, datetime.datetime)):
+                # ఒకవేళ టైమ్ జోన్ ఉంటే లోకల్ (IST) కి మారుస్తుంది
+                if raw_time.tzinfo is not None:
+                    sig_time = raw_time.astimezone(pytz.timezone('Asia/Kolkata')).strftime('%H:%M:%S')
+                else:
+                    sig_time = raw_time.strftime('%H:%M:%S')
+            else:
+                sig_time = str(raw_time).split()[-1] if ' ' in str(raw_time) else str(raw_time)
+            
             c_p = float(lat['Close'].iloc[0]) if isinstance(lat['Close'], pd.Series) else float(lat['Close'])
             r_s = float(lat['RSI'].iloc[0]) if isinstance(lat['RSI'], pd.Series) else float(lat['RSI'])
             
-            return {"STOCK": s_name, "PRICE": round(c_p, 2), "RSI": round(r_s, 2), "SIGNAL": sig, "SCORE": scr}
+            return {
+                "STOCK": s_name, 
+                "PRICE": round(c_p, 2), 
+                "RSI": round(r_s, 2), 
+                "SIGNAL": sig, 
+                "SCORE": scr,
+                "SIGNAL TIME": sig_time  # 🌟 కొత్త కాలమ్ జోడించబడింది
+            }
         except: return None
 
     results = []
@@ -268,14 +299,21 @@ try:
         if item is not None: results.append(item)
     
     scanner_df = pd.DataFrame(results).sort_values(by="SCORE", ascending=False)
+    
+    # కాలమ్స్ ఆర్డర్ నీట్‌గా సెట్ చేశాను
+    ordered_cols = ["STOCK", "PRICE", "RSI", "SIGNAL", "SCORE", "SIGNAL TIME"]
+    scanner_df = scanner_df[ordered_cols]
+    
+    # UI లో డిస్‌ప్లే చేయడం
     st.dataframe(scanner_df, use_container_width=True, hide_index=True)
     
-    # 📥 NEW: Live Scanner Excel Download Button
+    # ఎక్సెల్ షీట్‌లో రిపోర్ట్ జనరేట్ అయిన ఓవరాల్ టైమ్ కూడా స్టోర్ అవుతుంది
+    scanner_df['REPORT GENERATED (IST)'] = scanner_fetched_time
     scanner_excel_data = to_excel(scanner_df)
     st.download_button(
         label="📥 DOWNLOAD SCANNER REPORT AS EXCEL",
         data=scanner_excel_data,
-        file_name="Nifty50_AI_Scanner_Report.xlsx",
+        file_name=f"Nifty50_AI_Scanner_Report_{scanner_fetched_time.replace(' ', '_').replace(':', '-')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
