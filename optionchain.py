@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V3.6 - ROBUST ENCODING BUG FIXED
+# 🚀 NSE AI PRO MAX V3.7 - PARSER ERROR & UNEVEN ROW FIXED
 # =========================================================
 
 import streamlit as st
@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 # =========================================================
 
 st.set_page_config(
-    page_title="NSE AI PRO MAX V3.6",
+    page_title="NSE AI PRO MAX V3.7",
     page_icon="🚀",
     layout="wide"
 )
@@ -59,8 +59,8 @@ h1,h2,h3,h4 {
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 NSE AI PRO MAX V3.6")
-st.caption("INSTITUTIONAL EDITION + FIXED CSV OPTION CHAIN")
+st.title("🚀 NSE AI PRO MAX V3.7")
+st.caption("INSTITUTIONAL EDITION + AUTO PARSER OPTION CHAIN")
 
 # =========================================================
 # STOCK LIST
@@ -95,7 +95,7 @@ st.sidebar.markdown(f'''
 </a>
 ''', unsafe_allow_html=True)
 
-# Indicator calculations
+# Technical Indicators
 def calculate_indicators(df):
     if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
     for col in ["Close", "High", "Low", "Open", "Volume"]:
@@ -168,7 +168,7 @@ with tab1:
         st.error(f"Live Error: {str(e)}")
 
 # =========================================================
-# TAB 2 - ADVANCED MULTI-ENCODING DECODER (BUG FIXED HERE)
+# TAB 2 - AUTO DECODER WITH NO-CRASH PARSER LOGIC
 # =========================================================
 with tab2:
     st.header("📂 Screener Kit Data Processing")
@@ -179,15 +179,24 @@ with tab2:
     if uploaded_file is not None:
         raw_df = None
         
-        # 🛠️ New Robust Multi-Encoding Fallback Loop to prevent parsing bugs
         if uploaded_file.name.endswith('.csv'):
-            encodings = ['utf-8', 'latin-1', 'cp1252', 'utf-16']
+            encodings = ['utf-8', 'latin-1', 'cp1252']
             for encoding in encodings:
                 try:
-                    # Reset stream file pointer on each loop check
                     uploaded_file.seek(0)
-                    raw_df = pd.read_csv(uploaded_file, header=None, encoding=encoding, errors='ignore')
+                    # Force dummy columns range to avoid ParserError tokenization crash
+                    raw_df = pd.read_csv(
+                        uploaded_file, 
+                        header=None, 
+                        names=list(range(80)), 
+                        sep=None, 
+                        engine='python', 
+                        encoding=encoding, 
+                        errors='ignore'
+                    )
                     if not raw_df.empty:
+                        # Strip entirely NaN columns out smoothly
+                        raw_df = raw_df.dropna(how='all', axis=1)
                         break
                 except Exception:
                     continue
@@ -195,14 +204,14 @@ with tab2:
             try:
                 raw_df = pd.read_excel(uploaded_file, header=None)
             except Exception as excel_err:
-                st.error(f"Excel file open failure: {str(excel_err)}")
+                st.error(f"Excel file error: {str(excel_err)}")
 
-        # Process Matrix only if data frame was decoded successfully
+        # Process Matrix
         if raw_df is not None and not raw_df.empty:
-            st.success("✅ File Successfully Loaded!")
+            st.success("✅ File Successfully Loaded Without Any Errors!")
             
             st.subheader("📊 Your Uploaded Data Report (Preview)")
-            st.dataframe(raw_df.head(15), use_container_width=True)
+            st.dataframe(raw_df.dropna(how='all').head(20), use_container_width=True)
             
             st.markdown("---")
             
@@ -216,7 +225,7 @@ with tab2:
                             processed_rows.append(vals)
                             
                     if len(processed_rows) < 2:
-                        st.error("❌ ఈ ఫైల్ లో ఆప్షన్ చైన్ మ్యాట్రిక్స్ డేటా గుర్తించబడలేదు. సరైన ఫైల్ అప్‌లోడ్ చేయండి.")
+                        st.error("❌ ఆప్షన్ చైన్ టేబుల్ మ్యాట్రిక్స్ లో తగినంత డేటా లేదు. దయచేసి పూర్తి డేటా ఉన్న ఒరిజినల్ ఫైల్ వాడండి.")
                     else:
                         clean_matrix = pd.DataFrame(processed_rows)
                         total_cols = clean_matrix.shape[1]
@@ -228,11 +237,10 @@ with tab2:
                         
                         strike_series = clean_matrix[mid_idx]
                         
-                        # Left call mapping setup
+                        # Dynamic allocation logic based on array width
                         ce_vol_series = clean_matrix[1]
                         ce_ltp_series = clean_matrix[2] if mid_idx > 2 else clean_matrix[1]
                         
-                        # Right put mapping setup
                         pe_vol_series = clean_matrix[total_cols - 2]
                         pe_ltp_series = clean_matrix[total_cols - 3] if total_cols > 4 else clean_matrix[mid_idx + 1]
                         
@@ -280,6 +288,6 @@ with tab2:
                                 pt4.metric("TARGET 2", f"₹ {round(p_ltp * 1.30, 2)}")
                                 
                 except Exception as proc_err:
-                    st.error("ఎక్సెల్ షీట్ డేటాను ఎక్స్‌ట్రాక్ట్ చేయడంలో లోపం వచ్చింది.")
+                    st.error("ఎక్సెల్ షీట్ మ్యాట్రిక్స్ ని ప్రాసెస్ చేయడంలో లోపం వచ్చింది.")
         else:
-            st.error("❌ ఈ ఫైల్ ను సిస్టమ్ రీడ్ చేయలేకపోతోంది. దయచేసి ఫైల్ ఎన్‌కోడింగ్ ఒకసారి చెక్ చేయండి.")
+            st.error("❌ ఈ ఫైల్ ను సిస్టమ్ రీడ్ చేయలేకపోతోంది. దయచేసి ఫైల్ ఫార్మాట్ ని ఒకసారి చెక్ చేయండి.")
