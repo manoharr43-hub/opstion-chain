@@ -90,6 +90,8 @@ def calculate_indicators(df):
     df["MACD_SIGNAL"] = df["MACD"].ewm(span=9, adjust=False).mean()
     
     df["VWAP"] = (df["Close"] * df["Volume"]).cumsum() / (df["Volume"].cumsum() + 1e-10)
+    
+    # Fix pandas warning for fillna
     df.bfill(inplace=True)
     df.fillna(0, inplace=True)
     return df
@@ -180,16 +182,21 @@ with tab2:
             if raw_df is not None and not raw_df.empty:
                 raw_df.dropna(how='all', inplace=True)
 
-                # Find the actual row that contains the words STRIKE and OI
+                # ========================================================
+                # FIX APPLIED: Convert row cells to string before joining
+                # ========================================================
                 header_idx = 0
                 for i in range(min(15, len(raw_df))):
-                    row_text = " ".join(raw_df.iloc[i].astype(str)).upper()
+                    # Safely convert every single cell to a string to prevent Float/NaN errors
+                    row_values = [str(val) for val in raw_df.iloc[i].values]
+                    row_text = " ".join(row_values).upper()
+                    
                     if "STRIKE" in row_text and "OI" in row_text:
                         header_idx = i
                         break
                 
-                # Extract headers and data body
-                raw_headers = raw_df.iloc[header_idx].astype(str).str.strip().str.upper().tolist()
+                # Extract headers and data body (Safely convert all headers to string)
+                raw_headers = [str(val).strip().upper() for val in raw_df.iloc[header_idx].values]
                 data_df = raw_df.iloc[header_idx+1:].copy().reset_index(drop=True)
                 data_df.dropna(how='all', inplace=True)
 
@@ -200,14 +207,15 @@ with tab2:
                 final_columns = []
                 for i, col in enumerate(raw_headers):
                     col = col.replace(" ", "_").replace(".", "")
-                    if col in ['NAN', 'NONE', '']: col = f"DATA_{i}"
+                    if col in ['NAN', 'NONE', '']: 
+                        col = f"DATA_{i}"
 
                     if i < strike_pos: final_columns.append(f"CALL_{col}")
                     elif i > strike_pos: final_columns.append(f"PUT_{col}")
                     else: final_columns.append("STRIKE_PRICE")
 
                 data_df.columns = final_columns
-                st.success("📊 NSE DATA DETECTED & STRUCTURED")
+                st.success("📊 NSE DATA DETECTED & STRUCTURED SUCCESSFULLY")
                 
                 # Column selection UI
                 st.info("🛠️ **MAPPING ENGINE:** Left side mapped as CALLS, Right side mapped as PUTS.")
@@ -269,3 +277,9 @@ with tab2:
                         st.error("❌ Missing required columns.")
         except Exception as e:
             st.error(f"🔴 DATA PARSING ERROR: {str(e)}")
+
+# =========================================================
+# SYSTEM FOOTER
+# =========================================================
+st.markdown("---")
+st.caption("🚀 NSE AI PRO MAX V4.0 | Institutional Quantitative High-Frequency Engine")
