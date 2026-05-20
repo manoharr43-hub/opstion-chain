@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V2.3 - ACTIVE STRIKE & AI TRADE SETUP
+# 🚀 NSE AI PRO MAX V2.4 - TRADE SETUP IN BOX & SCREENER
 # =========================================================
 
 import streamlit as st
@@ -17,13 +17,13 @@ from concurrent.futures import ThreadPoolExecutor
 # =========================================================
 
 st.set_page_config(
-    page_title="NSE AI PRO MAX V2.3",
+    page_title="NSE AI PRO MAX V2.4",
     layout="wide"
 )
 
 st.fragment(run_every=60)
 
-st.title("🚀 NSE AI PRO MAX V2.3")
+st.title("🚀 NSE AI PRO MAX V2.4")
 st.caption("AI BASED NSE SCANNER + OPTIONS MOMENTUM + TRADE SETUP")
 
 # =========================================================
@@ -180,7 +180,7 @@ with tab1:
             col5.metric("AI SCORE", f"{score} PTS")
 
             # CALL SIDE OPTION CHAIN ANALYSIS & AI SETUP
-            st.subheader(f"🔥 {selected_stock} OPTIONS MOMENTUM & AI TRADE SETUP")
+            st.subheader(f"🔥 {selected_stock} CALL SIDE OPTION CHAIN")
             
             with st.spinner("Fetching Option Chain Data..."):
                 yf_ticker = yf.Ticker(ticker)
@@ -198,7 +198,7 @@ with tab1:
                         opt_chain = yf_ticker.option_chain(nearest_expiry)
                         calls_df = opt_chain.calls
                         
-                        buffer = current_price * 0.05 # 5% buffer to find ATM/ITM/OTM accurately
+                        buffer = current_price * 0.05 
                         filtered_calls = calls_df[
                             (calls_df['strike'] >= (current_price - buffer)) & 
                             (calls_df['strike'] <= (current_price + buffer))
@@ -214,35 +214,6 @@ with tab1:
                             
                             filtered_calls = filtered_calls.fillna(0)
                             
-                            # 🟢 NEW: FINDING STRIKE MOVEMENT (HIGHEST VOLUME)
-                            # Ekkada aithe volume highest undo akkada pedda movement unnattu
-                            active_strike_idx = filtered_calls['CALL VOLUME'].idxmax()
-                            active_strike_data = filtered_calls.loc[active_strike_idx]
-                            
-                            active_strike = float(active_strike_data['STRIKE PRICE'])
-                            active_ltp = float(active_strike_data['CALL LTP (Price)'])
-                            active_vol = int(active_strike_data['CALL VOLUME'])
-                            
-                            # 🟢 NEW: AI TRADE SETUP CALCULATION
-                            # Entry, Stoploss (15%), Target 1 (15%), Target 2 (30%)
-                            entry_price = round(active_ltp, 2)
-                            sl_price = round(active_ltp * 0.85, 2)
-                            target_1 = round(active_ltp * 1.15, 2)
-                            target_2 = round(active_ltp * 1.30, 2)
-                            
-                            # Displaying AI Setup
-                            st.markdown(f"### 🎯 AI ENTRY SETUP FOR **{active_strike} CE**")
-                            st.info(f"**💡 Momentum Reason:** ee strike lo ekkuva trading jaruguthondi (Volume: {active_vol}).")
-                            
-                            t1, t2, t3, t4 = st.columns(4)
-                            t1.metric("🟢 ENTRY PRICE", f"₹ {entry_price}")
-                            t2.metric("🔴 STOPLOSS", f"₹ {sl_price}")
-                            t3.metric("🎯 TARGET 1", f"₹ {target_1}")
-                            t4.metric("🚀 TARGET 2", f"₹ {target_2}")
-                            
-                            st.markdown("---")
-                            
-                            # Option chain data display
                             filtered_calls['STRIKE PRICE'] = filtered_calls['STRIKE PRICE'].astype(float).round(2)
                             filtered_calls['CALL LTP (Price)'] = filtered_calls['CALL LTP (Price)'].astype(float).round(2)
                             filtered_calls['CALL OI (Total)'] = filtered_calls['CALL OI (Total)'].astype(int)
@@ -257,6 +228,31 @@ with tab1:
                             
                             st.dataframe(option_excel_df, use_container_width=True, hide_index=True)
                             
+                            # 🟢 NEW: AI TRADE SETUP PLACED IN A HIGHLIGHTED BOX BELOW THE CHAIN
+                            active_strike_idx = filtered_calls['CALL VOLUME'].idxmax()
+                            active_strike_data = filtered_calls.loc[active_strike_idx]
+                            
+                            active_strike = float(active_strike_data['STRIKE PRICE'])
+                            active_ltp = float(active_strike_data['CALL LTP (Price)'])
+                            active_vol = int(active_strike_data['CALL VOLUME'])
+                            
+                            entry_price = round(active_ltp, 2)
+                            sl_price = round(active_ltp * 0.85, 2)
+                            target_1 = round(active_ltp * 1.15, 2)
+                            target_2 = round(active_ltp * 1.30, 2)
+                            
+                            # 📦 CREATING A HIGHLIGHTED BOX FOR TRADE SETUP
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            with st.container(border=True):
+                                st.markdown(f"<h3 style='text-align: center; color: #4CAF50;'>🎯 AI ENTRY SETUP FOR {active_strike} CE</h3>", unsafe_allow_html=True)
+                                st.info(f"**💡 Momentum Reason:** Ee strike lo ekkuva trading jaruguthondi (Highest Volume: {active_vol}).")
+                                
+                                t1, t2, t3, t4 = st.columns(4)
+                                t1.metric("🟢 ENTRY PRICE", f"₹ {entry_price}")
+                                t2.metric("🔴 STOPLOSS", f"₹ {sl_price}")
+                                t3.metric("🎯 TARGET 1", f"₹ {target_1}")
+                                t4.metric("🚀 TARGET 2", f"₹ {target_2}")
+
                         else:
                             st.warning("No call options data available in this price range.")
                     except Exception as opt_err:
