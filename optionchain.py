@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V2.6 - CUSTOM CSV CALL/PUT BOXES
+# 🚀 NSE AI PRO MAX V2.7 - BUG FIXED & FULLY OPTIMIZED
 # =========================================================
 
 import streamlit as st
@@ -16,10 +16,10 @@ from concurrent.futures import ThreadPoolExecutor
 # PAGE CONFIG & AUTO REFRESH
 # =========================================================
 
-st.set_page_config(page_title="NSE AI PRO MAX V2.6", layout="wide")
+st.set_page_config(page_title="NSE AI PRO MAX V2.7", layout="wide")
 st.fragment(run_every=60)
 
-st.title("🚀 NSE AI PRO MAX V2.6")
+st.title("🚀 NSE AI PRO MAX V2.7")
 st.caption("AI BASED NSE SCANNER + OPTIONS MOMENTUM + CUSTOM CSV SETUP")
 
 # =========================================================
@@ -57,7 +57,7 @@ ticker = nse_stocks[selected_stock]
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔗 QUICK LINKS")
-screener_link = "INSERT_YOUR_LINK_HERE" 
+screener_link = "INSERT_YOUR_LINK_HERE" # మీ లింక్ ఇక్కడ పెట్టండి
 
 st.sidebar.markdown(f'''
 <a href="{screener_link}" target="_blank" style="text-decoration: none;">
@@ -122,114 +122,137 @@ def generate_signal(df):
 # =========================================================
 # TABS SETUP
 # =========================================================
-tab1, tab2 = st.tabs(["📈 AI Scanner & Live Setup", "📂 Upload CSV & Extract AI Target (NEW)"])
+tab1, tab2 = st.tabs(["📈 AI Scanner & Live Setup", "📂 Upload CSV & Extract AI Target"])
 
 # =========================================================
-# TAB 1: LIVE SCANNER (Patha code)
+# TAB 1: LIVE SCANNER
 # =========================================================
 with tab1:
-    try:
+    try: # <--- ఇక్కడ మొదలైన try బ్లాక్ చివరలో except తో ఎండ్ అవుతుంది (ఎర్రర్ రాకుండా)
         df = yf.download(ticker, interval=interval, period=period, progress=False, auto_adjust=True)
-        if not df.empty:
+        if df.empty:
+            st.error("NO DATA FOUND")
+        else:
             df = calculate_indicators(df)
             signal, score = generate_signal(df)
             latest = df.iloc[-1]
             current_price = float(latest['Close'].iloc[0]) if isinstance(latest['Close'], pd.Series) else float(latest['Close'])
 
+            # 1. AI SIGNAL
             st.subheader("🤖 AI SIGNAL")
             if "BUY" in signal: st.success(f"{signal} (SCORE: {score})")
             elif "SELL" in signal: st.error(f"{signal} (SCORE: {score})")
             else: st.warning(f"{signal} (SCORE: {score})")
+            
+            col1, col2, col3, col4, col5 = st.columns(5)
+            col1.metric("PRICE", f"₹ {round(current_price, 2)}")
+            col2.metric("RSI", round(float(latest['RSI']), 2))
+            col3.metric("VWAP", round(float(latest['VWAP']), 2))
+            col4.metric("MACD", round(float(latest['MACD']), 2))
+            col5.metric("AI SCORE", f"{score} PTS")
 
+            # 2. OPTION CHAIN
+            st.subheader(f"🔥 {selected_stock} OPTION CHAIN & AI SETUP")
+            with st.spinner("Fetching Option Chain Data..."):
+                yf_ticker = yf.Ticker(ticker)
+                try:
+                    expiries = yf_ticker.options
+                except:
+                    expiries = []
+                
+                if expiries:
+                    nearest_expiry = expiries[0]
+                    st.caption(f"📅 Expiry: **{nearest_expiry}**")
+                    opt_chain = yf_ticker.option_chain(nearest_expiry)
+                    calls_df = opt_chain.calls
+                    puts_df = opt_chain.puts
+                    
+                    buffer = current_price * 0.05 
+                    filtered_calls = calls_df[(calls_df['strike'] >= (current_price - buffer)) & (calls_df['strike'] <= (current_price + buffer))].copy()
+                    filtered_puts = puts_df[(puts_df['strike'] >= (current_price - buffer)) & (puts_df['strike'] <= (current_price + buffer))].copy()
+                    
+                    if not filtered_calls.empty:
+                        # Call Data Display
+                        st.dataframe(filtered_calls[['strike', 'lastPrice', 'openInterest', 'volume']], use_container_width=True, hide_index=True)
+                        
+                        st.markdown("---")
+                        st.subheader("🤖 AI MOMENTUM TRADE SETUP (LIVE)")
+                        col_call, col_put = st.columns(2)
+                        
+                        # Call Box
+                        with col_call:
+                            with st.container(border=True):
+                                c_idx = filtered_calls['volume'].idxmax()
+                                c_data = filtered_calls.loc[c_idx]
+                                c_ltp = float(c_data['lastPrice'])
+                                st.markdown(f"<h4 style='text-align: center; color: #4CAF50;'>🟢 CALL SIDE: {float(c_data['strike'])} CE</h4>", unsafe_allow_html=True)
+                                st.info(f"Highest Volume: {int(c_data['volume'])}")
+                                ct1, ct2 = st.columns(2)
+                                ct1.metric("ENTRY", f"₹ {round(c_ltp, 2)}")
+                                ct2.metric("STOPLOSS", f"₹ {round(c_ltp * 0.85, 2)}")
+                                ct3, ct4 = st.columns(2)
+                                ct3.metric("TARGET 1", f"₹ {round(c_ltp * 1.15, 2)}")
+                                ct4.metric("TARGET 2", f"₹ {round(c_ltp * 1.30, 2)}")
+
+                        # Put Box
+                        with col_put:
+                            with st.container(border=True):
+                                if not filtered_puts.empty:
+                                    p_idx = filtered_puts['volume'].idxmax()
+                                    p_data = filtered_puts.loc[p_idx]
+                                    p_ltp = float(p_data['lastPrice'])
+                                    st.markdown(f"<h4 style='text-align: center; color: #FF5252;'>🔴 PUT SIDE: {float(p_data['strike'])} PE</h4>", unsafe_allow_html=True)
+                                    st.info(f"Highest Volume: {int(p_data['volume'])}")
+                                    pt1, pt2 = st.columns(2)
+                                    pt1.metric("ENTRY", f"₹ {round(p_ltp, 2)}")
+                                    pt2.metric("STOPLOSS", f"₹ {round(p_ltp * 0.85, 2)}")
+                                    pt3, pt4 = st.columns(2)
+                                    pt3.metric("TARGET 1", f"₹ {round(p_ltp * 1.15, 2)}")
+                                    pt4.metric("TARGET 2", f"₹ {round(p_ltp * 1.30, 2)}")
+                                else:
+                                    st.warning("No Put Data")
+                    else:
+                        st.warning("No Options Data found for this range.")
+                else:
+                    st.warning("Yahoo Finance options data not available.")
+
+            # 3. LIVE CHART
+            st.markdown("---")
             st.subheader(f"📈 {selected_stock} LIVE CHART")
             fig = go.Figure()
             time_col = df.columns[0] if 'index' not in df.columns and 'Date' not in df.columns else ('index' if 'index' in df.columns else 'Date')
             fig.add_trace(go.Scatter(x=df[time_col], y=df['Close'], mode='lines', name='Close'))
             fig.add_trace(go.Scatter(x=df[time_col], y=df['EMA20'], mode='lines', name='EMA20'))
+            fig.update_layout(height=400, hovermode="x unified")
             st.plotly_chart(fig, use_container_width=True)
 
-            scanner_fetched_time = get_current_ist_time()
+            # 4. SCANNER
             st.subheader("🔥 LIVE AI NIFTY 50 SCANNER")
-            st.caption(f"🕒 Scanner Last Run (IST): `{scanner_fetched_time}`")
-            # Skipping loop visually to save space, but keeping function intact
-            st.info("Scanner is active. Wait for auto-refresh.")
-    except Exception as e:
-        st.error("Chart Error")
+            def scan_stock(item):
+                s_name, s_ticker = item
+                try:
+                    data = yf.download(s_ticker, interval=interval, period=period, progress=False, auto_adjust=True)
+                    if data.empty: return None
+                    data = calculate_indicators(data)
+                    sig, scr = generate_signal(data)
+                    return {"STOCK": s_name, "PRICE": round(float(data.iloc[-1]['Close']), 2), "SIGNAL": sig, "SCORE": scr}
+                except: return None
+
+            results = []
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                scanned = executor.map(scan_stock, nse_stocks.items())
+            for item in scanned:
+                if item is not None: results.append(item)
+            
+            st.dataframe(pd.DataFrame(results).sort_values(by="SCORE", ascending=False), use_container_width=True, hide_index=True)
+
+    except Exception as e: # <--- కరెక్ట్ except బ్లాక్ ఇక్కడ ఉంది.
+        st.error(f"App Error: {str(e)}")
 
 # =========================================================
-# TAB 2: UPLOADED CSV TO CALL/PUT AI BOXES (FIXED & ADDED HERE)
+# TAB 2: UPLOADED CSV TO CALL/PUT AI BOXES
 # =========================================================
 with tab2:
-    st.header("📂 Screener Kit Data Processing")
-    st.write("మీరు డౌన్‌లోడ్ చేసిన Screener Excel/CSV ఫైల్ ని ఇక్కడ అప్లోడ్ చేయండి. దాని కింద AI మూమెంట్ బాక్సులు వస్తాయి.")
-    
-    uploaded_file = st.file_uploader("Upload Your File (CSV or Excel)", type=["csv", "xlsx", "xls"])
-    
-    if uploaded_file is not None:
-        try:
-            # 1. Read Data
-            if uploaded_file.name.endswith('.csv'):
-                screener_df = pd.read_csv(uploaded_file)
-            else:
-                screener_df = pd.read_excel(uploaded_file)
-                
-            screener_df = screener_df.dropna(how='all')
-            
-            # 2. Show the Table
-            st.success("✅ File Successfully Loaded!")
-            st.subheader("📊 Your Uploaded Data Report")
-            st.dataframe(screener_df, use_container_width=True)
-            
-            st.markdown("---")
-            st.subheader("⚙️ Map Your Columns For AI Trade Setup")
-            st.caption("మీ ఎక్సెల్ షీట్ లో కాలమ్ పేర్లు వేరుగా ఉండొచ్చు, కాబట్టి ఏ కాలమ్ దేనికి సంబంధించినదో కింద సెలెక్ట్ చేయండి.")
-            
-            # 3. Column Matcher (To avoid errors from different CSV formats)
-            cols = list(screener_df.columns)
-            
-            col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
-            with col_m1: strike_col = st.selectbox("Strike Price Column", cols, index=0)
-            with col_m2: ce_vol_col = st.selectbox("Call Volume Column", cols, index=min(1, len(cols)-1))
-            with col_m3: ce_ltp_col = st.selectbox("Call LTP (Price) Column", cols, index=min(2, len(cols)-1))
-            with col_m4: pe_vol_col = st.selectbox("Put Volume Column", cols, index=min(3, len(cols)-1))
-            with col_m5: pe_ltp_col = st.selectbox("Put LTP (Price) Column", cols, index=min(4, len(cols)-1))
-            
-            # 4. Generate AI Setup Button
-            if st.button("🚀 Generate AI Momentum Targets", use_container_width=True):
-                # Data cleanup (convert to numeric, handle errors)
-                screener_df[ce_vol_col] = pd.to_numeric(screener_df[ce_vol_col], errors='coerce').fillna(0)
-                screener_df[pe_vol_col] = pd.to_numeric(screener_df[pe_vol_col], errors='coerce').fillna(0)
-                screener_df[ce_ltp_col] = pd.to_numeric(screener_df[ce_ltp_col], errors='coerce').fillna(0)
-                screener_df[pe_ltp_col] = pd.to_numeric(screener_df[pe_ltp_col], errors='coerce').fillna(0)
-                screener_df[strike_col] = pd.to_numeric(screener_df[strike_col], errors='coerce').fillna(0)
-                
-                # --- CALL SIDE AI ---
-                c_idx = screener_df[ce_vol_col].idxmax()
-                c_strike = screener_df.loc[c_idx, strike_col]
-                c_ltp = screener_df.loc[c_idx, ce_ltp_col]
-                c_vol = screener_df.loc[c_idx, ce_vol_col]
-                
-                # --- PUT SIDE AI ---
-                p_idx = screener_df[pe_vol_col].idxmax()
-                p_strike = screener_df.loc[p_idx, strike_col]
-                p_ltp = screener_df.loc[p_idx, pe_ltp_col]
-                p_vol = screener_df.loc[p_idx, pe_vol_col]
-                
-                st.markdown("---")
-                st.subheader("🤖 AI MOMENTUM TRADE SETUP (CALL vs PUT)")
-                col_call, col_put = st.columns(2)
-                
-                # --- CALL BOX (GREEN) ---
-                with col_call:
-                    with st.container(border=True):
-                        st.markdown(f"<h3 style='text-align: center; color: #4CAF50;'>🟢 CALL SIDE: {c_strike} CE</h3>", unsafe_allow_html=True)
-                        st.info(f"**Highest Volume:** {int(c_vol)} (ఈ స్ట్రైక్ లో కాల్ సైడ్ భారీ మూమెంట్ ఉంది)")
-                        
-                        if c_ltp > 0:
-                            c_entry = round(c_ltp, 2)
-                            c_sl = round(c_ltp * 0.85, 2)
-                            c_t1 = round(c_ltp * 1.15, 2)
-                            c_t2 = round(c_ltp * 1.30, 2)
-                            
-                            t1, t2 = st.columns(2)
-                            t
+    try: # <--- Tab 2 లో కూడా try బ్లాక్ మొదలు
+        st.header("📂 Screener Kit Data Processing")
+        st.write("మీరు డౌన్‌లోడ్ చేసిన Screener Excel/CSV ఫైల్ ని ఇక్కడ అప్లో
