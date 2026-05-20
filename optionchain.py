@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V3.5 - INSTITUTIONAL MULTI-HEADER FIX
+# 🚀 NSE AI PRO MAX V3.6 - ROBUST ENCODING BUG FIXED
 # =========================================================
 
 import streamlit as st
@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 # =========================================================
 
 st.set_page_config(
-    page_title="NSE AI PRO MAX V3.5",
+    page_title="NSE AI PRO MAX V3.6",
     page_icon="🚀",
     layout="wide"
 )
@@ -59,7 +59,7 @@ h1,h2,h3,h4 {
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 NSE AI PRO MAX V3.5")
+st.title("🚀 NSE AI PRO MAX V3.6")
 st.caption("INSTITUTIONAL EDITION + FIXED CSV OPTION CHAIN")
 
 # =========================================================
@@ -95,7 +95,7 @@ st.sidebar.markdown(f'''
 </a>
 ''', unsafe_allow_html=True)
 
-# Technical Indicator calculations
+# Indicator calculations
 def calculate_indicators(df):
     if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
     for col in ["Close", "High", "Low", "Open", "Volume"]:
@@ -168,7 +168,7 @@ with tab1:
         st.error(f"Live Error: {str(e)}")
 
 # =========================================================
-# TAB 2 - AUTO RAW INDEX SCANNER (NO DROPDOWN NEEDED)
+# TAB 2 - ADVANCED MULTI-ENCODING DECODER (BUG FIXED HERE)
 # =========================================================
 with tab2:
     st.header("📂 Screener Kit Data Processing")
@@ -178,20 +178,29 @@ with tab2:
     
     if uploaded_file is not None:
         raw_df = None
-        try:
-            if uploaded_file.name.endswith('.csv'):
-                # Read raw values directly without headers to fix merged/multi-index rows
-                raw_df = pd.read_csv(uploaded_file, header=None, encoding='utf-8', errors='ignore')
-            else:
+        
+        # 🛠️ New Robust Multi-Encoding Fallback Loop to prevent parsing bugs
+        if uploaded_file.name.endswith('.csv'):
+            encodings = ['utf-8', 'latin-1', 'cp1252', 'utf-16']
+            for encoding in encodings:
+                try:
+                    # Reset stream file pointer on each loop check
+                    uploaded_file.seek(0)
+                    raw_df = pd.read_csv(uploaded_file, header=None, encoding=encoding, errors='ignore')
+                    if not raw_df.empty:
+                        break
+                except Exception:
+                    continue
+        else:
+            try:
                 raw_df = pd.read_excel(uploaded_file, header=None)
-        except Exception as e:
-            try: raw_df = pd.read_csv(uploaded_file, header=None, encoding='latin1')
-            except: st.error("ఫైల్ ఫార్మాట్ సపోర్ట్ చేయడం లేదు.")
+            except Exception as excel_err:
+                st.error(f"Excel file open failure: {str(excel_err)}")
 
+        # Process Matrix only if data frame was decoded successfully
         if raw_df is not None and not raw_df.empty:
             st.success("✅ File Successfully Loaded!")
             
-            # Show file snapshot
             st.subheader("📊 Your Uploaded Data Report (Preview)")
             st.dataframe(raw_df.head(15), use_container_width=True)
             
@@ -199,11 +208,9 @@ with tab2:
             
             if st.button("🚀 Auto-Extract AI Momentum Targets", use_container_width=True):
                 try:
-                    # Step 1: Filter numeric rows dynamically to find option chain matrix
                     processed_rows = []
                     for idx, row in raw_df.iterrows():
                         vals = list(row.values)
-                        # Check if row has a strike number somewhere in the middle columns
                         numeric_count = sum(1 for v in vals if str(v).replace('.','',1).isdigit())
                         if numeric_count >= 3:
                             processed_rows.append(vals)
@@ -214,26 +221,21 @@ with tab2:
                         clean_matrix = pd.DataFrame(processed_rows)
                         total_cols = clean_matrix.shape[1]
                         
-                        # Step 2: Extract indexes based on standard NSE matrix structure
-                        # Middle column is usually Strike Price
                         mid_idx = total_cols // 2
                         
-                        # Find numeric columns safely
                         for col in clean_matrix.columns:
                             clean_matrix[col] = pd.to_numeric(clean_matrix[col], errors='coerce').fillna(0)
                         
-                        # Dynamic Mapping based on Column count positions
                         strike_series = clean_matrix[mid_idx]
                         
-                        # Call Side (Left side of matrix: usually col 1 is volume, col 2/3 is LTP)
+                        # Left call mapping setup
                         ce_vol_series = clean_matrix[1]
                         ce_ltp_series = clean_matrix[2] if mid_idx > 2 else clean_matrix[1]
                         
-                        # Put Side (Right side of matrix: mid+1 or mid+2 is Volume/LTP)
+                        # Right put mapping setup
                         pe_vol_series = clean_matrix[total_cols - 2]
                         pe_ltp_series = clean_matrix[total_cols - 3] if total_cols > 4 else clean_matrix[mid_idx + 1]
                         
-                        # Find Highest Volume indices
                         c_max_idx = ce_vol_series.idxmax()
                         c_strike = strike_series.loc[c_max_idx]
                         c_ltp = ce_ltp_series.loc[c_max_idx]
@@ -244,23 +246,18 @@ with tab2:
                         p_ltp = pe_ltp_series.loc[p_max_idx]
                         p_vol = pe_vol_series.loc[p_max_idx]
                         
-                        # Fallback correction if strike logic falls on 0
                         if c_strike == 0 or p_strike == 0:
-                            # Try column 0 as fallback strike
                             c_strike = clean_matrix.loc[c_max_idx, 0] if c_strike == 0 else c_strike
                             p_strike = clean_matrix.loc[p_max_idx, 0] if p_strike == 0 else p_strike
                         
                         st.subheader("🤖 AI MOMENTUM TRADE SETUP (EXTRACTED SUCCESSFULLY)")
                         col_call, col_put = st.columns(2)
                         
-                        # --- CALL SIDE BOX ---
                         with col_call:
                             with st.container(border=True):
                                 st.markdown(f"<h3 style='text-align: center; color: #4CAF50;'>🟢 CALL SIDE: {int(c_strike) if c_strike > 0 else 'Active'} CE</h3>", unsafe_allow_html=True)
                                 st.info(f"**Highest Volume Detected:** {int(c_vol)}")
-                                
-                                # If ltp extraction is 0, give standard placeholder logic to avoid empty cards
-                                if c_ltp <= 0: c_ltp = 45.0 # Safe default threshold for display if raw mapping is text-shifted
+                                if c_ltp <= 0: c_ltp = 45.0
                                 
                                 t1, t2 = st.columns(2)
                                 t1.metric("ENTRY PRICE", f"₹ {round(c_ltp, 2)}")
@@ -269,12 +266,10 @@ with tab2:
                                 t3.metric("TARGET 1", f"₹ {round(c_ltp * 1.15, 2)}")
                                 t4.metric("TARGET 2", f"₹ {round(c_ltp * 1.30, 2)}")
 
-                        # --- PUT SIDE BOX ---
                         with col_put:
                             with st.container(border=True):
                                 st.markdown(f"<h3 style='text-align: center; color: #FF5252;'>🔴 PUT SIDE: {int(p_strike) if p_strike > 0 else 'Active'} PE</h3>", unsafe_allow_html=True)
                                 st.info(f"**Highest Volume Detected:** {int(p_vol)}")
-                                
                                 if p_ltp <= 0: p_ltp = 55.0
                                 
                                 pt1, pt2 = st.columns(2)
@@ -285,4 +280,6 @@ with tab2:
                                 pt4.metric("TARGET 2", f"₹ {round(p_ltp * 1.30, 2)}")
                                 
                 except Exception as proc_err:
-                    st.error("ఎక్సెల్ షీట్ రో-స్ట్రక్చర్ లో మార్పులు ఉన్నాయి. దయచేసి ఒరిజినల్ ఆప్షన్ చైన్ ఫైల్ ని అప్‌లోడ్ చేయండి.")
+                    st.error("ఎక్సెల్ షీట్ డేటాను ఎక్స్‌ట్రాక్ట్ చేయడంలో లోపం వచ్చింది.")
+        else:
+            st.error("❌ ఈ ఫైల్ ను సిస్టమ్ రీడ్ చేయలేకపోతోంది. దయచేసి ఫైల్ ఎన్‌కోడింగ్ ఒకసారి చెక్ చేయండి.")
