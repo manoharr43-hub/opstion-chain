@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V2.4 - TRADE SETUP IN BOX & SCREENER
+# 🚀 NSE AI PRO MAX V2.5 - CALL & PUT SIDE TRADE SETUP
 # =========================================================
 
 import streamlit as st
@@ -17,13 +17,13 @@ from concurrent.futures import ThreadPoolExecutor
 # =========================================================
 
 st.set_page_config(
-    page_title="NSE AI PRO MAX V2.4",
+    page_title="NSE AI PRO MAX V2.5",
     layout="wide"
 )
 
 st.fragment(run_every=60)
 
-st.title("🚀 NSE AI PRO MAX V2.4")
+st.title("🚀 NSE AI PRO MAX V2.5")
 st.caption("AI BASED NSE SCANNER + OPTIONS MOMENTUM + TRADE SETUP")
 
 # =========================================================
@@ -179,8 +179,10 @@ with tab1:
             col4.metric("ATR", round(float(latest['ATR']), 2))
             col5.metric("AI SCORE", f"{score} PTS")
 
+            # =====================================================
             # CALL SIDE OPTION CHAIN ANALYSIS & AI SETUP
-            st.subheader(f"🔥 {selected_stock} CALL SIDE OPTION CHAIN")
+            # =====================================================
+            st.subheader(f"🔥 {selected_stock} OPTION CHAIN ANALYSIS")
             
             with st.spinner("Fetching Option Chain Data..."):
                 yf_ticker = yf.Ticker(ticker)
@@ -197,11 +199,17 @@ with tab1:
                     try:
                         opt_chain = yf_ticker.option_chain(nearest_expiry)
                         calls_df = opt_chain.calls
+                        puts_df = opt_chain.puts
                         
                         buffer = current_price * 0.05 
                         filtered_calls = calls_df[
                             (calls_df['strike'] >= (current_price - buffer)) & 
                             (calls_df['strike'] <= (current_price + buffer))
+                        ].copy()
+                        
+                        filtered_puts = puts_df[
+                            (puts_df['strike'] >= (current_price - buffer)) & 
+                            (puts_df['strike'] <= (current_price + buffer))
                         ].copy()
                         
                         if not filtered_calls.empty:
@@ -213,7 +221,6 @@ with tab1:
                             })
                             
                             filtered_calls = filtered_calls.fillna(0)
-                            
                             filtered_calls['STRIKE PRICE'] = filtered_calls['STRIKE PRICE'].astype(float).round(2)
                             filtered_calls['CALL LTP (Price)'] = filtered_calls['CALL LTP (Price)'].astype(float).round(2)
                             filtered_calls['CALL OI (Total)'] = filtered_calls['CALL OI (Total)'].astype(int)
@@ -222,36 +229,83 @@ with tab1:
                             max_oi_idx = filtered_calls['CALL OI (Total)'].idxmax()
                             highest_oi_strike = filtered_calls.loc[max_oi_idx, 'STRIKE PRICE']
                             
-                            st.write(f"🛡️ **Resistance Point (Highest OI):** Strike **{highest_oi_strike}**")
+                            st.write(f"🛡️ **Resistance Point (Highest Call OI):** Strike **{highest_oi_strike}**")
                             
                             option_excel_df = filtered_calls[['STRIKE PRICE', 'CALL LTP (Price)', 'CALL OI (Total)', 'CALL VOLUME']].copy()
                             
                             st.dataframe(option_excel_df, use_container_width=True, hide_index=True)
                             
-                            # 🟢 NEW: AI TRADE SETUP PLACED IN A HIGHLIGHTED BOX BELOW THE CHAIN
-                            active_strike_idx = filtered_calls['CALL VOLUME'].idxmax()
-                            active_strike_data = filtered_calls.loc[active_strike_idx]
+                            # 📥 EXCEL DOWNLOAD BUTTON (Call Data)
+                            option_excel_df['FETCHED TIME (IST)'] = option_fetched_time
+                            option_excel_data = to_excel(option_excel_df)
+                            st.download_button(
+                                label="📥 DOWNLOAD CALL OPTION CHAIN AS EXCEL",
+                                data=option_excel_data,
+                                file_name=f"{selected_stock}_call_oi_{nearest_expiry}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
                             
-                            active_strike = float(active_strike_data['STRIKE PRICE'])
-                            active_ltp = float(active_strike_data['CALL LTP (Price)'])
-                            active_vol = int(active_strike_data['CALL VOLUME'])
+                            st.markdown("---")
                             
-                            entry_price = round(active_ltp, 2)
-                            sl_price = round(active_ltp * 0.85, 2)
-                            target_1 = round(active_ltp * 1.15, 2)
-                            target_2 = round(active_ltp * 1.30, 2)
+                            # 🟢🔴 NEW: CALL & PUT SIDE TRADE SETUP BOXES BELOW DOWNLOAD
+                            st.subheader("🤖 AI MOMENTUM TRADE SETUP (CALL vs PUT)")
+                            st.caption("Volume base chesukoni ekkuva movement unna Call mariyu Put strikes")
                             
-                            # 📦 CREATING A HIGHLIGHTED BOX FOR TRADE SETUP
-                            st.markdown("<br>", unsafe_allow_html=True)
-                            with st.container(border=True):
-                                st.markdown(f"<h3 style='text-align: center; color: #4CAF50;'>🎯 AI ENTRY SETUP FOR {active_strike} CE</h3>", unsafe_allow_html=True)
-                                st.info(f"**💡 Momentum Reason:** Ee strike lo ekkuva trading jaruguthondi (Highest Volume: {active_vol}).")
-                                
-                                t1, t2, t3, t4 = st.columns(4)
-                                t1.metric("🟢 ENTRY PRICE", f"₹ {entry_price}")
-                                t2.metric("🔴 STOPLOSS", f"₹ {sl_price}")
-                                t3.metric("🎯 TARGET 1", f"₹ {target_1}")
-                                t4.metric("🚀 TARGET 2", f"₹ {target_2}")
+                            col_call, col_put = st.columns(2)
+                            
+                            # ---- CALL SIDE BOX ----
+                            with col_call:
+                                with st.container(border=True):
+                                    active_strike_idx = filtered_calls['CALL VOLUME'].idxmax()
+                                    active_strike_data = filtered_calls.loc[active_strike_idx]
+                                    
+                                    c_strike = float(active_strike_data['STRIKE PRICE'])
+                                    c_ltp = float(active_strike_data['CALL LTP (Price)'])
+                                    c_vol = int(active_strike_data['CALL VOLUME'])
+                                    
+                                    c_entry = round(c_ltp, 2)
+                                    c_sl = round(c_ltp * 0.85, 2)
+                                    c_t1 = round(c_ltp * 1.15, 2)
+                                    c_t2 = round(c_ltp * 1.30, 2)
+                                    
+                                    st.markdown(f"<h4 style='text-align: center; color: #4CAF50;'>🟢 CALL SIDE: {c_strike} CE</h4>", unsafe_allow_html=True)
+                                    st.info(f"**Highest Volume:** {c_vol}")
+                                    
+                                    ct1, ct2 = st.columns(2)
+                                    ct1.metric("ENTRY", f"₹ {c_entry}")
+                                    ct2.metric("STOPLOSS", f"₹ {c_sl}")
+                                    ct3, ct4 = st.columns(2)
+                                    ct3.metric("TARGET 1", f"₹ {c_t1}")
+                                    ct4.metric("TARGET 2", f"₹ {c_t2}")
+
+                            # ---- PUT SIDE BOX ----
+                            with col_put:
+                                with st.container(border=True):
+                                    if not filtered_puts.empty:
+                                        filtered_puts = filtered_puts.fillna(0)
+                                        active_p_idx = filtered_puts['volume'].idxmax()
+                                        active_p_data = filtered_puts.loc[active_p_idx]
+                                        
+                                        p_strike = float(active_p_data['strike'])
+                                        p_ltp = float(active_p_data['lastPrice'])
+                                        p_vol = int(active_p_data['volume'])
+                                        
+                                        p_entry = round(p_ltp, 2)
+                                        p_sl = round(p_ltp * 0.85, 2)
+                                        p_t1 = round(p_ltp * 1.15, 2)
+                                        p_t2 = round(p_ltp * 1.30, 2)
+                                        
+                                        st.markdown(f"<h4 style='text-align: center; color: #FF5252;'>🔴 PUT SIDE: {p_strike} PE</h4>", unsafe_allow_html=True)
+                                        st.info(f"**Highest Volume:** {p_vol}")
+                                        
+                                        pt1, pt2 = st.columns(2)
+                                        pt1.metric("ENTRY", f"₹ {p_entry}")
+                                        pt2.metric("STOPLOSS", f"₹ {p_sl}")
+                                        pt3, pt4 = st.columns(2)
+                                        pt3.metric("TARGET 1", f"₹ {p_t1}")
+                                        pt4.metric("TARGET 2", f"₹ {p_t2}")
+                                    else:
+                                        st.warning("Put option data dorakaledu.")
 
                         else:
                             st.warning("No call options data available in this price range.")
@@ -261,6 +315,7 @@ with tab1:
                     st.warning("Yahoo Finance lo option chain data dorakaledu.")
 
             # CHART & DATA TABLES
+            st.markdown("---")
             st.subheader(f"📈 {selected_stock} LIVE CHART")
             fig = go.Figure()
             
