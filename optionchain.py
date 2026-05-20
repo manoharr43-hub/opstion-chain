@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V3.3 - ADVANCED COLUMN DETECTION FIXED
+# 🚀 NSE AI PRO MAX V3.4 - COLUMN MAPPER GUIDE INTEGRATED
 # =========================================================
 
 import streamlit as st
@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 # =========================================================
 
 st.set_page_config(
-    page_title="NSE AI PRO MAX V3.3",
+    page_title="NSE AI PRO MAX V3.4",
     page_icon="🚀",
     layout="wide"
 )
@@ -59,7 +59,7 @@ h1,h2,h3,h4 {
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 NSE AI PRO MAX V3.3")
+st.title("🚀 NSE AI PRO MAX V3.4")
 st.caption("INSTITUTIONAL EDITION + OPTIONS AI SETUP")
 
 # =========================================================
@@ -167,7 +167,9 @@ with tab1:
     except Exception as e:
         st.error(f"Live Error: {str(e)}")
 
-# TAB 2 - FIXED & SMART COLUMN PROTECTION
+# =========================================================
+# TAB 2 - RE-OPTIMIZED UPLOAD CONTROLS
+# =========================================================
 with tab2:
     st.header("📂 Screener Kit Data Processing")
     uploaded_file = st.file_uploader("Upload Your File (CSV or Excel)", type=["csv", "xlsx", "xls"])
@@ -185,15 +187,24 @@ with tab2:
 
         if screener_df is not None and not screener_df.empty:
             st.success("✅ File Successfully Loaded!")
-            st.dataframe(screener_df.head(10), use_container_width=True) # Shows clean head view
+            
+            # Help Box Guide to avoid wrong selections
+            with st.expander("💡 కాలమ్స్ ని ఎలా సెలెక్ట్ చేయాలో ఇక్కడ చూడండి (HELP GUIDE)", expanded=True):
+                st.markdown("""
+                * **Strike Price Column:** మీ టేబుల్ లో మధ్యలో ఉండే స్ట్రైక్ నెంబర్ల హెడ్డింగ్ (ఉదాహరణకు: 27000, 27100).
+                * **Call Volume / LTP Column:** మీ ఎక్సెల్ లో **ఎడమ వైపు (Calls)** ఉండే వాల్యూమ్ మరియు ధర(LTP) హెడ్డింగ్స్.
+                * **Put Volume / LTP Column:** మీ ఎక్సెల్ లో **కుడి వైపు (Puts)** ఉండే వాల్యూమ్ మరియు ధర(LTP) హెడ్డింగ్స్.
+                """)
+                
+            st.subheader("📊 Your Uploaded Data Report")
+            st.dataframe(screener_df.head(10), use_container_width=True)
             
             st.markdown("---")
             st.subheader("⚙️ Map Your Columns For AI Trade Setup")
-            st.caption("డ్రాప్‌డౌన్ లలో మీ ఎక్సెల్ షీట్ హెడ్డింగ్స్ ని కరెక్ట్ గా సెలెక్ట్ చేయండి:")
             
             cols = list(screener_df.columns)
             
-            # Smart Auto Match logic to pick default best match index
+            # Default auto search values
             def find_best_idx(keywords, col_list, default_idx=0):
                 for i, c in enumerate(col_list):
                     if any(k in str(c).lower() for k in keywords):
@@ -215,7 +226,6 @@ with tab2:
             
             if st.button("🚀 Generate AI Momentum Targets", use_container_width=True):
                 try:
-                    # Clean the chosen series data safely
                     screener_df[ce_vol_col] = pd.to_numeric(screener_df[ce_vol_col], errors='coerce').fillna(0)
                     screener_df[pe_vol_col] = pd.to_numeric(screener_df[pe_vol_col], errors='coerce').fillna(0)
                     screener_df[ce_ltp_col] = pd.to_numeric(screener_df[ce_ltp_col], errors='coerce').fillna(0)
@@ -240,30 +250,33 @@ with tab2:
                     
                     with col_call:
                         with st.container(border=True):
-                            st.markdown(f"<h3 style='text-align: center; color: #4CAF50;'>🟢 CALL SIDE: {int(c_strike) if c_strike > 0 else c_strike} CE</h3>", unsafe_allow_html=True)
-                            st.info(f"**Highest Volume:** {int(c_vol)}")
-                            if c_ltp > 0:
+                            # Strike Validation logic to protect against negative or bad indexing
+                            if c_strike <= 0 or c_ltp <= 0:
+                                st.markdown("<h3 style='text-align: center; color: #4CAF50;'>🟢 CALL SIDE</h3>", unsafe_allow_html=True)
+                                st.error("❌ Strike Price లేదా LTP తప్పుగా వచ్చింది! దయచేసి పైన ఉన్న 'Strike Price' మరియు 'Call LTP' డ్రాప్‌డౌన్ లను మార్చండి.")
+                            else:
+                                st.markdown(f"<h3 style='text-align: center; color: #4CAF50;'>🟢 CALL SIDE: {int(c_strike)} CE</h3>", unsafe_allow_html=True)
+                                st.info(f"**Highest Volume:** {int(c_vol)}")
                                 t1, t2 = st.columns(2)
                                 t1.metric("ENTRY", f"₹ {round(c_ltp, 2)}")
                                 t2.metric("STOPLOSS", f"₹ {round(c_ltp * 0.85, 2)}")
                                 t3, t4 = st.columns(2)
                                 t3.metric("TARGET 1", f"₹ {round(c_ltp * 1.15, 2)}")
                                 t4.metric("TARGET 2", f"₹ {round(c_ltp * 1.30, 2)}")
-                            else:
-                                st.warning("LTP is 0. Please map the 'Call LTP Column' correctly.")
 
                     with col_put:
                         with st.container(border=True):
-                            st.markdown(f"<h3 style='text-align: center; color: #FF5252;'>🔴 PUT SIDE: {int(p_strike) if p_strike > 0 else p_strike} PE</h3>", unsafe_allow_html=True)
-                            st.info(f"**Highest Volume:** {int(p_vol)}")
-                            if p_ltp > 0:
+                            if p_strike <= 0 or p_ltp <= 0:
+                                st.markdown("<h3 style='text-align: center; color: #FF5252;'>🔴 PUT SIDE</h3>", unsafe_allow_html=True)
+                                st.error("❌ Strike Price లేదా LTP తప్పుగా వచ్చింది! దయచేసి పైన ఉన్న 'Strike Price' మరియు 'Put LTP' డ్రాప్‌డౌన్ లను మార్చండి.")
+                            else:
+                                st.markdown(f"<h3 style='text-align: center; color: #FF5252;'>🔴 PUT SIDE: {int(p_strike)} PE</h3>", unsafe_allow_html=True)
+                                st.info(f"**Highest Volume:** {int(p_vol)}")
                                 pt1, pt2 = st.columns(2)
                                 pt1.metric("ENTRY", f"₹ {round(p_ltp, 2)}")
                                 pt2.metric("STOPLOSS", f"₹ {round(p_ltp * 0.85, 2)}")
                                 pt3, pt4 = st.columns(2)
                                 pt3.metric("TARGET 1", f"₹ {round(p_ltp * 1.15, 2)}")
                                 pt4.metric("TARGET 2", f"₹ {round(p_ltp * 1.30, 2)}")
-                            else:
-                                st.warning("LTP is 0. Please map the 'Put LTP Column' correctly.")
                 except Exception as proc_err:
-                    st.error(f"Error logic matching execution: {str(proc_err)}")
+                    st.error(f"Error executing column mapping setup logic.")
