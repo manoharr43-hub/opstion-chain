@@ -3,6 +3,5 @@ yfinance
 pandas
 numpy
 plotly
-nsepython
-streamlit-autorefresh
-ta
+openpyxl
+pytz
