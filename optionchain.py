@@ -1,6 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V2.2 - FIXED SIGNAL TIME & OPTION CHAIN
-# + SCREENER KIT LINK & DATA PROCESSING ADDED
+# 🚀 NSE AI PRO MAX V2.3 - ACTIVE STRIKE & AI TRADE SETUP
 # =========================================================
 
 import streamlit as st
@@ -18,14 +17,14 @@ from concurrent.futures import ThreadPoolExecutor
 # =========================================================
 
 st.set_page_config(
-    page_title="NSE AI PRO MAX V2.2",
+    page_title="NSE AI PRO MAX V2.3",
     layout="wide"
 )
 
 st.fragment(run_every=60)
 
-st.title("🚀 NSE AI PRO MAX V2.2")
-st.caption("AI BASED NSE SCANNER + CALL SIDE OI ANALYSIS + SCREENER KIT")
+st.title("🚀 NSE AI PRO MAX V2.3")
+st.caption("AI BASED NSE SCANNER + OPTIONS MOMENTUM + TRADE SETUP")
 
 # =========================================================
 # FULL NIFTY 50 STOCK LIST
@@ -65,7 +64,7 @@ ticker = nse_stocks[selected_stock]
 # --- SCREENER KIT LINK ---
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔗 QUICK LINKS")
-screener_link = "INSERT_YOUR_LINK_HERE"  # <--- MEERU IKKADA SCREENER LINK UPDATE CHEYANDI
+screener_link = "INSERT_YOUR_LINK_HERE" 
 
 st.sidebar.markdown(f'''
 <a href="{screener_link}" target="_blank" style="text-decoration: none;">
@@ -146,10 +145,10 @@ def generate_signal(df):
 # =========================================================
 # TABS SETUP
 # =========================================================
-tab1, tab2 = st.tabs(["📈 AI Scanner & Option Chain", "📂 Screener Kit Data Processing"])
+tab1, tab2 = st.tabs(["📈 AI Scanner & Options AI", "📂 Screener Kit Data Processing"])
 
 # =========================================================
-# TAB 1: ORIGINAL AI SCANNER & OPTION CHAIN
+# TAB 1: ORIGINAL AI SCANNER & NEW OPTIONS AI SETUP
 # =========================================================
 with tab1:
     try:
@@ -180,8 +179,8 @@ with tab1:
             col4.metric("ATR", round(float(latest['ATR']), 2))
             col5.metric("AI SCORE", f"{score} PTS")
 
-            # CALL SIDE OPTION CHAIN ANALYSIS
-            st.subheader(f"🔥 {selected_stock} CALL SIDE OPTION CHAIN (OI ANALYSIS)")
+            # CALL SIDE OPTION CHAIN ANALYSIS & AI SETUP
+            st.subheader(f"🔥 {selected_stock} OPTIONS MOMENTUM & AI TRADE SETUP")
             
             with st.spinner("Fetching Option Chain Data..."):
                 yf_ticker = yf.Ticker(ticker)
@@ -193,13 +192,13 @@ with tab1:
                 if expiries:
                     nearest_expiry = expiries[0]
                     option_fetched_time = get_current_ist_time()
-                    st.caption(f"📅 Expiry: **{nearest_expiry}** | 🕒 Last Updated (IST): `{option_fetched_time}`")
+                    st.caption(f"📅 Expiry: **{nearest_expiry}** | 🕒 Last Updated: `{option_fetched_time}`")
                     
                     try:
                         opt_chain = yf_ticker.option_chain(nearest_expiry)
                         calls_df = opt_chain.calls
                         
-                        buffer = current_price * 0.10
+                        buffer = current_price * 0.05 # 5% buffer to find ATM/ITM/OTM accurately
                         filtered_calls = calls_df[
                             (calls_df['strike'] >= (current_price - buffer)) & 
                             (calls_df['strike'] <= (current_price + buffer))
@@ -215,6 +214,35 @@ with tab1:
                             
                             filtered_calls = filtered_calls.fillna(0)
                             
+                            # 🟢 NEW: FINDING STRIKE MOVEMENT (HIGHEST VOLUME)
+                            # Ekkada aithe volume highest undo akkada pedda movement unnattu
+                            active_strike_idx = filtered_calls['CALL VOLUME'].idxmax()
+                            active_strike_data = filtered_calls.loc[active_strike_idx]
+                            
+                            active_strike = float(active_strike_data['STRIKE PRICE'])
+                            active_ltp = float(active_strike_data['CALL LTP (Price)'])
+                            active_vol = int(active_strike_data['CALL VOLUME'])
+                            
+                            # 🟢 NEW: AI TRADE SETUP CALCULATION
+                            # Entry, Stoploss (15%), Target 1 (15%), Target 2 (30%)
+                            entry_price = round(active_ltp, 2)
+                            sl_price = round(active_ltp * 0.85, 2)
+                            target_1 = round(active_ltp * 1.15, 2)
+                            target_2 = round(active_ltp * 1.30, 2)
+                            
+                            # Displaying AI Setup
+                            st.markdown(f"### 🎯 AI ENTRY SETUP FOR **{active_strike} CE**")
+                            st.info(f"**💡 Momentum Reason:** ee strike lo ekkuva trading jaruguthondi (Volume: {active_vol}).")
+                            
+                            t1, t2, t3, t4 = st.columns(4)
+                            t1.metric("🟢 ENTRY PRICE", f"₹ {entry_price}")
+                            t2.metric("🔴 STOPLOSS", f"₹ {sl_price}")
+                            t3.metric("🎯 TARGET 1", f"₹ {target_1}")
+                            t4.metric("🚀 TARGET 2", f"₹ {target_2}")
+                            
+                            st.markdown("---")
+                            
+                            # Option chain data display
                             filtered_calls['STRIKE PRICE'] = filtered_calls['STRIKE PRICE'].astype(float).round(2)
                             filtered_calls['CALL LTP (Price)'] = filtered_calls['CALL LTP (Price)'].astype(float).round(2)
                             filtered_calls['CALL OI (Total)'] = filtered_calls['CALL OI (Total)'].astype(int)
@@ -223,30 +251,18 @@ with tab1:
                             max_oi_idx = filtered_calls['CALL OI (Total)'].idxmax()
                             highest_oi_strike = filtered_calls.loc[max_oi_idx, 'STRIKE PRICE']
                             
-                            st.info(f"🎯 **Highest Call OI Concentration:** Strike **{highest_oi_strike}** (Acts as a strong Resistance line)")
+                            st.write(f"🛡️ **Resistance Point (Highest OI):** Strike **{highest_oi_strike}**")
                             
                             option_excel_df = filtered_calls[['STRIKE PRICE', 'CALL LTP (Price)', 'CALL OI (Total)', 'CALL VOLUME']].copy()
                             
-                            st.dataframe(
-                                option_excel_df, 
-                                use_container_width=True,
-                                hide_index=True
-                            )
+                            st.dataframe(option_excel_df, use_container_width=True, hide_index=True)
                             
-                            option_excel_df['FETCHED TIME (IST)'] = option_fetched_time
-                            option_excel_data = to_excel(option_excel_df)
-                            st.download_button(
-                                label="📥 DOWNLOAD OPTION CHAIN AS EXCEL",
-                                data=option_excel_data,
-                                file_name=f"{selected_stock}_call_oi_{nearest_expiry}.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            )
                         else:
                             st.warning("No call options data available in this price range.")
                     except Exception as opt_err:
-                        st.warning("Yahoo Finance లో ఈ స్టాక్‌కు సంబంధించిన ఆప్షన్ చైన్ డేటా దొరకలేదు లేదా ప్రస్తుతం లోడ్ అవ్వడం లేదు.")
+                        st.warning("Yahoo Finance lo option chain data dorakaledu.")
                 else:
-                    st.warning("Yahoo Finance లో ఈ స్టాక్‌కు సంబంధించిన ఆప్షన్ చైన్ డేటా దొరకలేదు.")
+                    st.warning("Yahoo Finance lo option chain data dorakaledu.")
 
             # CHART & DATA TABLES
             st.subheader(f"📈 {selected_stock} LIVE CHART")
@@ -309,15 +325,6 @@ with tab1:
             
             st.dataframe(scanner_df, use_container_width=True, hide_index=True)
             
-            scanner_df['REPORT GENERATED (IST)'] = scanner_fetched_time
-            scanner_excel_data = to_excel(scanner_df)
-            st.download_button(
-                label="📥 DOWNLOAD SCANNER REPORT AS EXCEL",
-                data=scanner_excel_data,
-                file_name=f"Nifty50_AI_Scanner_Report_{scanner_fetched_time.replace(' ', '_').replace(':', '-')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
     except Exception as e:
         st.error("APP ERROR")
         st.code(str(e))
@@ -333,7 +340,6 @@ with tab2:
     
     if uploaded_file is not None:
         try:
-            # File read cheyadam
             if uploaded_file.name.endswith('.csv'):
                 screener_df = pd.read_csv(uploaded_file)
             else:
@@ -341,16 +347,13 @@ with tab2:
                 
             st.success("✅ File Successfully Loaded!")
             
-            # Processing Options: Null values remove cheyadam (Basic Cleaning)
             clean_data = st.checkbox("Clean Data (Remove empty rows)", value=True)
             if clean_data:
-                screener_df = screener_df.dropna(how='all') # Anni khali ga unna rows theeseyali
+                screener_df = screener_df.dropna(how='all')
             
             st.subheader("📊 Preview of Screener Data")
             st.dataframe(screener_df, use_container_width=True)
             
-            st.info("💡 Note: Meeru ee data meeda further conditions (like volume breakout, price filter) apply cheyali anukunte akkada unna columns batti code adjust cheyochu.")
-            
         except Exception as e:
-            st.error("File read cheyadam lo error vachindi. Please check the file format.")
+            st.error("File read cheyadam lo error vachindi.")
             st.code(str(e))
