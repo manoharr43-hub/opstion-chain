@@ -1,5 +1,6 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V3.1 - EXPANDED STOCK LIST EDITION
+# 🚀 NSE AI PRO MAX V3.0 - FINAL STABLE INSTITUTIONAL BUILD
+# + SCREENER KIT CSV UPLOAD INTEGRATED
 # =========================================================
 
 import streamlit as st
@@ -18,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 # =========================================================
 
 st.set_page_config(
-    page_title="NSE AI PRO MAX V3.1",
+    page_title="NSE AI PRO MAX V3.0",
     page_icon="🚀",
     layout="wide"
 )
@@ -63,11 +64,11 @@ h1,h2,h3,h4 {
 # TITLE
 # =========================================================
 
-st.title("🚀 NSE AI PRO MAX V3.1")
-st.caption("INSTITUTIONAL EDITION + OPTIONS AI SETUP (EXPANDED STOCKS)")
+st.title("🚀 NSE AI PRO MAX V3.0")
+st.caption("INSTITUTIONAL EDITION + OPTIONS AI SETUP")
 
 # =========================================================
-# 🔥 EXPANDED NSE STOCK LIST (NIFTY 50 + TOP STOCKS)
+# NSE STOCK LIST
 # =========================================================
 
 nse_stocks = {
@@ -82,42 +83,7 @@ nse_stocks = {
     "AXISBANK": "AXISBANK.NS",
     "KOTAKBANK": "KOTAKBANK.NS",
     "SUNPHARMA": "SUNPHARMA.NS",
-    "BAJFINANCE": "BAJFINANCE.NS",
-    "ADANIENT": "ADANIENT.NS",
-    "ADANIPORTS": "ADANIPORTS.NS",
-    "APOLLOHOSP": "APOLLOHOSP.NS",
-    "ASIANPAINT": "ASIANPAINT.NS",
-    "BAJAJ-AUTO": "BAJAJ-AUTO.NS",
-    "BAJAJFINSV": "BAJAJFINSV.NS",
-    "BEL": "BEL.NS",
-    "BHARTIARTL": "BHARTIARTL.NS",
-    "BPCL": "BPCL.NS",
-    "BRITANNIA": "BRITANNIA.NS",
-    "CIPLA": "CIPLA.NS",
-    "COALINDIA": "COALINDIA.NS",
-    "DIVISLAB": "DIVISLAB.NS",
-    "DRREDDY": "DRREDDY.NS",
-    "EICHERMOT": "EICHERMOT.NS",
-    "GRASIM": "GRASIM.NS",
-    "HCLTECH": "HCLTECH.NS",
-    "HEROMOTOCO": "HEROMOTOCO.NS",
-    "HINDALCO": "HINDALCO.NS",
-    "HINDUNILVR": "HINDUNILVR.NS",
-    "INDUSINDBK": "INDUSINDBK.NS",
-    "JSWSTEEL": "JSWSTEEL.NS",
-    "M&M": "M&M.NS",
-    "MARUTI": "MARUTI.NS",
-    "NESTLEIND": "NESTLEIND.NS",
-    "NTPC": "NTPC.NS",
-    "ONGC": "ONGC.NS",
-    "POWERGRID": "POWERGRID.NS",
-    "TATAMOTORS": "TATAMOTORS.NS",
-    "TATASTEEL": "TATASTEEL.NS",
-    "TECHM": "TECHM.NS",
-    "TITAN": "TITAN.NS",
-    "ULTRACEMCO": "ULTRACEMCO.NS",
-    "WIPRO": "WIPRO.NS",
-    "TRENT": "TRENT.NS"
+    "BAJFINANCE": "BAJFINANCE.NS"
 }
 
 # =========================================================
@@ -266,13 +232,18 @@ with tab1:
             latest = df.iloc[-1]
             current_price = float(latest["Close"])
 
-            # Signal Display
+            # -------------------------------------------------
+            # SIGNAL DISPLAY
+            # -------------------------------------------------
             st.subheader("🤖 AI SIGNAL ENGINE")
+
             if "BUY" in signal: st.success(f"{signal} | SCORE : {score}")
             elif "SELL" in signal: st.error(f"{signal} | SCORE : {score}")
             else: st.warning(f"{signal} | SCORE : {score}")
 
-            # Metrics
+            # -------------------------------------------------
+            # METRICS
+            # -------------------------------------------------
             c1, c2, c3, c4, c5 = st.columns(5)
             c1.metric("PRICE", f"₹ {round(current_price,2)}")
             c2.metric("RSI", round(float(latest["RSI"]),2))
@@ -280,7 +251,9 @@ with tab1:
             c4.metric("MACD", round(float(latest["MACD"]),2))
             c5.metric("AI SCORE", score)
 
-            # ATR Target Engine
+            # -------------------------------------------------
+            # ATR TARGET ENGINE
+            # -------------------------------------------------
             atr = float(latest["ATR"])
             entry = current_price
             sl = entry - atr
@@ -297,76 +270,18 @@ with tab1:
             t4.metric("TARGET 2", round(target2,2))
             t5.metric("TARGET 3", round(target3,2))
 
+            # -------------------------------------------------
+            # VOLUME SPIKE
+            # -------------------------------------------------
             st.markdown("---")
             if latest["VOLUME_SPIKE"] == "YES":
                 st.success("🔥 VOLUME BLAST DETECTED")
             else:
                 st.info("NORMAL VOLUME")
 
-            # Option Chain Setup (Live Data)
-            st.markdown("---")
-            st.subheader(f"🔥 {selected_stock} OPTION CHAIN & AI SETUP")
-            with st.spinner("Fetching Option Chain Data..."):
-                yf_ticker = yf.Ticker(ticker)
-                try:
-                    expiries = yf_ticker.options
-                except:
-                    expiries = []
-                
-                if expiries:
-                    nearest_expiry = expiries[0]
-                    st.caption(f"📅 Expiry: **{nearest_expiry}**")
-                    opt_chain = yf_ticker.option_chain(nearest_expiry)
-                    calls_df = opt_chain.calls
-                    puts_df = opt_chain.puts
-                    
-                    buffer = current_price * 0.05 
-                    filtered_calls = calls_df[(calls_df['strike'] >= (current_price - buffer)) & (calls_df['strike'] <= (current_price + buffer))].copy()
-                    filtered_puts = puts_df[(puts_df['strike'] >= (current_price - buffer)) & (puts_df['strike'] <= (current_price + buffer))].copy()
-                    
-                    if not filtered_calls.empty:
-                        st.dataframe(filtered_calls[['strike', 'lastPrice', 'openInterest', 'volume']], use_container_width=True, hide_index=True)
-                        
-                        st.markdown("---")
-                        st.subheader("🤖 AI MOMENTUM TRADE SETUP (LIVE)")
-                        col_call, col_put = st.columns(2)
-                        
-                        with col_call:
-                            with st.container(border=True):
-                                c_idx = filtered_calls['volume'].idxmax()
-                                c_data = filtered_calls.loc[c_idx]
-                                c_ltp = float(c_data['lastPrice'])
-                                st.markdown(f"<h4 style='text-align: center; color: #4CAF50;'>🟢 CALL SIDE: {float(c_data['strike'])} CE</h4>", unsafe_allow_html=True)
-                                st.info(f"Highest Volume: {int(c_data['volume'])}")
-                                ct1, ct2 = st.columns(2)
-                                ct1.metric("ENTRY", f"₹ {round(c_ltp, 2)}")
-                                ct2.metric("STOPLOSS", f"₹ {round(c_ltp * 0.85, 2)}")
-                                ct3, ct4 = st.columns(2)
-                                ct3.metric("TARGET 1", f"₹ {round(c_ltp * 1.15, 2)}")
-                                ct4.metric("TARGET 2", f"₹ {round(c_ltp * 1.30, 2)}")
-
-                        with col_put:
-                            with st.container(border=True):
-                                if not filtered_puts.empty:
-                                    p_idx = filtered_puts['volume'].idxmax()
-                                    p_data = filtered_puts.loc[p_idx]
-                                    p_ltp = float(p_data['lastPrice'])
-                                    st.markdown(f"<h4 style='text-align: center; color: #FF5252;'>🔴 PUT SIDE: {float(p_data['strike'])} PE</h4>", unsafe_allow_html=True)
-                                    st.info(f"Highest Volume: {int(p_data['volume'])}")
-                                    pt1, pt2 = st.columns(2)
-                                    pt1.metric("ENTRY", f"₹ {round(p_ltp, 2)}")
-                                    pt2.metric("STOPLOSS", f"₹ {round(p_ltp * 0.85, 2)}")
-                                    pt3, pt4 = st.columns(2)
-                                    pt3.metric("TARGET 1", f"₹ {round(p_ltp * 1.15, 2)}")
-                                    pt4.metric("TARGET 2", f"₹ {round(p_ltp * 1.30, 2)}")
-                                else:
-                                    st.warning("No Put Data")
-                    else:
-                        st.warning("No Options Data found.")
-                else:
-                    st.warning("Options Expiries not found.")
-
-            # Live Chart
+            # -------------------------------------------------
+            # LIVE CHART
+            # -------------------------------------------------
             st.markdown("---")
             st.subheader(f"📈 {selected_stock} LIVE CHART")
             fig = go.Figure()
@@ -381,7 +296,9 @@ with tab1:
             )
             st.plotly_chart(fig, use_container_width=True)
 
-            # AI Scanner (Scans all new stocks)
+            # -------------------------------------------------
+            # AI SCANNER
+            # -------------------------------------------------
             st.markdown("---")
             st.subheader("🔥 LIVE NSE AI SCANNER")
 
@@ -410,7 +327,7 @@ with tab1:
                     return None
 
             results = []
-            with ThreadPoolExecutor(max_workers=15) as executor:
+            with ThreadPoolExecutor(max_workers=10) as executor:
                 scanned = executor.map(scan_stock, nse_stocks.items())
 
             for item in scanned:
@@ -421,7 +338,9 @@ with tab1:
             scan_df = scan_df.sort_values(by="SCORE", ascending=False)
             st.dataframe(scan_df, use_container_width=True, hide_index=True)
 
-            # Top Picks
+            # -------------------------------------------------
+            # TOP PICKS
+            # -------------------------------------------------
             st.markdown("---")
             st.subheader("🚀 TOP AI PICKS")
             top_buys = scan_df[scan_df["SIGNAL"].str.contains("BUY")].head(5)
@@ -517,9 +436,10 @@ with tab2:
     except Exception as e: 
         st.error(f"File Error: {str(e)}")
 
+
 # =========================================================
 # FOOTER
 # =========================================================
 
 st.markdown("---")
-st.caption("🚀 NSE AI PRO MAX V3.1 | Institutional Edition")
+st.caption("🚀 NSE AI PRO MAX V3.0 | Institutional Edition")
