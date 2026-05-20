@@ -182,4 +182,4 @@ with tab2:
                         st.metric("ENTRY", f"₹ {round(c_ltp, 2)}")
                         st.metric("STOPLOSS", f"₹ {round(c_ltp * 0.85, 2)}")
                         st.metric("TARGET 1", f"₹ {round(c_ltp * 1.15, 2)}")
-                        st.metric("TARGET 2", f"₹ {
+                        st.metric("TARGET 2",
