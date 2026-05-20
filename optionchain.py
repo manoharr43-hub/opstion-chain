@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V2.8 - FULLY REGENERATED
+# 🚀 NSE AI PRO MAX V2.9 - FULLY REGENERATED
 # =========================================================
 
 import streamlit as st
@@ -7,7 +7,6 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import io
 import datetime
 import pytz
 from concurrent.futures import ThreadPoolExecutor
@@ -15,23 +14,19 @@ from concurrent.futures import ThreadPoolExecutor
 # =========================================================
 # PAGE CONFIG & AUTO REFRESH
 # =========================================================
-st.set_page_config(page_title="NSE AI PRO MAX V2.8", layout="wide")
+st.set_page_config(page_title="NSE AI PRO MAX V2.9", layout="wide")
 st.fragment(run_every=60)
 
-st.title("🚀 NSE AI PRO MAX V2.8")
+st.title("🚀 NSE AI PRO MAX V2.9")
 st.caption("AI BASED NSE SCANNER + OPTIONS MOMENTUM + CUSTOM CSV SETUP")
 
 # =========================================================
-# FULL NIFTY 50 STOCK LIST
+# FULL NIFTY 50 STOCK LIST (shortened for demo)
 # =========================================================
 nse_stocks = {
     "RELIANCE": "RELIANCE.NS", "HDFCBANK": "HDFCBANK.NS", "INFY": "INFY.NS",
     "ICICIBANK": "ICICIBANK.NS", "TCS": "TCS.NS", "ITC": "ITC.NS",
-    "KOTAKBANK": "KOTAKBANK.NS", "LT": "LT.NS", "SBIN": "SBIN.NS",
-    "BHARTIARTL": "BHARTIARTL.NS", "ASIANPAINT": "ASIANPAINT.NS",
-    "AXISBANK": "AXISBANK.NS", "SUNPHARMA": "SUNPHARMA.NS",
-    "TITAN": "TITAN.NS", "ULTRACEMCO": "ULTRACEMCO.NS",
-    "WIPRO": "WIPRO.NS", "NESTLEIND": "NESTLEIND.NS"
+    "SBIN": "SBIN.NS", "AXISBANK": "AXISBANK.NS", "SUNPHARMA": "SUNPHARMA.NS"
 }
 
 # =========================================================
@@ -43,23 +38,11 @@ interval = st.sidebar.selectbox("INTERVAL", ["5m", "15m", "30m", "1h"])
 period = st.sidebar.selectbox("PERIOD", ["1d", "5d", "1mo"])
 ticker = nse_stocks[selected_stock]
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("🔗 QUICK LINKS")
-screener_link = "INSERT_YOUR_LINK_HERE"
-st.sidebar.markdown(f'''
-<a href="{screener_link}" target="_blank" style="text-decoration: none;">
-    <div style="background-color: #2E86C1; padding: 10px; border-radius: 5px; text-align: center; color: white; font-weight: bold; margin-bottom: 15px;">
-        📊 Open NSE Screener Kit
-    </div>
-</a>
-''', unsafe_allow_html=True)
-
 # =========================================================
 # HELPER FUNCTIONS
 # =========================================================
 def calculate_indicators(df):
     if df.empty: return df
-    if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
     df = df.reset_index()
     df['EMA20'] = df['Close'].ewm(span=20).mean()
     df['EMA50'] = df['Close'].ewm(span=50).mean()
@@ -130,8 +113,8 @@ with tab1:
             st.markdown("---")
             st.subheader(f"📈 {selected_stock} LIVE CHART")
             fig = go.Figure()
-            fig.add_trace(go.Scatter(x=df['Date'] if 'Date' in df.columns else df.index, y=df['Close'], mode='lines', name='Close'))
-            fig.add_trace(go.Scatter(x=df['Date'] if 'Date' in df.columns else df.index, y=df['EMA20'], mode='lines', name='EMA20'))
+            fig.add_trace(go.Scatter(x=df.index, y=df['Close'], mode='lines', name='Close'))
+            fig.add_trace(go.Scatter(x=df.index, y=df['EMA20'], mode='lines', name='EMA20'))
             st.plotly_chart(fig, use_container_width=True)
 
             # Scanner
@@ -143,4 +126,60 @@ with tab1:
                     if data.empty: return None
                     data = calculate_indicators(data)
                     sig, scr = generate_signal(data)
-                    return {"STOCK": s_name, "PRICE": round(float(data.iloc[-1]['Close']), 2), "SIGNAL
+                    return {
+                        "STOCK": s_name,
+                        "PRICE": round(float(data.iloc[-1]['Close']), 2),
+                        "SIGNAL": sig,
+                        "SCORE": scr
+                    }
+                except: return None
+
+            results = []
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                scanned = executor.map(scan_stock, nse_stocks.items())
+            for item in scanned:
+                if item is not None: results.append(item)
+
+            st.dataframe(pd.DataFrame(results).sort_values(by="SCORE", ascending=False), use_container_width=True, hide_index=True)
+
+    except Exception as e:
+        st.error(f"App Error: {str(e)}")
+
+# =========================================================
+# TAB 2: UPLOADED CSV TO CALL/PUT AI BOXES
+# =========================================================
+with tab2:
+    try:
+        st.header("📂 Screener Kit Data Processing")
+        st.write("మీరు డౌన్‌లోడ్ చేసిన Screener Excel/CSV ఫైల్ ని ఇక్కడ అప్లోడ్ చేయండి")
+
+        uploaded_file = st.file_uploader("Upload Screener CSV/Excel", type=["csv", "xlsx"])
+        if uploaded_file is not None:
+            if uploaded_file.name.endswith(".csv"):
+                df_csv = pd.read_csv(uploaded_file)
+            else:
+                df_csv = pd.read_excel(uploaded_file)
+
+            st.success("✅ File Uploaded Successfully")
+            st.dataframe(df_csv, use_container_width=True)
+
+            st.markdown("---")
+            st.subheader("🤖 AI Screener Call/Put Setup")
+
+            if {"Strike", "Type", "LTP", "Volume"}.issubset(df_csv.columns):
+                calls_df = df_csv[df_csv["Type"].str.upper() == "CE"].copy()
+                puts_df = df_csv[df_csv["Type"].str.upper() == "PE"].copy()
+
+                col_call, col_put = st.columns(2)
+
+                with col_call:
+                    if not calls_df.empty:
+                        c_idx = calls_df["Volume"].idxmax()
+                        c_data = calls_df.loc[c_idx]
+                        c_ltp = float(c_data["LTP"])
+                        st.markdown(f"<h4 style='text-align: center; color: #4CAF50;'>🟢 CALL SIDE: {c_data['Strike']} CE</h4>", unsafe_allow_html=True)
+                        st.info(f"Highest Volume: {int(c_data['Volume'])}")
+                        st.metric("ENTRY", f"₹ {round(c_ltp, 2)}")
+                        st.metric("STOPLOSS", f"₹ {round(c_ltp * 0.85, 2)}")
+                        st.metric("TARGET 1", f"₹ {round(c_ltp * 1.15, 2)}")
+                        st.metric("TARGET 2", f"₹ {
