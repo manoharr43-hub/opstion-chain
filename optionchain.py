@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V2.9 - FINAL STABLE BUILD
+# 🚀 NSE AI PRO MAX V3.0 - INSTITUTIONAL EDITION
 # =========================================================
 
 import streamlit as st
@@ -8,170 +8,285 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from concurrent.futures import ThreadPoolExecutor
+from streamlit_autorefresh import st_autorefresh
+import ta
 
 # =========================================================
-# PAGE CONFIG & AUTO REFRESH
+# PAGE CONFIG
 # =========================================================
-st.set_page_config(page_title="NSE AI PRO MAX V2.9", layout="wide")
-st.fragment(run_every=60)
+st.set_page_config(
+    page_title="NSE AI PRO MAX V3.0",
+    layout="wide",
+    page_icon="🚀"
+)
 
-st.title("🚀 NSE AI PRO MAX V2.9")
-st.caption("AI BASED NSE SCANNER + OPTIONS MOMENTUM + CUSTOM CSV SETUP")
+st_autorefresh(interval=60000, key="refresh")
 
 # =========================================================
-# STOCK LIST (active tickers only)
+# DARK CSS
+# =========================================================
+st.markdown("""
+<style>
+.main {
+    background-color: #0E1117;
+    color: white;
+}
+.stMetric {
+    background: #1E1E1E;
+    padding: 10px;
+    border-radius: 10px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# =========================================================
+# TITLE
+# =========================================================
+st.title("🚀 NSE AI PRO MAX V3.0")
+st.caption("INSTITUTIONAL EDITION")
+
+# =========================================================
+# NSE STOCKS
 # =========================================================
 nse_stocks = {
-    "RELIANCE": "RELIANCE.NS", "HDFCBANK": "HDFCBANK.NS", "INFY": "INFY.NS",
-    "ICICIBANK": "ICICIBANK.NS", "TCS": "TCS.NS", "ITC": "ITC.NS",
-    "SBIN": "SBIN.NS", "AXISBANK": "AXISBANK.NS", "SUNPHARMA": "SUNPHARMA.NS"
+    "RELIANCE": "RELIANCE.NS",
+    "HDFCBANK": "HDFCBANK.NS",
+    "INFY": "INFY.NS",
+    "ICICIBANK": "ICICIBANK.NS",
+    "TCS": "TCS.NS",
+    "SBIN": "SBIN.NS",
+    "ITC": "ITC.NS",
+    "LT": "LT.NS",
+    "AXISBANK": "AXISBANK.NS",
+    "SUNPHARMA": "SUNPHARMA.NS"
 }
 
 # =========================================================
-# SIDEBAR SETTINGS
+# SIDEBAR
 # =========================================================
 st.sidebar.header("⚙️ SETTINGS")
-selected_stock = st.sidebar.selectbox("SELECT STOCK", list(nse_stocks.keys()))
-interval = st.sidebar.selectbox("INTERVAL", ["5m", "15m", "30m", "1h"])
-period = st.sidebar.selectbox("PERIOD", ["1d", "5d", "1mo"])
+
+selected_stock = st.sidebar.selectbox(
+    "SELECT STOCK",
+    list(nse_stocks.keys())
+)
+
+interval = st.sidebar.selectbox(
+    "INTERVAL",
+    ["5m", "15m", "30m", "1h"]
+)
+
+period = st.sidebar.selectbox(
+    "PERIOD",
+    ["1d", "5d", "1mo"]
+)
+
 ticker = nse_stocks[selected_stock]
 
 # =========================================================
-# HELPER FUNCTIONS
+# INDICATORS
 # =========================================================
 def calculate_indicators(df):
-    if df.empty: return df
-    df = df.reset_index()
-    df["EMA20"] = df["Close"].ewm(span=20).mean()
-    df["EMA50"] = df["Close"].ewm(span=50).mean()
-    df["VWAP"] = ((df["Close"] * df["Volume"]).cumsum()) / df["Volume"].cumsum()
-    delta = df["Close"].diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-    rs = gain.rolling(14).mean() / loss.rolling(14).mean()
-    df["RSI"] = 100 - (100 / (1 + rs))
-    df["RSI"] = df["RSI"].fillna(50)
-    df["MACD"] = df["Close"].ewm(span=12).mean() - df["Close"].ewm(span=26).mean()
-    df["MACD_SIGNAL"] = df["MACD"].ewm(span=9).mean()
+
+    df["EMA20"] = ta.trend.ema_indicator(df["Close"], window=20)
+    df["EMA50"] = ta.trend.ema_indicator(df["Close"], window=50)
+
+    df["RSI"] = ta.momentum.rsi(df["Close"], window=14)
+
+    macd = ta.trend.MACD(df["Close"])
+    df["MACD"] = macd.macd()
+    df["MACD_SIGNAL"] = macd.macd_signal()
+
+    bb = ta.volatility.BollingerBands(df["Close"])
+    df["BB_HIGH"] = bb.bollinger_hband()
+    df["BB_LOW"] = bb.bollinger_lband()
+
+    atr = ta.volatility.AverageTrueRange(
+        df["High"],
+        df["Low"],
+        df["Close"]
+    )
+
+    df["ATR"] = atr.average_true_range()
+
+    df["VWAP"] = (
+        (df["Close"] * df["Volume"]).cumsum()
+    ) / df["Volume"].cumsum()
+
     return df
 
-def generate_signal(df):
-    latest = df.iloc[-1]
-    score = 0
-    if latest["EMA20"] > latest["EMA50"]: score += 25
-    else: score -= 25
-    if latest["Close"] > latest["VWAP"]: score += 25
-    else: score -= 25
-    if 55 < latest["RSI"] < 70: score += 25
-    elif latest["RSI"] > 70: score -= 10
-    elif latest["RSI"] < 30: score += 15
-    else: score -= 10
-    if latest["MACD"] > latest["MACD_SIGNAL"]: score += 25
-    else: score -= 25
+# =========================================================
+# AI SIGNAL ENGINE
+# =========================================================
+def generate_ai_signal(df):
 
-    if score >= 75: signal = "🚀 STRONG BUY"
-    elif score >= 25: signal = "✅ BUY"
-    elif score <= -75: signal = "🚨 STRONG SELL"
-    elif score <= -25: signal = "🔻 SELL"
-    else: signal = "⚠️ SIDEWAYS"
+    latest = df.iloc[-1]
+
+    score = 0
+
+    # EMA TREND
+    if latest["EMA20"] > latest["EMA50"]:
+        score += 25
+    else:
+        score -= 25
+
+    # VWAP
+    if latest["Close"] > latest["VWAP"]:
+        score += 20
+    else:
+        score -= 20
+
+    # RSI
+    if 55 < latest["RSI"] < 70:
+        score += 20
+
+    elif latest["RSI"] > 75:
+        score -= 10
+
+    # MACD
+    if latest["MACD"] > latest["MACD_SIGNAL"]:
+        score += 25
+    else:
+        score -= 25
+
+    # VOLUME
+    recent_volume = df["Volume"].tail(5).mean()
+
+    if latest["Volume"] > recent_volume:
+        score += 10
+
+    # FINAL SIGNAL
+    if score >= 70:
+        signal = "🚀 STRONG BUY"
+
+    elif score >= 30:
+        signal = "✅ BUY"
+
+    elif score <= -70:
+        signal = "🚨 STRONG SELL"
+
+    elif score <= -30:
+        signal = "🔻 SELL"
+
+    else:
+        signal = "⚠️ SIDEWAYS"
+
     return signal, score
 
 # =========================================================
-# TABS SETUP
+# MAIN DATA
 # =========================================================
-tab1, tab2 = st.tabs(["📈 AI Scanner & Live Setup", "📂 Upload CSV & Extract AI Target"])
+try:
 
-# =========================================================
-# TAB 1 – LIVE SCANNER
-# =========================================================
-with tab1:
-    try:
-        df = yf.download(ticker, interval=interval, period=period, progress=False, auto_adjust=True)
-        if df.empty:
-            st.error("NO DATA FOUND")
+    df = yf.download(
+        ticker,
+        interval=interval,
+        period=period,
+        progress=False,
+        auto_adjust=True
+    )
+
+    if df.empty:
+        st.error("NO DATA FOUND")
+
+    else:
+
+        df = calculate_indicators(df)
+
+        signal, score = generate_ai_signal(df)
+
+        latest = df.iloc[-1]
+
+        current_price = float(latest["Close"])
+
+        # =================================================
+        # AI SIGNAL
+        # =================================================
+        st.subheader("🤖 AI SIGNAL")
+
+        if "BUY" in signal:
+            st.success(f"{signal} | SCORE: {score}")
+
+        elif "SELL" in signal:
+            st.error(f"{signal} | SCORE: {score}")
+
         else:
-            df = calculate_indicators(df)
-            signal, score = generate_signal(df)
-            latest = df.iloc[-1]
-            current_price = float(latest["Close"])
+            st.warning(f"{signal} | SCORE: {score}")
 
-            st.subheader("🤖 AI SIGNAL")
-            if "BUY" in signal: st.success(f"{signal} (SCORE: {score})")
-            elif "SELL" in signal: st.error(f"{signal} (SCORE: {score})")
-            else: st.warning(f"{signal} (SCORE: {score})")
+        # =================================================
+        # METRICS
+        # =================================================
+        c1, c2, c3, c4, c5 = st.columns(5)
 
-            col1, col2, col3, col4, col5 = st.columns(5)
-            col1.metric("PRICE", f"₹ {round(current_price, 2)}")
-            col2.metric("RSI", round(float(latest["RSI"]), 2))
-            col3.metric("VWAP", round(float(latest["VWAP"]), 2))
-            col4.metric("MACD", round(float(latest["MACD"]), 2))
-            col5.metric("AI SCORE", f"{score} PTS")
+        c1.metric("PRICE", f"₹ {round(current_price,2)}")
+        c2.metric("RSI", round(float(latest["RSI"]),2))
+        c3.metric("VWAP", round(float(latest["VWAP"]),2))
+        c4.metric("MACD", round(float(latest["MACD"]),2))
+        c5.metric("AI SCORE", score)
 
-            st.markdown("---")
-            st.subheader(f"📈 {selected_stock} LIVE CHART")
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=df.index, y=df["Close"], mode="lines", name="Close"))
-            fig.add_trace(go.Scatter(x=df.index, y=df["EMA20"], mode="lines", name="EMA20"))
-            st.plotly_chart(fig, width="stretch")
+        # =================================================
+        # ATR TARGETS
+        # =================================================
+        atr = float(latest["ATR"])
 
-            st.subheader("🔥 LIVE AI NIFTY 50 SCANNER")
-            def scan_stock(item):
-                s_name, s_ticker = item
-                try:
-                    data = yf.download(s_ticker, interval=interval, period=period, progress=False, auto_adjust=True)
-                    if data.empty: return None
-                    data = calculate_indicators(data)
-                    sig, scr = generate_signal(data)
-                    return {"STOCK": s_name, "PRICE": round(float(data.iloc[-1]["Close"]), 2),
-                            "SIGNAL": sig, "SCORE": scr}
-                except: return None
+        entry = current_price
+        sl = entry - atr
+        target1 = entry + atr
+        target2 = entry + (atr * 2)
+        target3 = entry + (atr * 3)
 
-            results = []
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                scanned = executor.map(scan_stock, nse_stocks.items())
-            for item in scanned:
-                if item is not None: results.append(item)
+        st.markdown("---")
+        st.subheader("🎯 AI TARGET ENGINE")
 
-            st.dataframe(pd.DataFrame(results).sort_values(by="SCORE", ascending=False),
-                         width="stretch", hide_index=True)
+        a1, a2, a3, a4, a5 = st.columns(5)
 
-    except Exception as e:
-        st.error(f"App Error: {str(e)}")
+        a1.metric("ENTRY", round(entry,2))
+        a2.metric("SL", round(sl,2))
+        a3.metric("TARGET 1", round(target1,2))
+        a4.metric("TARGET 2", round(target2,2))
+        a5.metric("TARGET 3", round(target3,2))
 
-# =========================================================
-# TAB 2 – CSV UPLOAD WORKFLOW
-# =========================================================
-with tab2:
-    try:
-        st.header("📂 Screener Kit Data Processing")
-        st.write("మీరు డౌన్‌లోడ్ చేసిన Screener Excel/CSV ఫైల్ ని ఇక్కడ అప్లోడ్ చేయండి")
+        # =================================================
+        # CHART
+        # =================================================
+        st.markdown("---")
+        st.subheader(f"📈 {selected_stock} LIVE CHART")
 
-        uploaded_file = st.file_uploader("Upload Screener CSV/Excel", type=["csv", "xlsx"])
-        if uploaded_file is not None:
-            if uploaded_file.name.endswith(".csv"):
-                df_csv = pd.read_csv(uploaded_file)
-            else:
-                df_csv = pd.read_excel(uploaded_file)
+        fig = go.Figure()
 
-            st.success("✅ File Uploaded Successfully")
-            st.dataframe(df_csv, width="stretch")
+        fig.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df["Close"],
+                mode="lines",
+                name="Close"
+            )
+        )
 
-            st.markdown("---")
-            st.subheader("🤖 AI Screener Call/Put Setup")
+        fig.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df["EMA20"],
+                mode="lines",
+                name="EMA20"
+            )
+        )
 
-            if {"Strike", "Type", "LTP", "Volume"}.issubset(df_csv.columns):
-                calls_df = df_csv[df_csv["Type"].str.upper() == "CE"].copy()
-                puts_df = df_csv[df_csv["Type"].str.upper() == "PE"].copy()
-                col_call, col_put = st.columns(2)
+        fig.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df["EMA50"],
+                mode="lines",
+                name="EMA50"
+            )
+        )
 
-                with col_call:
-                    if not calls_df.empty:
-                        c_idx = calls_df["Volume"].idxmax()
-                        c_data = calls_df.loc[c_idx]
-                        c_ltp = float(c_data["LTP"])
-                        st.markdown(f"<h4 style='text-align:center;color:#4CAF50;'>🟢 CALL SIDE: {c_data['Strike']} CE</h4>",
-                                    unsafe_allow_html=True)
-                        st.info(f"Highest Volume: {int(c_data['Volume'])}")
-                        st.metric("ENTRY", f"₹ {round(c_ltp, 2)}")
-                        st.metric("STOPLOSS", f"₹ {round(c_ltp * 0.85, 2)}")
-                        st.metric("TARGET 1", f"
+        fig.update_layout(
+            template="plotly_dark",
+            height=600
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+except Exception as e:
+    st.error(f"ERROR : {str(e)}")
