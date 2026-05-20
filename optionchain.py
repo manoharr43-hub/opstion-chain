@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V2.9 - FULLY REGENERATED
+# 🚀 NSE AI PRO MAX V2.9 - FULLY REGENERATED & FIXED
 # =========================================================
 
 import streamlit as st
@@ -7,8 +7,6 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import datetime
-import pytz
 from concurrent.futures import ThreadPoolExecutor
 
 # =========================================================
@@ -21,7 +19,7 @@ st.title("🚀 NSE AI PRO MAX V2.9")
 st.caption("AI BASED NSE SCANNER + OPTIONS MOMENTUM + CUSTOM CSV SETUP")
 
 # =========================================================
-# FULL NIFTY 50 STOCK LIST (shortened for demo)
+# STOCK LIST (remove delisted tickers)
 # =========================================================
 nse_stocks = {
     "RELIANCE": "RELIANCE.NS", "HDFCBANK": "HDFCBANK.NS", "INFY": "INFY.NS",
@@ -79,7 +77,7 @@ def generate_signal(df):
     return signal, score
 
 # =========================================================
-# TABS SETUP
+# TABS
 # =========================================================
 tab1, tab2 = st.tabs(["📈 AI Scanner & Live Setup", "📂 Upload CSV & Extract AI Target"])
 
@@ -115,7 +113,7 @@ with tab1:
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=df.index, y=df['Close'], mode='lines', name='Close'))
             fig.add_trace(go.Scatter(x=df.index, y=df['EMA20'], mode='lines', name='EMA20'))
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
             # Scanner
             st.subheader("🔥 LIVE AI NIFTY 50 SCANNER")
@@ -140,7 +138,7 @@ with tab1:
             for item in scanned:
                 if item is not None: results.append(item)
 
-            st.dataframe(pd.DataFrame(results).sort_values(by="SCORE", ascending=False), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(results).sort_values(by="SCORE", ascending=False), width="stretch", hide_index=True)
 
     except Exception as e:
         st.error(f"App Error: {str(e)}")
@@ -161,7 +159,7 @@ with tab2:
                 df_csv = pd.read_excel(uploaded_file)
 
             st.success("✅ File Uploaded Successfully")
-            st.dataframe(df_csv, use_container_width=True)
+            st.dataframe(df_csv, width="stretch")
 
             st.markdown("---")
             st.subheader("🤖 AI Screener Call/Put Setup")
@@ -182,4 +180,3 @@ with tab2:
                         st.metric("ENTRY", f"₹ {round(c_ltp, 2)}")
                         st.metric("STOPLOSS", f"₹ {round(c_ltp * 0.85, 2)}")
                         st.metric("TARGET 1", f"₹ {round(c_ltp * 1.15, 2)}")
-                        st.metric("TARGET 2",
