@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V3.0 - INSTITUTIONAL EDITION
+# 🚀 NSE AI PRO MAX V3.0 - FINAL STABLE INSTITUTIONAL BUILD
 # =========================================================
 
 import streamlit as st
@@ -7,63 +7,91 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import time
+
 from concurrent.futures import ThreadPoolExecutor
-from streamlit_autorefresh import st_autorefresh
-import ta
 
 # =========================================================
 # PAGE CONFIG
 # =========================================================
+
 st.set_page_config(
     page_title="NSE AI PRO MAX V3.0",
-    layout="wide",
-    page_icon="🚀"
+    page_icon="🚀",
+    layout="wide"
 )
 
-st_autorefresh(interval=60000, key="refresh")
+# =========================================================
+# AUTO REFRESH
+# =========================================================
+
+if "last_refresh" not in st.session_state:
+    st.session_state.last_refresh = time.time()
+
+if time.time() - st.session_state.last_refresh > 60:
+    st.session_state.last_refresh = time.time()
+    st.rerun()
 
 # =========================================================
-# DARK CSS
+# DARK MODE CSS
 # =========================================================
+
 st.markdown("""
 <style>
+
 .main {
     background-color: #0E1117;
     color: white;
 }
+
 .stMetric {
     background: #1E1E1E;
-    padding: 10px;
+    padding: 15px;
     border-radius: 10px;
+    border: 1px solid #333;
 }
+
+[data-testid="stSidebar"] {
+    background-color: #161A28;
+}
+
+h1,h2,h3,h4 {
+    color: white;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
 # =========================================================
 # TITLE
 # =========================================================
+
 st.title("🚀 NSE AI PRO MAX V3.0")
 st.caption("INSTITUTIONAL EDITION")
 
 # =========================================================
-# NSE STOCKS
+# NSE STOCK LIST
 # =========================================================
+
 nse_stocks = {
     "RELIANCE": "RELIANCE.NS",
     "HDFCBANK": "HDFCBANK.NS",
-    "INFY": "INFY.NS",
     "ICICIBANK": "ICICIBANK.NS",
+    "INFY": "INFY.NS",
     "TCS": "TCS.NS",
     "SBIN": "SBIN.NS",
     "ITC": "ITC.NS",
     "LT": "LT.NS",
     "AXISBANK": "AXISBANK.NS",
-    "SUNPHARMA": "SUNPHARMA.NS"
+    "KOTAKBANK": "KOTAKBANK.NS",
+    "SUNPHARMA": "SUNPHARMA.NS",
+    "BAJFINANCE": "BAJFINANCE.NS"
 }
 
 # =========================================================
 # SIDEBAR
 # =========================================================
+
 st.sidebar.header("⚙️ SETTINGS")
 
 selected_stock = st.sidebar.selectbox(
@@ -84,41 +112,111 @@ period = st.sidebar.selectbox(
 ticker = nse_stocks[selected_stock]
 
 # =========================================================
-# INDICATORS
+# INDICATOR FUNCTION
 # =========================================================
+
 def calculate_indicators(df):
 
-    df["EMA20"] = ta.trend.ema_indicator(df["Close"], window=20)
-    df["EMA50"] = ta.trend.ema_indicator(df["Close"], window=50)
+    # -----------------------------------------------------
+    # FIX MULTI INDEX
+    # -----------------------------------------------------
 
-    df["RSI"] = ta.momentum.rsi(df["Close"], window=14)
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
 
-    macd = ta.trend.MACD(df["Close"])
-    df["MACD"] = macd.macd()
-    df["MACD_SIGNAL"] = macd.macd_signal()
+    # -----------------------------------------------------
+    # FORCE 1D SERIES
+    # -----------------------------------------------------
 
-    bb = ta.volatility.BollingerBands(df["Close"])
-    df["BB_HIGH"] = bb.bollinger_hband()
-    df["BB_LOW"] = bb.bollinger_lband()
+    for col in ["Close", "High", "Low", "Open", "Volume"]:
+        df[col] = pd.Series(df[col]).squeeze()
 
-    atr = ta.volatility.AverageTrueRange(
-        df["High"],
-        df["Low"],
-        df["Close"]
-    )
+    # -----------------------------------------------------
+    # EMA
+    # -----------------------------------------------------
 
-    df["ATR"] = atr.average_true_range()
+    df["EMA20"] = df["Close"].ewm(span=20).mean()
+    df["EMA50"] = df["Close"].ewm(span=50).mean()
+
+    # -----------------------------------------------------
+    # RSI
+    # -----------------------------------------------------
+
+    delta = df["Close"].diff()
+
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+
+    avg_gain = gain.rolling(14).mean()
+    avg_loss = loss.rolling(14).mean()
+
+    rs = avg_gain / avg_loss
+
+    df["RSI"] = 100 - (100 / (1 + rs))
+
+    # -----------------------------------------------------
+    # MACD
+    # -----------------------------------------------------
+
+    ema12 = df["Close"].ewm(span=12).mean()
+    ema26 = df["Close"].ewm(span=26).mean()
+
+    df["MACD"] = ema12 - ema26
+    df["MACD_SIGNAL"] = df["MACD"].ewm(span=9).mean()
+
+    # -----------------------------------------------------
+    # VWAP
+    # -----------------------------------------------------
 
     df["VWAP"] = (
         (df["Close"] * df["Volume"]).cumsum()
-    ) / df["Volume"].cumsum()
+        / df["Volume"].cumsum()
+    )
+
+    # -----------------------------------------------------
+    # ATR
+    # -----------------------------------------------------
+
+    high_low = df["High"] - df["Low"]
+
+    high_close = np.abs(
+        df["High"] - df["Close"].shift()
+    )
+
+    low_close = np.abs(
+        df["Low"] - df["Close"].shift()
+    )
+
+    ranges = pd.concat(
+        [high_low, high_close, low_close],
+        axis=1
+    )
+
+    true_range = ranges.max(axis=1)
+
+    df["ATR"] = true_range.rolling(14).mean()
+
+    # -----------------------------------------------------
+    # VOLUME SPIKE
+    # -----------------------------------------------------
+
+    df["AVG_VOLUME"] = df["Volume"].rolling(20).mean()
+
+    df["VOLUME_SPIKE"] = np.where(
+        df["Volume"] > df["AVG_VOLUME"] * 1.5,
+        "YES",
+        "NO"
+    )
+
+    df = df.fillna(0)
 
     return df
 
 # =========================================================
 # AI SIGNAL ENGINE
 # =========================================================
-def generate_ai_signal(df):
+
+def generate_signal(df):
 
     latest = df.iloc[-1]
 
@@ -143,6 +241,9 @@ def generate_ai_signal(df):
     elif latest["RSI"] > 75:
         score -= 10
 
+    elif latest["RSI"] < 30:
+        score += 15
+
     # MACD
     if latest["MACD"] > latest["MACD_SIGNAL"]:
         score += 25
@@ -150,9 +251,7 @@ def generate_ai_signal(df):
         score -= 25
 
     # VOLUME
-    recent_volume = df["Volume"].tail(5).mean()
-
-    if latest["Volume"] > recent_volume:
+    if latest["VOLUME_SPIKE"] == "YES":
         score += 10
 
     # FINAL SIGNAL
@@ -174,8 +273,9 @@ def generate_ai_signal(df):
     return signal, score
 
 # =========================================================
-# MAIN DATA
+# DOWNLOAD DATA
 # =========================================================
+
 try:
 
     df = yf.download(
@@ -183,73 +283,115 @@ try:
         interval=interval,
         period=period,
         progress=False,
-        auto_adjust=True
+        auto_adjust=True,
+        group_by='column'
     )
 
     if df.empty:
+
         st.error("NO DATA FOUND")
 
     else:
 
         df = calculate_indicators(df)
 
-        signal, score = generate_ai_signal(df)
+        signal, score = generate_signal(df)
 
         latest = df.iloc[-1]
 
         current_price = float(latest["Close"])
 
         # =================================================
-        # AI SIGNAL
+        # SIGNAL DISPLAY
         # =================================================
-        st.subheader("🤖 AI SIGNAL")
+
+        st.subheader("🤖 AI SIGNAL ENGINE")
 
         if "BUY" in signal:
-            st.success(f"{signal} | SCORE: {score}")
+            st.success(f"{signal} | SCORE : {score}")
 
         elif "SELL" in signal:
-            st.error(f"{signal} | SCORE: {score}")
+            st.error(f"{signal} | SCORE : {score}")
 
         else:
-            st.warning(f"{signal} | SCORE: {score}")
+            st.warning(f"{signal} | SCORE : {score}")
 
         # =================================================
         # METRICS
         # =================================================
+
         c1, c2, c3, c4, c5 = st.columns(5)
 
-        c1.metric("PRICE", f"₹ {round(current_price,2)}")
-        c2.metric("RSI", round(float(latest["RSI"]),2))
-        c3.metric("VWAP", round(float(latest["VWAP"]),2))
-        c4.metric("MACD", round(float(latest["MACD"]),2))
-        c5.metric("AI SCORE", score)
+        c1.metric(
+            "PRICE",
+            f"₹ {round(current_price,2)}"
+        )
+
+        c2.metric(
+            "RSI",
+            round(float(latest["RSI"]),2)
+        )
+
+        c3.metric(
+            "VWAP",
+            round(float(latest["VWAP"]),2)
+        )
+
+        c4.metric(
+            "MACD",
+            round(float(latest["MACD"]),2)
+        )
+
+        c5.metric(
+            "AI SCORE",
+            score
+        )
 
         # =================================================
-        # ATR TARGETS
+        # ATR TARGET ENGINE
         # =================================================
+
         atr = float(latest["ATR"])
 
         entry = current_price
+
         sl = entry - atr
+
         target1 = entry + atr
+
         target2 = entry + (atr * 2)
+
         target3 = entry + (atr * 3)
 
         st.markdown("---")
+
         st.subheader("🎯 AI TARGET ENGINE")
 
-        a1, a2, a3, a4, a5 = st.columns(5)
+        t1, t2, t3, t4, t5 = st.columns(5)
 
-        a1.metric("ENTRY", round(entry,2))
-        a2.metric("SL", round(sl,2))
-        a3.metric("TARGET 1", round(target1,2))
-        a4.metric("TARGET 2", round(target2,2))
-        a5.metric("TARGET 3", round(target3,2))
+        t1.metric("ENTRY", round(entry,2))
+        t2.metric("STOPLOSS", round(sl,2))
+        t3.metric("TARGET 1", round(target1,2))
+        t4.metric("TARGET 2", round(target2,2))
+        t5.metric("TARGET 3", round(target3,2))
 
         # =================================================
-        # CHART
+        # VOLUME SPIKE
         # =================================================
+
         st.markdown("---")
+
+        if latest["VOLUME_SPIKE"] == "YES":
+            st.success("🔥 VOLUME BLAST DETECTED")
+        else:
+            st.info("NORMAL VOLUME")
+
+        # =================================================
+        # LIVE CHART
+        # =================================================
+
+        st.markdown("---")
+
         st.subheader(f"📈 {selected_stock} LIVE CHART")
 
         fig = go.Figure()
@@ -283,10 +425,116 @@ try:
 
         fig.update_layout(
             template="plotly_dark",
-            height=600
+            height=650,
+            xaxis_rangeslider_visible=False
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+        # =================================================
+        # AI SCANNER
+        # =================================================
+
+        st.markdown("---")
+
+        st.subheader("🔥 LIVE NSE AI SCANNER")
+
+        def scan_stock(item):
+
+            name, tick = item
+
+            try:
+
+                data = yf.download(
+                    tick,
+                    interval=interval,
+                    period=period,
+                    progress=False,
+                    auto_adjust=True
+                )
+
+                if data.empty:
+                    return None
+
+                data = calculate_indicators(data)
+
+                sig, scr = generate_signal(data)
+
+                last = data.iloc[-1]
+
+                return {
+                    "STOCK": name,
+                    "PRICE": round(float(last["Close"]),2),
+                    "SIGNAL": sig,
+                    "SCORE": scr,
+                    "RSI": round(float(last["RSI"]),2)
+                }
+
+            except:
+                return None
+
+        results = []
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+
+            scanned = executor.map(
+                scan_stock,
+                nse_stocks.items()
+            )
+
+        for item in scanned:
+
+            if item is not None:
+                results.append(item)
+
+        scan_df = pd.DataFrame(results)
+
+        scan_df = scan_df.sort_values(
+            by="SCORE",
+            ascending=False
+        )
+
+        st.dataframe(
+            scan_df,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # =================================================
+        # TOP PICKS
+        # =================================================
+
+        st.markdown("---")
+
+        st.subheader("🚀 TOP AI PICKS")
+
+        top_buys = scan_df[
+            scan_df["SIGNAL"].str.contains("BUY")
+        ].head(5)
+
+        st.dataframe(
+            top_buys,
+            use_container_width=True,
+            hide_index=True
+        )
+
+# =========================================================
+# ERROR HANDLING
+# =========================================================
 
 except Exception as e:
+
     st.error(f"ERROR : {str(e)}")
+
+# =========================================================
+# FOOTER
+# =========================================================
+
+st.markdown("---")
+
+st.caption(
+    "🚀 NSE AI PRO MAX V3.0 | Institutional Edition"
+)
