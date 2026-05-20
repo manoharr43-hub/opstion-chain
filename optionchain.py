@@ -1,6 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V3.0 - FINAL STABLE INSTITUTIONAL BUILD
-# + SCREENER KIT CSV UPLOAD INTEGRATED
+# 🚀 NSE AI PRO MAX V3.3 - ADVANCED COLUMN DETECTION FIXED
 # =========================================================
 
 import streamlit as st
@@ -19,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 # =========================================================
 
 st.set_page_config(
-    page_title="NSE AI PRO MAX V3.0",
+    page_title="NSE AI PRO MAX V3.3",
     page_icon="🚀",
     layout="wide"
 )
@@ -60,30 +59,18 @@ h1,h2,h3,h4 {
 </style>
 """, unsafe_allow_html=True)
 
-# =========================================================
-# TITLE
-# =========================================================
-
-st.title("🚀 NSE AI PRO MAX V3.0")
+st.title("🚀 NSE AI PRO MAX V3.3")
 st.caption("INSTITUTIONAL EDITION + OPTIONS AI SETUP")
 
 # =========================================================
-# NSE STOCK LIST
+# STOCK LIST
 # =========================================================
 
 nse_stocks = {
-    "RELIANCE": "RELIANCE.NS",
-    "HDFCBANK": "HDFCBANK.NS",
-    "ICICIBANK": "ICICIBANK.NS",
-    "INFY": "INFY.NS",
-    "TCS": "TCS.NS",
-    "SBIN": "SBIN.NS",
-    "ITC": "ITC.NS",
-    "LT": "LT.NS",
-    "AXISBANK": "AXISBANK.NS",
-    "KOTAKBANK": "KOTAKBANK.NS",
-    "SUNPHARMA": "SUNPHARMA.NS",
-    "BAJFINANCE": "BAJFINANCE.NS"
+    "RELIANCE": "RELIANCE.NS", "HDFCBANK": "HDFCBANK.NS", "ICICIBANK": "ICICIBANK.NS",
+    "INFY": "INFY.NS", "TCS": "TCS.NS", "SBIN": "SBIN.NS", "ITC": "ITC.NS",
+    "LT": "LT.NS", "AXISBANK": "AXISBANK.NS", "KOTAKBANK": "KOTAKBANK.NS",
+    "SUNPHARMA": "SUNPHARMA.NS", "BAJFINANCE": "BAJFINANCE.NS"
 }
 
 # =========================================================
@@ -91,25 +78,11 @@ nse_stocks = {
 # =========================================================
 
 st.sidebar.header("⚙️ SETTINGS")
-
-selected_stock = st.sidebar.selectbox(
-    "SELECT STOCK",
-    list(nse_stocks.keys())
-)
-
-interval = st.sidebar.selectbox(
-    "INTERVAL",
-    ["5m", "15m", "30m", "1h"]
-)
-
-period = st.sidebar.selectbox(
-    "PERIOD",
-    ["1d", "5d", "1mo"]
-)
-
+selected_stock = st.sidebar.selectbox("SELECT STOCK", list(nse_stocks.keys()))
+interval = st.sidebar.selectbox("INTERVAL", ["5m", "15m", "30m", "1h"])
+period = st.sidebar.selectbox("PERIOD", ["1d", "5d", "1mo"])
 ticker = nse_stocks[selected_stock]
 
-# --- SCREENER KIT LINK ---
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔗 QUICK LINKS")
 screener_link = "INSERT_YOUR_LINK_HERE" 
@@ -122,128 +95,62 @@ st.sidebar.markdown(f'''
 </a>
 ''', unsafe_allow_html=True)
 
-
-# =========================================================
-# INDICATOR FUNCTION
-# =========================================================
-
+# Helper functions
 def calculate_indicators(df):
-
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-
+    if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
     for col in ["Close", "High", "Low", "Open", "Volume"]:
-        df[col] = pd.Series(df[col]).squeeze()
-
+        if col in df.columns: df[col] = pd.Series(df[col]).squeeze()
     df["EMA20"] = df["Close"].ewm(span=20).mean()
     df["EMA50"] = df["Close"].ewm(span=50).mean()
-
     delta = df["Close"].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
-    avg_gain = gain.rolling(14).mean()
-    avg_loss = loss.rolling(14).mean()
-    rs = avg_gain / avg_loss
-    df["RSI"] = 100 - (100 / (1 + rs))
-
-    ema12 = df["Close"].ewm(span=12).mean()
-    ema26 = df["Close"].ewm(span=26).mean()
-    df["MACD"] = ema12 - ema26
+    df["RSI"] = 100 - (100 / (1 + (gain.rolling(14).mean() / loss.rolling(14).mean())))
+    df["MACD"] = df["Close"].ewm(span=12).mean() - df["Close"].ewm(span=26).mean()
     df["MACD_SIGNAL"] = df["MACD"].ewm(span=9).mean()
-
-    df["VWAP"] = (
-        (df["Close"] * df["Volume"]).cumsum()
-        / df["Volume"].cumsum()
-    )
-
-    high_low = df["High"] - df["Low"]
-    high_close = np.abs(df["High"] - df["Close"].shift())
-    low_close = np.abs(df["Low"] - df["Close"].shift())
-    ranges = pd.concat([high_low, high_close, low_close], axis=1)
-    true_range = ranges.max(axis=1)
-    df["ATR"] = true_range.rolling(14).mean()
-
+    df["VWAP"] = ((df["Close"] * df["Volume"]).cumsum()) / df["Volume"].cumsum()
     df["AVG_VOLUME"] = df["Volume"].rolling(20).mean()
-    df["VOLUME_SPIKE"] = np.where(
-        df["Volume"] > df["AVG_VOLUME"] * 1.5,
-        "YES",
-        "NO"
-    )
-
+    df["VOLUME_SPIKE"] = np.where(df["Volume"] > df["AVG_VOLUME"] * 1.5, "YES", "NO")
     df = df.fillna(0)
     return df
-
-# =========================================================
-# AI SIGNAL ENGINE
-# =========================================================
 
 def generate_signal(df):
     latest = df.iloc[-1]
     score = 0
-
     if latest["EMA20"] > latest["EMA50"]: score += 25
     else: score -= 25
-
     if latest["Close"] > latest["VWAP"]: score += 20
     else: score -= 20
-
     if 55 < latest["RSI"] < 70: score += 20
     elif latest["RSI"] > 75: score -= 10
     elif latest["RSI"] < 30: score += 15
-
     if latest["MACD"] > latest["MACD_SIGNAL"]: score += 25
     else: score -= 25
-
-    if latest["VOLUME_SPIKE"] == "YES": score += 10
-
     if score >= 70: signal = "🚀 STRONG BUY"
     elif score >= 30: signal = "✅ BUY"
     elif score <= -70: signal = "🚨 STRONG SELL"
     elif score <= -30: signal = "🔻 SELL"
     else: signal = "⚠️ SIDEWAYS"
-
     return signal, score
 
-
-# =========================================================
-# TABS SETUP
-# =========================================================
+# Tabs Setup
 tab1, tab2 = st.tabs(["📈 AI Live Chart & Scanner", "📂 Upload Screener CSV & Extract AI Target"])
 
-# =========================================================
-# TAB 1: LIVE CHART & SCANNER
-# =========================================================
+# TAB 1
 with tab1:
     try:
-        df = yf.download(
-            ticker,
-            interval=interval,
-            period=period,
-            progress=False,
-            auto_adjust=True,
-            group_by='column'
-        )
-
-        if df.empty:
-            st.error("NO DATA FOUND")
-        else:
+        df = yf.download(ticker, interval=interval, period=period, progress=False, auto_adjust=True, group_by='column')
+        if not df.empty:
             df = calculate_indicators(df)
             signal, score = generate_signal(df)
             latest = df.iloc[-1]
             current_price = float(latest["Close"])
 
-            # -------------------------------------------------
-            # SIGNAL DISPLAY
-            # -------------------------------------------------
             st.subheader("🤖 AI SIGNAL ENGINE")
-
             if "BUY" in signal: st.success(f"{signal} | SCORE : {score}")
             elif "SELL" in signal: st.error(f"{signal} | SCORE : {score}")
             else: st.warning(f"{signal} | SCORE : {score}")
 
-            # -------------------------------------------------
-            # METRICS
-            # -------------------------------------------------
             c1, c2, c3, c4, c5 = st.columns(5)
             c1.metric("PRICE", f"₹ {round(current_price,2)}")
             c2.metric("RSI", round(float(latest["RSI"]),2))
@@ -251,195 +158,112 @@ with tab1:
             c4.metric("MACD", round(float(latest["MACD"]),2))
             c5.metric("AI SCORE", score)
 
-            # -------------------------------------------------
-            # ATR TARGET ENGINE
-            # -------------------------------------------------
-            atr = float(latest["ATR"])
-            entry = current_price
-            sl = entry - atr
-            target1 = entry + atr
-            target2 = entry + (atr * 2)
-            target3 = entry + (atr * 3)
-
-            st.markdown("---")
-            st.subheader("🎯 AI TARGET ENGINE")
-            t1, t2, t3, t4, t5 = st.columns(5)
-            t1.metric("ENTRY", round(entry,2))
-            t2.metric("STOPLOSS", round(sl,2))
-            t3.metric("TARGET 1", round(target1,2))
-            t4.metric("TARGET 2", round(target2,2))
-            t5.metric("TARGET 3", round(target3,2))
-
-            # -------------------------------------------------
-            # VOLUME SPIKE
-            # -------------------------------------------------
-            st.markdown("---")
-            if latest["VOLUME_SPIKE"] == "YES":
-                st.success("🔥 VOLUME BLAST DETECTED")
-            else:
-                st.info("NORMAL VOLUME")
-
-            # -------------------------------------------------
-            # LIVE CHART
-            # -------------------------------------------------
             st.markdown("---")
             st.subheader(f"📈 {selected_stock} LIVE CHART")
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=df.index, y=df["Close"], mode="lines", name="Close"))
-            fig.add_trace(go.Scatter(x=df.index, y=df["EMA20"], mode="lines", name="EMA20"))
-            fig.add_trace(go.Scatter(x=df.index, y=df["EMA50"], mode="lines", name="EMA50"))
-            
-            fig.update_layout(
-                template="plotly_dark",
-                height=650,
-                xaxis_rangeslider_visible=False
-            )
+            fig.update_layout(template="plotly_dark", height=350)
             st.plotly_chart(fig, use_container_width=True)
-
-            # -------------------------------------------------
-            # AI SCANNER
-            # -------------------------------------------------
-            st.markdown("---")
-            st.subheader("🔥 LIVE NSE AI SCANNER")
-
-            def scan_stock(item):
-                name, tick = item
-                try:
-                    data = yf.download(
-                        tick,
-                        interval=interval,
-                        period=period,
-                        progress=False,
-                        auto_adjust=True
-                    )
-                    if data.empty: return None
-                    data = calculate_indicators(data)
-                    sig, scr = generate_signal(data)
-                    last = data.iloc[-1]
-                    return {
-                        "STOCK": name,
-                        "PRICE": round(float(last["Close"]),2),
-                        "SIGNAL": sig,
-                        "SCORE": scr,
-                        "RSI": round(float(last["RSI"]),2)
-                    }
-                except:
-                    return None
-
-            results = []
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                scanned = executor.map(scan_stock, nse_stocks.items())
-
-            for item in scanned:
-                if item is not None:
-                    results.append(item)
-
-            scan_df = pd.DataFrame(results)
-            scan_df = scan_df.sort_values(by="SCORE", ascending=False)
-            st.dataframe(scan_df, use_container_width=True, hide_index=True)
-
-            # -------------------------------------------------
-            # TOP PICKS
-            # -------------------------------------------------
-            st.markdown("---")
-            st.subheader("🚀 TOP AI PICKS")
-            top_buys = scan_df[scan_df["SIGNAL"].str.contains("BUY")].head(5)
-            st.dataframe(top_buys, use_container_width=True, hide_index=True)
-
     except Exception as e:
-        st.error(f"ERROR : {str(e)}")
+        st.error(f"Live Error: {str(e)}")
 
-
-# =========================================================
-# TAB 2: UPLOADED CSV TO CALL/PUT AI BOXES
-# =========================================================
+# TAB 2 - FIXED & SMART COLUMN PROTECTION
 with tab2:
-    try: 
-        st.header("📂 Screener Kit Data Processing")
-        st.write("మీరు డౌన్‌లోడ్ చేసిన Screener Excel/CSV ఫైల్ ని ఇక్కడ అప్లోడ్ చేయండి. దాని కింద AI మూమెంట్ బాక్సులు వస్తాయి.")
-        
-        uploaded_file = st.file_uploader("Upload Your File (CSV or Excel)", type=["csv", "xlsx", "xls"])
-        
-        if uploaded_file is not None:
+    st.header("📂 Screener Kit Data Processing")
+    uploaded_file = st.file_uploader("Upload Your File (CSV or Excel)", type=["csv", "xlsx", "xls"])
+    
+    if uploaded_file is not None:
+        screener_df = None
+        try:
             if uploaded_file.name.endswith('.csv'):
-                screener_df = pd.read_csv(uploaded_file)
+                screener_df = pd.read_csv(uploaded_file, encoding='utf-8', errors='ignore')
             else:
                 screener_df = pd.read_excel(uploaded_file)
-                
-            screener_df = screener_df.dropna(how='all')
-            
+        except Exception as read_err:
+            try: screener_df = pd.read_csv(uploaded_file, encoding='latin1')
+            except: st.error("Error file layout parsing.")
+
+        if screener_df is not None and not screener_df.empty:
             st.success("✅ File Successfully Loaded!")
-            st.subheader("📊 Your Uploaded Data Report")
-            st.dataframe(screener_df, use_container_width=True)
+            st.dataframe(screener_df.head(10), use_container_width=True) # Shows clean head view
             
             st.markdown("---")
             st.subheader("⚙️ Map Your Columns For AI Trade Setup")
-            st.caption("మీ ఎక్సెల్ షీట్ లో కాలమ్ పేర్లు వేరుగా ఉండొచ్చు, కాబట్టి ఏ కాలమ్ దేనికి సంబంధించినదో కింద సెలెక్ట్ చేయండి.")
+            st.caption("డ్రాప్‌డౌన్ లలో మీ ఎక్సెల్ షీట్ హెడ్డింగ్స్ ని కరెక్ట్ గా సెలెక్ట్ చేయండి:")
             
             cols = list(screener_df.columns)
+            
+            # Smart Auto Match logic to pick default best match index
+            def find_best_idx(keywords, col_list, default_idx=0):
+                for i, c in enumerate(col_list):
+                    if any(k in str(c).lower() for k in keywords):
+                        return i
+                return default_idx
+
+            s_idx = find_best_idx(['strike', 'price'], cols, 0)
+            cv_idx = find_best_idx(['call volume', 'c_vol', 'ce_vol', 'volume'], cols, min(1, len(cols)-1))
+            cl_idx = find_best_idx(['call ltp', 'c_ltp', 'ce_ltp', 'lastprice'], cols, min(2, len(cols)-1))
+            pv_idx = find_best_idx(['put volume', 'p_vol', 'pe_vol'], cols, min(3, len(cols)-1))
+            pl_idx = find_best_idx(['put ltp', 'p_ltp', 'pe_ltp'], cols, min(4, len(cols)-1))
+
             col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
-            with col_m1: strike_col = st.selectbox("Strike Price Column", cols, index=0)
-            with col_m2: ce_vol_col = st.selectbox("Call Volume Column", cols, index=min(1, len(cols)-1))
-            with col_m3: ce_ltp_col = st.selectbox("Call LTP (Price) Column", cols, index=min(2, len(cols)-1))
-            with col_m4: pe_vol_col = st.selectbox("Put Volume Column", cols, index=min(3, len(cols)-1))
-            with col_m5: pe_ltp_col = st.selectbox("Put LTP (Price) Column", cols, index=min(4, len(cols)-1))
+            with col_m1: strike_col = st.selectbox("Strike Price Column", cols, index=s_idx)
+            with col_m2: ce_vol_col = st.selectbox("Call Volume Column", cols, index=cv_idx)
+            with col_m3: ce_ltp_col = st.selectbox("Call LTP (Price) Column", cols, index=cl_idx)
+            with col_m4: pe_vol_col = st.selectbox("Put Volume Column", cols, index=pv_idx)
+            with col_m5: pe_ltp_col = st.selectbox("Put LTP (Price) Column", cols, index=pl_idx)
             
             if st.button("🚀 Generate AI Momentum Targets", use_container_width=True):
-                screener_df[ce_vol_col] = pd.to_numeric(screener_df[ce_vol_col], errors='coerce').fillna(0)
-                screener_df[pe_vol_col] = pd.to_numeric(screener_df[pe_vol_col], errors='coerce').fillna(0)
-                screener_df[ce_ltp_col] = pd.to_numeric(screener_df[ce_ltp_col], errors='coerce').fillna(0)
-                screener_df[pe_ltp_col] = pd.to_numeric(screener_df[pe_ltp_col], errors='coerce').fillna(0)
-                screener_df[strike_col] = pd.to_numeric(screener_df[strike_col], errors='coerce').fillna(0)
-                
-                c_idx = screener_df[ce_vol_col].idxmax()
-                c_strike = screener_df.loc[c_idx, strike_col]
-                c_ltp = screener_df.loc[c_idx, ce_ltp_col]
-                c_vol = screener_df.loc[c_idx, ce_vol_col]
-                
-                p_idx = screener_df[pe_vol_col].idxmax()
-                p_strike = screener_df.loc[p_idx, strike_col]
-                p_ltp = screener_df.loc[p_idx, pe_ltp_col]
-                p_vol = screener_df.loc[p_idx, pe_vol_col]
-                
-                st.markdown("---")
-                st.subheader("🤖 AI MOMENTUM TRADE SETUP (CSV DATA)")
-                col_call, col_put = st.columns(2)
-                
-                with col_call:
-                    with st.container(border=True):
-                        st.markdown(f"<h3 style='text-align: center; color: #4CAF50;'>🟢 CALL SIDE: {c_strike} CE</h3>", unsafe_allow_html=True)
-                        st.info(f"**Highest Volume:** {int(c_vol)}")
-                        if c_ltp > 0:
-                            t1, t2 = st.columns(2)
-                            t1.metric("ENTRY", f"₹ {round(c_ltp, 2)}")
-                            t2.metric("STOPLOSS", f"₹ {round(c_ltp * 0.85, 2)}")
-                            t3, t4 = st.columns(2)
-                            t3.metric("TARGET 1", f"₹ {round(c_ltp * 1.15, 2)}")
-                            t4.metric("TARGET 2", f"₹ {round(c_ltp * 1.30, 2)}")
-                        else:
-                            st.warning("LTP is 0. Check columns.")
+                try:
+                    # Clean the chosen series data safely
+                    screener_df[ce_vol_col] = pd.to_numeric(screener_df[ce_vol_col], errors='coerce').fillna(0)
+                    screener_df[pe_vol_col] = pd.to_numeric(screener_df[pe_vol_col], errors='coerce').fillna(0)
+                    screener_df[ce_ltp_col] = pd.to_numeric(screener_df[ce_ltp_col], errors='coerce').fillna(0)
+                    screener_df[pe_ltp_col] = pd.to_numeric(screener_df[pe_ltp_col], errors='coerce').fillna(0)
+                    screener_df[strike_col] = pd.to_numeric(screener_df[strike_col], errors='coerce').fillna(0)
+                    
+                    # CALL ANALYSIS
+                    c_idx = screener_df[ce_vol_col].idxmax()
+                    c_strike = screener_df.loc[c_idx, strike_col]
+                    c_ltp = screener_df.loc[c_idx, ce_ltp_col]
+                    c_vol = screener_df.loc[c_idx, ce_vol_col]
+                    
+                    # PUT ANALYSIS
+                    p_idx = screener_df[pe_vol_col].idxmax()
+                    p_strike = screener_df.loc[p_idx, strike_col]
+                    p_ltp = screener_df.loc[p_idx, pe_ltp_col]
+                    p_vol = screener_df.loc[p_idx, pe_vol_col]
+                    
+                    st.markdown("---")
+                    st.subheader("🤖 AI MOMENTUM TRADE SETUP (CSV DATA)")
+                    col_call, col_put = st.columns(2)
+                    
+                    with col_call:
+                        with st.container(border=True):
+                            st.markdown(f"<h3 style='text-align: center; color: #4CAF50;'>🟢 CALL SIDE: {int(c_strike) if c_strike > 0 else c_strike} CE</h3>", unsafe_allow_html=True)
+                            st.info(f"**Highest Volume:** {int(c_vol)}")
+                            if c_ltp > 0:
+                                t1, t2 = st.columns(2)
+                                t1.metric("ENTRY", f"₹ {round(c_ltp, 2)}")
+                                t2.metric("STOPLOSS", f"₹ {round(c_ltp * 0.85, 2)}")
+                                t3, t4 = st.columns(2)
+                                t3.metric("TARGET 1", f"₹ {round(c_ltp * 1.15, 2)}")
+                                t4.metric("TARGET 2", f"₹ {round(c_ltp * 1.30, 2)}")
+                            else:
+                                st.warning("LTP is 0. Please map the 'Call LTP Column' correctly.")
 
-                with col_put:
-                    with st.container(border=True):
-                        st.markdown(f"<h3 style='text-align: center; color: #FF5252;'>🔴 PUT SIDE: {p_strike} PE</h3>", unsafe_allow_html=True)
-                        st.info(f"**Highest Volume:** {int(p_vol)}")
-                        if p_ltp > 0:
-                            pt1, pt2 = st.columns(2)
-                            pt1.metric("ENTRY", f"₹ {round(p_ltp, 2)}")
-                            pt2.metric("STOPLOSS", f"₹ {round(p_ltp * 0.85, 2)}")
-                            pt3, pt4 = st.columns(2)
-                            pt3.metric("TARGET 1", f"₹ {round(p_ltp * 1.15, 2)}")
-                            pt4.metric("TARGET 2", f"₹ {round(p_ltp * 1.30, 2)}")
-                        else:
-                            st.warning("LTP is 0. Check columns.")
-
-    except Exception as e: 
-        st.error(f"File Error: {str(e)}")
-
-
-# =========================================================
-# FOOTER
-# =========================================================
-
-st.markdown("---")
-st.caption("🚀 NSE AI PRO MAX V3.0 | Institutional Edition")
+                    with col_put:
+                        with st.container(border=True):
+                            st.markdown(f"<h3 style='text-align: center; color: #FF5252;'>🔴 PUT SIDE: {int(p_strike) if p_strike > 0 else p_strike} PE</h3>", unsafe_allow_html=True)
+                            st.info(f"**Highest Volume:** {int(p_vol)}")
+                            if p_ltp > 0:
+                                pt1, pt2 = st.columns(2)
+                                pt1.metric("ENTRY", f"₹ {round(p_ltp, 2)}")
+                                pt2.metric("STOPLOSS", f"₹ {round(p_ltp * 0.85, 2)}")
+                                pt3, pt4 = st.columns(2)
+                                pt3.metric("TARGET 1", f"₹ {round(p_ltp * 1.15, 2)}")
+                                pt4.metric("TARGET 2", f"₹ {round(p_ltp * 1.30, 2)}")
+                            else:
+                                st.warning("LTP is 0. Please map the 'Put LTP Column' correctly.")
+                except Exception as proc_err:
+                    st.error(f"Error logic matching execution: {str(proc_err)}")
