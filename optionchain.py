@@ -62,6 +62,20 @@ period = st.sidebar.selectbox("PERIOD", ["1d", "5d", "1mo"])
 
 ticker = nse_stocks[selected_stock]
 
+# 🟢 NEW: NSE SCREENER LINK ADDED HERE IN SIDEBAR 🟢
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔗 QUICK LINKS")
+screener_link = "INSERT_YOUR_LINK_HERE"  # <--- MI LINK IKKADA PETTANDI
+
+st.sidebar.markdown(f'''
+<a href="{screener_link}" target="_blank" style="text-decoration: none;">
+    <div style="background-color: #2E86C1; padding: 10px; border-radius: 5px; text-align: center; color: white; font-weight: bold; margin-bottom: 15px;">
+        📊 Open NSE Screener Kit
+    </div>
+</a>
+''', unsafe_allow_html=True)
+
+
 # =========================================================
 # HELPER FUNCTIONS: TIME & EXCEL
 # =========================================================
