@@ -1,12 +1,13 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V6.0 ULTRA
+# 🚀 NSE AI PRO MAX V7.0 SUPREME
 # =========================================================
-# FULL NSE STOCK DATABASE
-# LIVE AI ENGINE
+# LIVE NSE AI ENGINE
+# SIGNAL TIME SYSTEM
+# EXCEL DOWNLOAD
 # LIVE OPTION CHAIN
+# MAX PAIN ANALYSIS
 # SMART MONEY FLOW
-# MULTI STOCK SCANNER
-# MAX PAIN ANALYZER
+# AI STOCK SCANNER
 # INSTITUTIONAL DASHBOARD
 # =========================================================
 
@@ -17,6 +18,7 @@ import numpy as np
 import requests
 import plotly.graph_objects as go
 import pytz
+import io
 
 from datetime import datetime
 
@@ -25,13 +27,13 @@ from datetime import datetime
 # =========================================================
 
 st.set_page_config(
-    page_title="NSE AI PRO MAX V6.0 ULTRA",
+    page_title="NSE AI PRO MAX V7.0 SUPREME",
     page_icon="🚀",
     layout="wide"
 )
 
 # =========================================================
-# DARK UI
+# DARK THEME
 # =========================================================
 
 st.markdown("""
@@ -49,8 +51,8 @@ st.markdown("""
 .stMetric {
     background-color: #1F2937;
     border: 1px solid #374151;
-    border-radius: 10px;
-    padding: 12px;
+    border-radius: 12px;
+    padding: 15px;
 }
 
 h1,h2,h3,h4 {
@@ -73,11 +75,11 @@ div.stButton > button:first-child {
 # TITLE
 # =========================================================
 
-st.title("🚀 NSE AI PRO MAX V6.0 ULTRA")
-st.caption("Institutional Quantitative AI Trading System")
+st.title("🚀 NSE AI PRO MAX V7.0 SUPREME")
+st.caption("Institutional AI Quantitative Trading System")
 
 # =========================================================
-# MASSIVE NSE STOCK DATABASE
+# NSE STOCK DATABASE
 # =========================================================
 
 nse_stocks = {
@@ -87,16 +89,15 @@ nse_stocks = {
     "NIFTY 50": "^NSEI",
     "BANKNIFTY": "^NSEBANK",
 
-    # BANKING
+    # BANKS
 
     "HDFCBANK": "HDFCBANK.NS",
     "ICICIBANK": "ICICIBANK.NS",
     "SBIN": "SBIN.NS",
     "AXISBANK": "AXISBANK.NS",
     "KOTAKBANK": "KOTAKBANK.NS",
-    "INDUSINDBK": "INDUSINDBK.NS",
-    "BANKBARODA": "BANKBARODA.NS",
     "PNB": "PNB.NS",
+    "BANKBARODA": "BANKBARODA.NS",
     "FEDERALBNK": "FEDERALBNK.NS",
     "IDFCFIRSTB": "IDFCFIRSTB.NS",
 
@@ -108,8 +109,6 @@ nse_stocks = {
     "HCLTECH": "HCLTECH.NS",
     "TECHM": "TECHM.NS",
     "LTIM": "LTIM.NS",
-    "PERSISTENT": "PERSISTENT.NS",
-    "MPHASIS": "MPHASIS.NS",
 
     # AUTO
 
@@ -118,8 +117,6 @@ nse_stocks = {
     "M&M": "M&M.NS",
     "BAJAJ-AUTO": "BAJAJ-AUTO.NS",
     "HEROMOTOCO": "HEROMOTOCO.NS",
-    "EICHERMOT": "EICHERMOT.NS",
-    "ASHOKLEY": "ASHOKLEY.NS",
 
     # PHARMA
 
@@ -127,26 +124,18 @@ nse_stocks = {
     "DRREDDY": "DRREDDY.NS",
     "CIPLA": "CIPLA.NS",
     "DIVISLAB": "DIVISLAB.NS",
-    "LUPIN": "LUPIN.NS",
-    "AUROPHARMA": "AUROPHARMA.NS",
 
     # FMCG
 
     "ITC": "ITC.NS",
     "HINDUNILVR": "HINDUNILVR.NS",
     "NESTLEIND": "NESTLEIND.NS",
-    "BRITANNIA": "BRITANNIA.NS",
-    "DABUR": "DABUR.NS",
-    "COLPAL": "COLPAL.NS",
 
     # ENERGY
 
     "RELIANCE": "RELIANCE.NS",
     "ONGC": "ONGC.NS",
-    "BPCL": "BPCL.NS",
     "IOC": "IOC.NS",
-    "GAIL": "GAIL.NS",
-    "ADANIGREEN": "ADANIGREEN.NS",
     "NTPC": "NTPC.NS",
     "POWERGRID": "POWERGRID.NS",
 
@@ -155,40 +144,20 @@ nse_stocks = {
     "TATASTEEL": "TATASTEEL.NS",
     "JSWSTEEL": "JSWSTEEL.NS",
     "HINDALCO": "HINDALCO.NS",
-    "SAIL": "SAIL.NS",
-    "VEDL": "VEDL.NS",
-    "NMDC": "NMDC.NS",
-
-    # CEMENT
-
-    "ULTRACEMCO": "ULTRACEMCO.NS",
-    "SHREECEM": "SHREECEM.NS",
-    "AMBUJACEM": "AMBUJACEM.NS",
-    "ACC": "ACC.NS",
 
     # TELECOM
 
     "BHARTIARTL": "BHARTIARTL.NS",
-    "IDEA": "IDEA.NS",
-
-    # ADANI
-
-    "ADANIENT": "ADANIENT.NS",
-    "ADANIPORTS": "ADANIPORTS.NS",
-    "ADANIPOWER": "ADANIPOWER.NS",
 
     # OTHERS
 
     "LT": "LT.NS",
     "BAJFINANCE": "BAJFINANCE.NS",
     "BAJAJFINSV": "BAJAJFINSV.NS",
-    "PIDILITIND": "PIDILITIND.NS",
     "TITAN": "TITAN.NS",
     "ASIANPAINT": "ASIANPAINT.NS",
-    "DMART": "DMART.NS",
     "IRCTC": "IRCTC.NS",
-    "ZOMATO": "ZOMATO.NS",
-    "PAYTM": "PAYTM.NS"
+    "ZOMATO": "ZOMATO.NS"
 }
 
 # =========================================================
@@ -220,8 +189,10 @@ ticker = nse_stocks[selected_stock]
 
 india = pytz.timezone("Asia/Kolkata")
 
+current_time = datetime.now(india)
+
 st.sidebar.info(
-    datetime.now(india).strftime(
+    current_time.strftime(
         "🕒 %d-%m-%Y %H:%M:%S IST"
     )
 )
@@ -230,20 +201,21 @@ st.sidebar.info(
 # MARKET STATUS
 # =========================================================
 
-hour = datetime.now(india).hour
+if 9 <= current_time.hour <= 15:
 
-if 9 <= hour <= 15:
     st.sidebar.success("🟢 MARKET OPEN")
+
 else:
+
     st.sidebar.error("🔴 MARKET CLOSED")
 
 # =========================================================
-# DATA CACHE
+# CACHE DATA
 # =========================================================
 
 @st.cache_data(ttl=60)
 
-def load_data(ticker, interval, period):
+def load_market_data(ticker, interval, period):
 
     data = yf.download(
         ticker,
@@ -255,15 +227,16 @@ def load_data(ticker, interval, period):
     )
 
     if isinstance(data.columns, pd.MultiIndex):
+
         data.columns = data.columns.get_level_values(0)
 
     return data
 
 # =========================================================
-# INDICATORS
+# TECHNICAL INDICATORS
 # =========================================================
 
-def add_indicators(df):
+def calculate_indicators(df):
 
     df = df.copy()
 
@@ -313,7 +286,7 @@ def add_indicators(df):
         (df["Volume"].cumsum() + 1e-10)
     )
 
-    # VOLUME SPIKE
+    # SMART MONEY
 
     df["VOL_AVG"] = df["Volume"].rolling(20).mean()
 
@@ -329,62 +302,80 @@ def add_indicators(df):
 # AI SIGNAL ENGINE
 # =========================================================
 
-def generate_ai_signal(latest):
+def generate_signal(latest):
 
     score = 0
 
     # EMA
 
     if latest["EMA20"] > latest["EMA50"]:
+
         score += 25
+
     else:
+
         score -= 25
 
     # RSI
 
     if 55 <= latest["RSI"] <= 70:
+
         score += 20
 
     elif latest["RSI"] < 30:
+
         score += 15
 
     elif latest["RSI"] > 75:
+
         score -= 15
 
     # MACD
 
     if latest["MACD"] > latest["MACD_SIGNAL"]:
+
         score += 25
+
     else:
+
         score -= 25
 
     # VWAP
 
     if latest["Close"] > latest["VWAP"]:
+
         score += 20
+
     else:
+
         score -= 20
 
     # SMART MONEY
 
     if latest["SMART_MONEY"]:
+
         score += 10
 
-    # SIGNAL
+    # FINAL SIGNAL
 
     if score >= 70:
+
         signal = "🚀 STRONG BUY"
 
     elif score >= 30:
+
         signal = "✅ BUY"
 
     elif score <= -70:
+
         signal = "🚨 STRONG SELL"
 
     elif score <= -30:
+
         signal = "🔻 SELL"
 
     else:
+
         signal = "⚠️ SIDEWAYS"
 
     confidence = min(abs(score), 95)
@@ -392,7 +383,7 @@ def generate_ai_signal(latest):
     return signal, score, confidence
 
 # =========================================================
-# LIVE OPTION CHAIN API
+# OPTION CHAIN API
 # =========================================================
 
 @st.cache_data(ttl=60)
@@ -435,18 +426,21 @@ def get_option_chain(symbol="NIFTY"):
 
             "STRIKE": strike,
 
-            "CALL_OI": ce.get("openInterest", 0),
+            "CALL_OI": ce.get(
+                "openInterest", 0
+            ),
+
+            "PUT_OI": pe.get(
+                "openInterest", 0
+            ),
 
             "CALL_CHG_OI": ce.get(
                 "changeinOpenInterest", 0
             ),
 
-            "PUT_OI": pe.get("openInterest", 0),
-
             "PUT_CHG_OI": pe.get(
                 "changeinOpenInterest", 0
             )
-
         })
 
     return pd.DataFrame(rows)
@@ -462,51 +456,75 @@ tab1, tab2, tab3 = st.tabs([
 ])
 
 # =========================================================
-# TAB 1 - LIVE TECHNICAL
+# TAB 1 - TECHNICAL ANALYSIS
 # =========================================================
 
 with tab1:
 
     try:
 
-        data = load_data(
+        data = load_market_data(
             ticker,
             interval,
             period
         )
 
         if data.empty:
+
             st.error("❌ NO MARKET DATA")
+
             st.stop()
 
-        data = add_indicators(data)
+        data = calculate_indicators(data)
 
         latest = data.iloc[-1]
 
-        signal, score, confidence = generate_ai_signal(latest)
+        signal, score, confidence = generate_signal(latest)
+
+        signal_time = datetime.now(india).strftime(
+            "%d-%m-%Y %H:%M:%S"
+        )
 
         # =====================================================
-        # SIGNAL
+        # SIGNAL DISPLAY
         # =====================================================
 
-        st.subheader("🤖 AI TRADING SIGNAL")
+        st.subheader("🤖 AI SIGNAL ENGINE")
 
         if "BUY" in signal:
 
             st.success(
-                f"{signal} | CONFIDENCE : {confidence}%"
+                f"""
+                {signal}
+                
+                🎯 CONFIDENCE : {confidence}%
+                
+                ⏰ SIGNAL TIME : {signal_time} IST
+                """
             )
 
         elif "SELL" in signal:
 
             st.error(
-                f"{signal} | CONFIDENCE : {confidence}%"
+                f"""
+                {signal}
+                
+                🎯 CONFIDENCE : {confidence}%
+                
+                ⏰ SIGNAL TIME : {signal_time} IST
+                """
             )
 
         else:
 
             st.warning(
-                f"{signal} | CONFIDENCE : {confidence}%"
+                f"""
+                {signal}
+                
+                🎯 CONFIDENCE : {confidence}%
+                
+                ⏰ SIGNAL TIME : {signal_time} IST
+                """
             )
 
         # =====================================================
@@ -541,7 +559,7 @@ with tab1:
         )
 
         # =====================================================
-        # CANDLE CHART
+        # CHART
         # =====================================================
 
         fig = go.Figure()
@@ -584,7 +602,7 @@ with tab1:
         # SMART MONEY
         # =====================================================
 
-        st.subheader("🏦 SMART MONEY TRACKER")
+        st.subheader("🏦 SMART MONEY FLOW")
 
         if latest["SMART_MONEY"]:
 
@@ -596,6 +614,76 @@ with tab1:
 
             st.info(
                 "Normal Trading Activity"
+            )
+
+        # =====================================================
+        # EXCEL DOWNLOAD
+        # =====================================================
+
+        signal_df = pd.DataFrame([{
+
+            "TIME": signal_time,
+
+            "STOCK": selected_stock,
+
+            "PRICE": round(
+                float(latest["Close"]),2
+            ),
+
+            "RSI": round(
+                float(latest["RSI"]),2
+            ),
+
+            "VWAP": round(
+                float(latest["VWAP"]),2
+            ),
+
+            "MACD": round(
+                float(latest["MACD"]),2
+            ),
+
+            "SIGNAL": signal,
+
+            "CONFIDENCE": confidence,
+
+            "AI_SCORE": score
+        }])
+
+        excel_buffer = io.BytesIO()
+
+        with pd.ExcelWriter(
+            excel_buffer,
+            engine="openpyxl"
+        ) as writer:
+
+            signal_df.to_excel(
+                writer,
+                index=False,
+                sheet_name="AI_SIGNAL"
+            )
+
+        excel_data = excel_buffer.getvalue()
+
+        st.download_button(
+
+            label="📥 DOWNLOAD SIGNAL EXCEL",
+
+            data=excel_data,
+
+            file_name=f"{selected_stock}_AI_SIGNAL.xlsx",
+
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        # =====================================================
+        # SIGNAL DATA
+        # =====================================================
+
+        with st.expander("📂 VIEW SIGNAL DATA"):
+
+            st.dataframe(
+                signal_df,
+                use_container_width=True
             )
 
     except Exception as e:
@@ -619,10 +707,6 @@ with tab2:
 
         option_df = get_option_chain(option_symbol)
 
-        # =====================================================
-        # PCR
-        # =====================================================
-
         total_call = option_df["CALL_OI"].sum()
 
         total_put = option_df["PUT_OI"].sum()
@@ -633,10 +717,6 @@ with tab2:
             else 0
         )
 
-        # =====================================================
-        # SUPPORT / RESISTANCE
-        # =====================================================
-
         support = option_df.loc[
             option_df["PUT_OI"].idxmax(),
             "STRIKE"
@@ -646,10 +726,6 @@ with tab2:
             option_df["CALL_OI"].idxmax(),
             "STRIKE"
         ]
-
-        # =====================================================
-        # MAX PAIN
-        # =====================================================
 
         option_df["TOTAL_OI"] = (
             option_df["CALL_OI"]
@@ -663,38 +739,20 @@ with tab2:
         ]
 
         # =====================================================
-        # MARKET DIRECTION
+        # SIGNAL
         # =====================================================
 
         if pcr > 1.15:
 
-            direction = "🚀 BULLISH"
+            st.success("🚀 BULLISH")
 
         elif pcr < 0.85:
 
-            direction = "🔻 BEARISH"
+            st.error("🔻 BEARISH")
 
         else:
 
-            direction = "⚠️ SIDEWAYS"
-
-        # =====================================================
-        # SIGNAL
-        # =====================================================
-
-        st.subheader("🤖 OPTION CHAIN REPORT")
-
-        if "BULLISH" in direction:
-
-            st.success(direction)
-
-        elif "BEARISH" in direction:
-
-            st.error(direction)
-
-        else:
-
-            st.warning(direction)
+            st.warning("⚠️ SIDEWAYS")
 
         # =====================================================
         # METRICS
@@ -753,15 +811,34 @@ with tab2:
         )
 
         # =====================================================
-        # FULL DATA
+        # DOWNLOAD OPTION DATA
         # =====================================================
 
-        with st.expander("📂 VIEW OPTION CHAIN DATA"):
+        option_excel = io.BytesIO()
 
-            st.dataframe(
-                option_df,
-                use_container_width=True
+        with pd.ExcelWriter(
+            option_excel,
+            engine="openpyxl"
+        ) as writer:
+
+            option_df.to_excel(
+                writer,
+                index=False,
+                sheet_name="OPTION_CHAIN"
             )
+
+        option_data = option_excel.getvalue()
+
+        st.download_button(
+
+            label="📥 DOWNLOAD OPTION CHAIN EXCEL",
+
+            data=option_data,
+
+            file_name=f"{option_symbol}_OPTION_CHAIN.xlsx",
+
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
     except Exception as e:
 
@@ -785,7 +862,7 @@ with tab3:
 
         try:
 
-            df = load_data(
+            df = load_market_data(
                 symbol,
                 "15m",
                 "5d"
@@ -793,11 +870,11 @@ with tab3:
 
             if not df.empty:
 
-                df = add_indicators(df)
+                df = calculate_indicators(df)
 
                 latest = df.iloc[-1]
 
-                signal, score, confidence = generate_ai_signal(latest)
+                signal, score, confidence = generate_signal(latest)
 
                 results.append({
 
@@ -829,36 +906,42 @@ with tab3:
 
     if not scan_df.empty:
 
-        buy_df = scan_df[
-            scan_df["SIGNAL"].str.contains(
-                "BUY"
-            )
-        ]
-
-        sell_df = scan_df[
-            scan_df["SIGNAL"].str.contains(
-                "SELL"
-            )
-        ]
-
-        st.subheader("🚀 TOP BUY SIGNALS")
-
         st.dataframe(
-            buy_df.sort_values(
+            scan_df.sort_values(
                 by="CONFIDENCE",
                 ascending=False
             ),
             use_container_width=True
         )
 
-        st.subheader("🔻 TOP SELL SIGNALS")
+        # =====================================================
+        # SCANNER DOWNLOAD
+        # =====================================================
 
-        st.dataframe(
-            sell_df.sort_values(
-                by="CONFIDENCE",
-                ascending=False
-            ),
-            use_container_width=True
+        scan_excel = io.BytesIO()
+
+        with pd.ExcelWriter(
+            scan_excel,
+            engine="openpyxl"
+        ) as writer:
+
+            scan_df.to_excel(
+                writer,
+                index=False,
+                sheet_name="AI_SCANNER"
+            )
+
+        scan_data = scan_excel.getvalue()
+
+        st.download_button(
+
+            label="📥 DOWNLOAD AI SCANNER EXCEL",
+
+            data=scan_data,
+
+            file_name="NSE_AI_SCANNER.xlsx",
+
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
 # =========================================================
@@ -868,5 +951,5 @@ with tab3:
 st.markdown("---")
 
 st.caption(
-    "🚀 NSE AI PRO MAX V6.0 ULTRA | Institutional Quantitative AI System"
+    "🚀 NSE AI PRO MAX V7.0 SUPREME | Institutional Quantitative Trading System"
 )
