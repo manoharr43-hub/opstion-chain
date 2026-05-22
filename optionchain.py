@@ -1,5 +1,13 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V5.0 - INSTITUTIONAL LIVE ENGINE
+# 🚀 NSE AI PRO MAX V6.0 ULTRA
+# =========================================================
+# FULL NSE STOCK DATABASE
+# LIVE AI ENGINE
+# LIVE OPTION CHAIN
+# SMART MONEY FLOW
+# MULTI STOCK SCANNER
+# MAX PAIN ANALYZER
+# INSTITUTIONAL DASHBOARD
 # =========================================================
 
 import streamlit as st
@@ -9,6 +17,7 @@ import numpy as np
 import requests
 import plotly.graph_objects as go
 import pytz
+
 from datetime import datetime
 
 # =========================================================
@@ -16,13 +25,13 @@ from datetime import datetime
 # =========================================================
 
 st.set_page_config(
-    page_title="NSE AI PRO MAX V5.0",
+    page_title="NSE AI PRO MAX V6.0 ULTRA",
     page_icon="🚀",
     layout="wide"
 )
 
 # =========================================================
-# CUSTOM CSS
+# DARK UI
 # =========================================================
 
 st.markdown("""
@@ -40,8 +49,8 @@ st.markdown("""
 .stMetric {
     background-color: #1F2937;
     border: 1px solid #374151;
-    border-radius: 12px;
-    padding: 15px;
+    border-radius: 10px;
+    padding: 12px;
 }
 
 h1,h2,h3,h4 {
@@ -64,45 +73,137 @@ div.stButton > button:first-child {
 # TITLE
 # =========================================================
 
-st.title("🚀 NSE AI PRO MAX V5.0")
-st.caption("Institutional AI Trading + Live Option Chain System")
+st.title("🚀 NSE AI PRO MAX V6.0 ULTRA")
+st.caption("Institutional Quantitative AI Trading System")
 
 # =========================================================
-# NSE STOCK DATABASE
+# MASSIVE NSE STOCK DATABASE
 # =========================================================
 
 nse_stocks = {
-    "RELIANCE": "RELIANCE.NS",
-    "TCS": "TCS.NS",
-    "INFY": "INFY.NS",
+
+    # INDEX
+
+    "NIFTY 50": "^NSEI",
+    "BANKNIFTY": "^NSEBANK",
+
+    # BANKING
+
     "HDFCBANK": "HDFCBANK.NS",
     "ICICIBANK": "ICICIBANK.NS",
     "SBIN": "SBIN.NS",
-    "LT": "LT.NS",
-    "ITC": "ITC.NS",
     "AXISBANK": "AXISBANK.NS",
     "KOTAKBANK": "KOTAKBANK.NS",
-    "BAJFINANCE": "BAJFINANCE.NS",
-    "SUNPHARMA": "SUNPHARMA.NS",
+    "INDUSINDBK": "INDUSINDBK.NS",
+    "BANKBARODA": "BANKBARODA.NS",
+    "PNB": "PNB.NS",
+    "FEDERALBNK": "FEDERALBNK.NS",
+    "IDFCFIRSTB": "IDFCFIRSTB.NS",
+
+    # IT
+
+    "TCS": "TCS.NS",
+    "INFY": "INFY.NS",
+    "WIPRO": "WIPRO.NS",
+    "HCLTECH": "HCLTECH.NS",
+    "TECHM": "TECHM.NS",
+    "LTIM": "LTIM.NS",
+    "PERSISTENT": "PERSISTENT.NS",
+    "MPHASIS": "MPHASIS.NS",
+
+    # AUTO
+
     "MARUTI": "MARUTI.NS",
+    "TATAMOTORS": "TATAMOTORS.NS",
+    "M&M": "M&M.NS",
+    "BAJAJ-AUTO": "BAJAJ-AUTO.NS",
+    "HEROMOTOCO": "HEROMOTOCO.NS",
+    "EICHERMOT": "EICHERMOT.NS",
+    "ASHOKLEY": "ASHOKLEY.NS",
+
+    # PHARMA
+
+    "SUNPHARMA": "SUNPHARMA.NS",
+    "DRREDDY": "DRREDDY.NS",
+    "CIPLA": "CIPLA.NS",
+    "DIVISLAB": "DIVISLAB.NS",
+    "LUPIN": "LUPIN.NS",
+    "AUROPHARMA": "AUROPHARMA.NS",
+
+    # FMCG
+
+    "ITC": "ITC.NS",
     "HINDUNILVR": "HINDUNILVR.NS",
-    "NIFTY 50": "^NSEI",
-    "BANKNIFTY": "^NSEBANK"
+    "NESTLEIND": "NESTLEIND.NS",
+    "BRITANNIA": "BRITANNIA.NS",
+    "DABUR": "DABUR.NS",
+    "COLPAL": "COLPAL.NS",
+
+    # ENERGY
+
+    "RELIANCE": "RELIANCE.NS",
+    "ONGC": "ONGC.NS",
+    "BPCL": "BPCL.NS",
+    "IOC": "IOC.NS",
+    "GAIL": "GAIL.NS",
+    "ADANIGREEN": "ADANIGREEN.NS",
+    "NTPC": "NTPC.NS",
+    "POWERGRID": "POWERGRID.NS",
+
+    # METALS
+
+    "TATASTEEL": "TATASTEEL.NS",
+    "JSWSTEEL": "JSWSTEEL.NS",
+    "HINDALCO": "HINDALCO.NS",
+    "SAIL": "SAIL.NS",
+    "VEDL": "VEDL.NS",
+    "NMDC": "NMDC.NS",
+
+    # CEMENT
+
+    "ULTRACEMCO": "ULTRACEMCO.NS",
+    "SHREECEM": "SHREECEM.NS",
+    "AMBUJACEM": "AMBUJACEM.NS",
+    "ACC": "ACC.NS",
+
+    # TELECOM
+
+    "BHARTIARTL": "BHARTIARTL.NS",
+    "IDEA": "IDEA.NS",
+
+    # ADANI
+
+    "ADANIENT": "ADANIENT.NS",
+    "ADANIPORTS": "ADANIPORTS.NS",
+    "ADANIPOWER": "ADANIPOWER.NS",
+
+    # OTHERS
+
+    "LT": "LT.NS",
+    "BAJFINANCE": "BAJFINANCE.NS",
+    "BAJAJFINSV": "BAJAJFINSV.NS",
+    "PIDILITIND": "PIDILITIND.NS",
+    "TITAN": "TITAN.NS",
+    "ASIANPAINT": "ASIANPAINT.NS",
+    "DMART": "DMART.NS",
+    "IRCTC": "IRCTC.NS",
+    "ZOMATO": "ZOMATO.NS",
+    "PAYTM": "PAYTM.NS"
 }
 
 # =========================================================
 # SIDEBAR
 # =========================================================
 
-st.sidebar.header("⚙️ CONTROL PANEL")
+st.sidebar.header("⚙️ AI CONTROL PANEL")
 
 selected_stock = st.sidebar.selectbox(
-    "SELECT STOCK",
-    list(nse_stocks.keys())
+    "SELECT NSE STOCK",
+    sorted(list(nse_stocks.keys()))
 )
 
 interval = st.sidebar.selectbox(
-    "SELECT INTERVAL",
+    "SELECT TIMEFRAME",
     ["5m", "15m", "30m", "1h"]
 )
 
@@ -114,7 +215,7 @@ period = st.sidebar.selectbox(
 ticker = nse_stocks[selected_stock]
 
 # =========================================================
-# TIME
+# INDIA TIME
 # =========================================================
 
 india = pytz.timezone("Asia/Kolkata")
@@ -137,12 +238,12 @@ else:
     st.sidebar.error("🔴 MARKET CLOSED")
 
 # =========================================================
-# CACHE MARKET DATA
+# DATA CACHE
 # =========================================================
 
 @st.cache_data(ttl=60)
 
-def load_market_data(ticker, interval, period):
+def load_data(ticker, interval, period):
 
     data = yf.download(
         ticker,
@@ -159,7 +260,7 @@ def load_market_data(ticker, interval, period):
     return data
 
 # =========================================================
-# TECHNICAL INDICATORS
+# INDICATORS
 # =========================================================
 
 def add_indicators(df):
@@ -183,9 +284,11 @@ def add_indicators(df):
     delta = df["Close"].diff()
 
     gain = delta.clip(lower=0)
+
     loss = -delta.clip(upper=0)
 
     avg_gain = gain.rolling(14).mean()
+
     avg_loss = loss.rolling(14).mean()
 
     rs = avg_gain / (avg_loss + 1e-10)
@@ -195,6 +298,7 @@ def add_indicators(df):
     # MACD
 
     ema12 = df["Close"].ewm(span=12).mean()
+
     ema26 = df["Close"].ewm(span=26).mean()
 
     df["MACD"] = ema12 - ema26
@@ -213,7 +317,7 @@ def add_indicators(df):
 
     df["VOL_AVG"] = df["Volume"].rolling(20).mean()
 
-    df["VOLUME_SPIKE"] = (
+    df["SMART_MONEY"] = (
         df["Volume"] > df["VOL_AVG"] * 2
     )
 
@@ -225,7 +329,7 @@ def add_indicators(df):
 # AI SIGNAL ENGINE
 # =========================================================
 
-def ai_signal(latest):
+def generate_ai_signal(latest):
 
     score = 0
 
@@ -261,9 +365,9 @@ def ai_signal(latest):
     else:
         score -= 20
 
-    # VOLUME
+    # SMART MONEY
 
-    if latest["VOLUME_SPIKE"]:
+    if latest["SMART_MONEY"]:
         score += 10
 
     # SIGNAL
@@ -324,6 +428,7 @@ def get_option_chain(symbol="NIFTY"):
         strike = item.get("strikePrice", 0)
 
         ce = item.get("CE", {})
+
         pe = item.get("PE", {})
 
         rows.append({
@@ -331,12 +436,16 @@ def get_option_chain(symbol="NIFTY"):
             "STRIKE": strike,
 
             "CALL_OI": ce.get("openInterest", 0),
-            "CALL_CHG_OI": ce.get("changeinOpenInterest", 0),
-            "CALL_VOL": ce.get("totalTradedVolume", 0),
+
+            "CALL_CHG_OI": ce.get(
+                "changeinOpenInterest", 0
+            ),
 
             "PUT_OI": pe.get("openInterest", 0),
-            "PUT_CHG_OI": pe.get("changeinOpenInterest", 0),
-            "PUT_VOL": pe.get("totalTradedVolume", 0)
+
+            "PUT_CHG_OI": pe.get(
+                "changeinOpenInterest", 0
+            )
 
         })
 
@@ -348,19 +457,19 @@ def get_option_chain(symbol="NIFTY"):
 
 tab1, tab2, tab3 = st.tabs([
     "📈 LIVE TECHNICAL",
-    "📂 LIVE OPTION CHAIN",
+    "📂 OPTION CHAIN",
     "🤖 AI SCANNER"
 ])
 
 # =========================================================
-# TAB 1 - TECHNICAL ANALYSIS
+# TAB 1 - LIVE TECHNICAL
 # =========================================================
 
 with tab1:
 
     try:
 
-        data = load_market_data(
+        data = load_data(
             ticker,
             interval,
             period
@@ -374,25 +483,28 @@ with tab1:
 
         latest = data.iloc[-1]
 
-        signal, score, confidence = ai_signal(latest)
+        signal, score, confidence = generate_ai_signal(latest)
 
         # =====================================================
-        # SIGNAL DISPLAY
+        # SIGNAL
         # =====================================================
 
         st.subheader("🤖 AI TRADING SIGNAL")
 
         if "BUY" in signal:
+
             st.success(
                 f"{signal} | CONFIDENCE : {confidence}%"
             )
 
         elif "SELL" in signal:
+
             st.error(
                 f"{signal} | CONFIDENCE : {confidence}%"
             )
 
         else:
+
             st.warning(
                 f"{signal} | CONFIDENCE : {confidence}%"
             )
@@ -469,20 +581,21 @@ with tab1:
         )
 
         # =====================================================
-        # SMART MONEY DETECTOR
+        # SMART MONEY
         # =====================================================
-
-        spike = latest["VOLUME_SPIKE"]
 
         st.subheader("🏦 SMART MONEY TRACKER")
 
-        if spike:
+        if latest["SMART_MONEY"]:
+
             st.success(
-                "🔥 INSTITUTIONAL VOLUME DETECTED"
+                "🔥 INSTITUTIONAL BUYING DETECTED"
             )
+
         else:
+
             st.info(
-                "Normal Market Participation"
+                "Normal Trading Activity"
             )
 
     except Exception as e:
@@ -490,7 +603,7 @@ with tab1:
         st.error(f"🔴 ERROR : {e}")
 
 # =========================================================
-# TAB 2 - LIVE OPTION CHAIN
+# TAB 2 - OPTION CHAIN
 # =========================================================
 
 with tab2:
@@ -498,7 +611,7 @@ with tab2:
     st.header("📂 LIVE NSE OPTION CHAIN")
 
     option_symbol = st.selectbox(
-        "SELECT OPTION INDEX",
+        "SELECT INDEX",
         ["NIFTY", "BANKNIFTY"]
     )
 
@@ -506,15 +619,12 @@ with tab2:
 
         option_df = get_option_chain(option_symbol)
 
-        if option_df.empty:
-            st.error("❌ NO OPTION DATA")
-            st.stop()
-
         # =====================================================
         # PCR
         # =====================================================
 
         total_call = option_df["CALL_OI"].sum()
+
         total_put = option_df["PUT_OI"].sum()
 
         pcr = (
@@ -527,13 +637,13 @@ with tab2:
         # SUPPORT / RESISTANCE
         # =====================================================
 
-        resistance = option_df.loc[
-            option_df["CALL_OI"].idxmax(),
+        support = option_df.loc[
+            option_df["PUT_OI"].idxmax(),
             "STRIKE"
         ]
 
-        support = option_df.loc[
-            option_df["PUT_OI"].idxmax(),
+        resistance = option_df.loc[
+            option_df["CALL_OI"].idxmax(),
             "STRIKE"
         ]
 
@@ -553,32 +663,42 @@ with tab2:
         ]
 
         # =====================================================
-        # SIGNAL
+        # MARKET DIRECTION
         # =====================================================
 
         if pcr > 1.15:
+
             direction = "🚀 BULLISH"
 
         elif pcr < 0.85:
+
             direction = "🔻 BEARISH"
 
         else:
+
             direction = "⚠️ SIDEWAYS"
 
         # =====================================================
-        # METRICS
+        # SIGNAL
         # =====================================================
 
         st.subheader("🤖 OPTION CHAIN REPORT")
 
         if "BULLISH" in direction:
+
             st.success(direction)
 
         elif "BEARISH" in direction:
+
             st.error(direction)
 
         else:
+
             st.warning(direction)
+
+        # =====================================================
+        # METRICS
+        # =====================================================
 
         m1, m2, m3, m4 = st.columns(4)
 
@@ -624,7 +744,7 @@ with tab2:
             template="plotly_dark",
             barmode="group",
             height=650,
-            title="LIVE OPEN INTEREST"
+            title="LIVE OI ANALYSIS"
         )
 
         st.plotly_chart(
@@ -633,31 +753,10 @@ with tab2:
         )
 
         # =====================================================
-        # OI CHANGE ANALYSIS
+        # FULL DATA
         # =====================================================
 
-        st.subheader("📊 OI CHANGE ANALYSIS")
-
-        total_call_change = option_df["CALL_CHG_OI"].sum()
-        total_put_change = option_df["PUT_CHG_OI"].sum()
-
-        cc1, cc2 = st.columns(2)
-
-        cc1.metric(
-            "CALL OI CHANGE",
-            f"{int(total_call_change):,}"
-        )
-
-        cc2.metric(
-            "PUT OI CHANGE",
-            f"{int(total_put_change):,}"
-        )
-
-        # =====================================================
-        # TABLE
-        # =====================================================
-
-        with st.expander("📂 VIEW FULL OPTION DATA"):
+        with st.expander("📂 VIEW OPTION CHAIN DATA"):
 
             st.dataframe(
                 option_df,
@@ -666,7 +765,7 @@ with tab2:
 
     except Exception as e:
 
-        st.error(f"🔴 OPTION CHAIN ERROR : {e}")
+        st.error(f"🔴 OPTION ERROR : {e}")
 
 # =========================================================
 # TAB 3 - AI SCANNER
@@ -674,9 +773,9 @@ with tab2:
 
 with tab3:
 
-    st.header("🤖 MULTI STOCK AI SCANNER")
+    st.header("🤖 NSE AI SCANNER")
 
-    scan_results = []
+    results = []
 
     progress = st.progress(0)
 
@@ -686,7 +785,7 @@ with tab3:
 
         try:
 
-            df = load_market_data(
+            df = load_data(
                 symbol,
                 "15m",
                 "5d"
@@ -698,30 +797,64 @@ with tab3:
 
                 latest = df.iloc[-1]
 
-                signal, score, confidence = ai_signal(latest)
+                signal, score, confidence = generate_ai_signal(latest)
 
-                scan_results.append({
+                results.append({
 
                     "STOCK": name,
-                    "PRICE": round(float(latest["Close"]),2),
-                    "RSI": round(float(latest["RSI"]),2),
-                    "SIGNAL": signal,
-                    "CONFIDENCE": confidence,
-                    "SCORE": score
 
+                    "PRICE": round(
+                        float(latest["Close"]),2
+                    ),
+
+                    "RSI": round(
+                        float(latest["RSI"]),2
+                    ),
+
+                    "SIGNAL": signal,
+
+                    "CONFIDENCE": confidence,
+
+                    "SCORE": score
                 })
 
         except:
             pass
 
-        progress.progress((idx + 1) / total)
+        progress.progress(
+            (idx + 1) / total
+        )
 
-    scan_df = pd.DataFrame(scan_results)
+    scan_df = pd.DataFrame(results)
 
     if not scan_df.empty:
 
+        buy_df = scan_df[
+            scan_df["SIGNAL"].str.contains(
+                "BUY"
+            )
+        ]
+
+        sell_df = scan_df[
+            scan_df["SIGNAL"].str.contains(
+                "SELL"
+            )
+        ]
+
+        st.subheader("🚀 TOP BUY SIGNALS")
+
         st.dataframe(
-            scan_df.sort_values(
+            buy_df.sort_values(
+                by="CONFIDENCE",
+                ascending=False
+            ),
+            use_container_width=True
+        )
+
+        st.subheader("🔻 TOP SELL SIGNALS")
+
+        st.dataframe(
+            sell_df.sort_values(
                 by="CONFIDENCE",
                 ascending=False
             ),
@@ -735,5 +868,5 @@ with tab3:
 st.markdown("---")
 
 st.caption(
-    "🚀 NSE AI PRO MAX V5.0 | Institutional Quant Trading Engine"
+    "🚀 NSE AI PRO MAX V6.0 ULTRA | Institutional Quantitative AI System"
 )
