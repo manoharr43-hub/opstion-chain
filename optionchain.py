@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V4.0 - ULTRA STABLE EDITION (FINAL FIX)
+# 🚀 NSE AI PRO MAX V4.1 - ULTRA STABLE ENGINE
 # =========================================================
 
 import streamlit as st
@@ -10,275 +10,739 @@ import plotly.graph_objects as go
 import pytz
 from datetime import datetime
 
-# Auto-refresh component (Optional)
+# =========================================================
+# OPTIONAL AUTO REFRESH
+# =========================================================
+
 try:
     from streamlit_autorefresh import st_autorefresh
-except ImportError:
+except:
     st_autorefresh = None
 
 # =========================================================
-# PAGE CONFIG & DARK THEME UI
+# PAGE CONFIG
 # =========================================================
+
 st.set_page_config(
-    page_title="NSE AI PRO MAX V4.0",
+    page_title="NSE AI PRO MAX V4.1",
     page_icon="🚀",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
+
+# =========================================================
+# DARK UI
+# =========================================================
 
 st.markdown("""
 <style>
-    .main { background-color: #0E1117; color: white; }
-    [data-testid="stSidebar"] { background-color: #111827; }
-    .stMetric { background-color: #1F2937; padding: 15px; border-radius: 10px; border: 1px solid #374151; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-    h1, h2, h3, h4 { color: #FFFFFF !important; font-family: 'Inter', sans-serif; }
-    div.stButton > button:first-child { background-color: #2563EB; color: white; border-radius: 6px; font-weight: bold; border: none; padding: 0.5rem 1rem; }
-    div.stButton > button:first-child:hover { background-color: #1D4ED8; }
+
+.main {
+    background-color: #0E1117;
+    color: white;
+}
+
+[data-testid="stSidebar"] {
+    background-color: #111827;
+}
+
+.stMetric {
+    background-color: #1F2937;
+    padding: 15px;
+    border-radius: 12px;
+    border: 1px solid #374151;
+}
+
+h1,h2,h3,h4 {
+    color: white !important;
+}
+
+div.stButton > button:first-child {
+    background-color: #2563EB;
+    color: white;
+    border-radius: 8px;
+    border: none;
+    font-weight: bold;
+    width: 100%;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 NSE AI PRO MAX V4.0")
-st.caption("Institutional AI Trading Dashboard + Smart Option Chain Analyzer")
+# =========================================================
+# HEADER
+# =========================================================
+
+st.title("🚀 NSE AI PRO MAX V4.1")
+st.caption("Institutional Quant AI Dashboard + Option Chain Intelligence")
 
 # =========================================================
-# STOCK REPOSITORY & SIDEBAR
+# NSE STOCK LIST
 # =========================================================
+
 nse_stocks = {
-    "RELIANCE": "RELIANCE.NS", "TCS": "TCS.NS", "INFY": "INFY.NS",
-    "HDFCBANK": "HDFCBANK.NS", "ICICIBANK": "ICICIBANK.NS", "SBIN": "SBIN.NS",
-    "LT": "LT.NS", "ITC": "ITC.NS", "AXISBANK": "AXISBANK.NS",
-    "KOTAKBANK": "KOTAKBANK.NS", "BAJFINANCE": "BAJFINANCE.NS",
-    "SUNPHARMA": "SUNPHARMA.NS", "MARUTI": "MARUTI.NS", "HINDUNILVR": "HINDUNILVR.NS",
-    "NIFTY 50": "^NSEI", "BANKNIFTY": "^NSEBANK"
+    "RELIANCE": "RELIANCE.NS",
+    "TCS": "TCS.NS",
+    "INFY": "INFY.NS",
+    "HDFCBANK": "HDFCBANK.NS",
+    "ICICIBANK": "ICICIBANK.NS",
+    "SBIN": "SBIN.NS",
+    "LT": "LT.NS",
+    "ITC": "ITC.NS",
+    "AXISBANK": "AXISBANK.NS",
+    "KOTAKBANK": "KOTAKBANK.NS",
+    "BAJFINANCE": "BAJFINANCE.NS",
+    "SUNPHARMA": "SUNPHARMA.NS",
+    "MARUTI": "MARUTI.NS",
+    "HINDUNILVR": "HINDUNILVR.NS",
+    "NIFTY 50": "^NSEI",
+    "BANKNIFTY": "^NSEBANK"
 }
 
+# =========================================================
+# SIDEBAR
+# =========================================================
+
 st.sidebar.header("⚙️ CONTROL PANEL")
-selected_stock = st.sidebar.selectbox("SELECT STOCK / INDEX", list(nse_stocks.keys()))
-interval = st.sidebar.selectbox("TIMEFRAME INTERVAL", ["5m", "15m", "30m", "1h"])
-period = st.sidebar.selectbox("HISTORICAL PERIOD", ["1d", "5d", "1mo"])
+
+selected_stock = st.sidebar.selectbox(
+    "SELECT STOCK",
+    list(nse_stocks.keys())
+)
+
+interval = st.sidebar.selectbox(
+    "TIMEFRAME",
+    ["5m", "15m", "30m", "1h"]
+)
+
+period = st.sidebar.selectbox(
+    "PERIOD",
+    ["1d", "5d", "1mo"]
+)
+
 ticker = nse_stocks[selected_stock]
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("📌 ENGINE STATUS")
+# =========================================================
+# AUTO REFRESH
+# =========================================================
 
 if st_autorefresh:
-    st_autorefresh(interval=60000, key="nse_dashboard_polling")
-    st.sidebar.success("🟢 LIVE REFRESH ACTIVE (60s)")
+    st_autorefresh(interval=60000, key="refresh")
+    st.sidebar.success("🟢 LIVE AUTO REFRESH ACTIVE")
 else:
-    st.sidebar.warning("⚠️ Auto-Refresh Paused (Install streamlit-autorefresh)")
-
-india_tz = pytz.timezone('Asia/Kolkata')
-st.sidebar.info(f"🕒 {datetime.now(india_tz).strftime('%d-%m-%Y %H:%M:%S')} IST")
+    st.sidebar.warning("⚠️ Install streamlit-autorefresh")
 
 # =========================================================
-# TECHNICAL INDICATORS & AI SIGNAL ENGINE
+# TIMEZONE
 # =========================================================
+
+india_tz = pytz.timezone("Asia/Kolkata")
+
+st.sidebar.info(
+    datetime.now(india_tz).strftime(
+        "🕒 %d-%m-%Y %H:%M:%S IST"
+    )
+)
+
+# =========================================================
+# MARKET STATUS
+# =========================================================
+
+current_hour = datetime.now(india_tz).hour
+
+if 9 <= current_hour <= 15:
+    st.sidebar.success("🟢 MARKET OPEN")
+else:
+    st.sidebar.error("🔴 MARKET CLOSED")
+
+# =========================================================
+# INDICATOR ENGINE
+# =========================================================
+
 def calculate_indicators(df):
-    df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
-    df["EMA50"] = df["Close"].ewm(span=50, adjust=False).mean()
-    
+
+    df = df.copy()
+
+    # EMA
+
+    df["EMA20"] = df["Close"].ewm(
+        span=20,
+        adjust=False
+    ).mean()
+
+    df["EMA50"] = df["Close"].ewm(
+        span=50,
+        adjust=False
+    ).mean()
+
+    # RSI
+
     delta = df["Close"].diff()
+
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
-    avg_gain = gain.rolling(14, min_periods=1).mean()
-    avg_loss = loss.rolling(14, min_periods=1).mean()
+
+    avg_gain = gain.rolling(14).mean()
+    avg_loss = loss.rolling(14).mean()
+
     rs = avg_gain / (avg_loss + 1e-10)
+
     df["RSI"] = 100 - (100 / (1 + rs))
-    
-    ema12 = df["Close"].ewm(span=12, adjust=False).mean()
-    ema26 = df["Close"].ewm(span=26, adjust=False).mean()
+
+    # MACD
+
+    ema12 = df["Close"].ewm(span=12).mean()
+    ema26 = df["Close"].ewm(span=26).mean()
+
     df["MACD"] = ema12 - ema26
-    df["MACD_SIGNAL"] = df["MACD"].ewm(span=9, adjust=False).mean()
-    
-    df["VWAP"] = (df["Close"] * df["Volume"]).cumsum() / (df["Volume"].cumsum() + 1e-10)
-    df.bfill(inplace=True)
-    df.fillna(0, inplace=True)
+
+    df["MACD_SIGNAL"] = df["MACD"].ewm(span=9).mean()
+
+    # VWAP
+
+    df["VWAP"] = (
+        (df["Close"] * df["Volume"]).cumsum()
+        /
+        (df["Volume"].cumsum() + 1e-10)
+    )
+
+    df = df.fillna(method="bfill")
+    df = df.fillna(0)
+
     return df
 
+# =========================================================
+# AI SIGNAL ENGINE
+# =========================================================
+
 def generate_signal(latest):
+
     score = 0
-    if latest["EMA20"] > latest["EMA50"]: score += 25
-    else: score -= 25
 
-    if 55 < latest["RSI"] < 70: score += 20
-    elif latest["RSI"] > 75: score -= 15  
-    elif latest["RSI"] < 30: score += 15  
+    # EMA
 
-    if latest["MACD"] > latest["MACD_SIGNAL"]: score += 25
-    else: score -= 25
+    if latest["EMA20"] > latest["EMA50"]:
+        score += 25
+    else:
+        score -= 25
 
-    if latest["Close"] > latest["VWAP"]: score += 20
-    else: score -= 20
+    # RSI
 
-    if score >= 70: return "🚀 STRONG BUY", score
-    elif score >= 30: return "✅ BUY", score
-    elif score <= -70: return "🚨 STRONG SELL", score
-    elif score <= -30: return "🔻 SELL", score
-    else: return "⚠️ SIDEWAYS", score
+    if 55 <= latest["RSI"] <= 70:
+        score += 20
+
+    elif latest["RSI"] > 75:
+        score -= 15
+
+    elif latest["RSI"] < 30:
+        score += 15
+
+    # MACD
+
+    if latest["MACD"] > latest["MACD_SIGNAL"]:
+        score += 25
+    else:
+        score -= 25
+
+    # VWAP
+
+    if latest["Close"] > latest["VWAP"]:
+        score += 20
+    else:
+        score -= 20
+
+    # SIGNAL
+
+    if score >= 70:
+        return "🚀 STRONG BUY", score
+
+    elif score >= 30:
+        return "✅ BUY", score
+
+    elif score <= -70:
+        return "🚨 STRONG SELL", score
+
+    elif score <= -30:
+        return "🔻 SELL", score
+
+    return "⚠️ SIDEWAYS", score
 
 # =========================================================
-# TABS SETUP - (TAB1 AND TAB2 ARE CREATED HERE)
+# TABS
 # =========================================================
-tab1, tab2 = st.tabs(["📈 AI LIVE TECHNICAL CHART", "📂 NSE OPTION CHAIN ANALYZER"])
+
+tab1, tab2 = st.tabs([
+    "📈 LIVE TECHNICAL DASHBOARD",
+    "📂 OPTION CHAIN ANALYZER"
+])
 
 # =========================================================
-# TAB 1: LIVE CHART
+# TAB 1
 # =========================================================
+
 with tab1:
+
     try:
-        data = yf.download(ticker, interval=interval, period=period, progress=False, auto_adjust=True)
-        
-        if not data.empty:
-            if isinstance(data.columns, pd.MultiIndex):
-                data.columns = data.columns.get_level_values(0)
 
-            data = calculate_indicators(data)
-            latest = data.iloc[-1]
-            signal, score = generate_signal(latest)
+        data = yf.download(
+            ticker,
+            interval=interval,
+            period=period,
+            progress=False,
+            auto_adjust=True,
+            threads=True
+        )
 
-            st.subheader("🤖 AI MODEL INSIGHTS")
-            if "BUY" in signal: st.success(f"⚡ {signal} | QUANT SCORE: {score}")
-            elif "SELL" in signal: st.error(f"🔴 {signal} | QUANT SCORE: {score}")
-            else: st.warning(f"🟡 {signal} | QUANT SCORE: {score}")
+        if data.empty:
+            st.error("❌ No market data found.")
+            st.stop()
 
-            c1, c2, c3, c4, c5 = st.columns(5)
-            c1.metric("LAST PRICE", f"₹ {round(float(latest['Close']), 2)}")
-            c2.metric("RSI (14)", round(float(latest["RSI"]), 2))
-            c3.metric("VWAP", f"₹ {round(float(latest['VWAP']), 2)}")
-            c4.metric("MACD SPREAD", round(float(latest["MACD"]), 2))
-            c5.metric("NET SCORING", f"{score} / 90")
+        # MultiIndex Fix
 
-            st.markdown("---")
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=data.index, y=data["Close"], mode='lines', name='Spot Price', line=dict(color='#3B82F6', width=2)))
-            fig.add_trace(go.Scatter(x=data.index, y=data["EMA20"], mode='lines', name='EMA 20 Fast', line=dict(color='#F59E0B', width=1.5, dash='dot')))
-            fig.add_trace(go.Scatter(x=data.index, y=data["EMA50"], mode='lines', name='EMA 50 Slow', line=dict(color='#EF4444', width=1.5, dash='dash')))
-            fig.update_layout(template="plotly_dark", height=500, hovermode="x unified", margin=dict(l=0, r=0, t=30, b=0))
-            st.plotly_chart(fig, use_container_width=True)
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
+
+        data = calculate_indicators(data)
+
+        latest = data.iloc[-1]
+
+        signal, score = generate_signal(latest)
+
+        # =====================================================
+        # SIGNAL DISPLAY
+        # =====================================================
+
+        st.subheader("🤖 AI QUANT SIGNAL")
+
+        if "BUY" in signal:
+            st.success(f"{signal} | SCORE = {score}")
+
+        elif "SELL" in signal:
+            st.error(f"{signal} | SCORE = {score}")
+
         else:
-            st.error("❌ Market data not found for selected timeframe.")
+            st.warning(f"{signal} | SCORE = {score}")
+
+        # =====================================================
+        # METRICS
+        # =====================================================
+
+        c1, c2, c3, c4, c5 = st.columns(5)
+
+        c1.metric(
+            "PRICE",
+            f"₹ {round(float(latest['Close']),2)}"
+        )
+
+        c2.metric(
+            "RSI",
+            round(float(latest["RSI"]),2)
+        )
+
+        c3.metric(
+            "VWAP",
+            round(float(latest["VWAP"]),2)
+        )
+
+        c4.metric(
+            "MACD",
+            round(float(latest["MACD"]),2)
+        )
+
+        c5.metric(
+            "AI SCORE",
+            score
+        )
+
+        # =====================================================
+        # CHART
+        # =====================================================
+
+        fig = go.Figure()
+
+        fig.add_trace(go.Scatter(
+            x=data.index,
+            y=data["Close"],
+            mode="lines",
+            name="PRICE"
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=data.index,
+            y=data["EMA20"],
+            mode="lines",
+            name="EMA20"
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=data.index,
+            y=data["EMA50"],
+            mode="lines",
+            name="EMA50"
+        ))
+
+        fig.update_layout(
+            template="plotly_dark",
+            height=550,
+            hovermode="x unified"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
     except Exception as e:
-        st.error(f"🔴 LIVE TRACKING ERROR: {str(e)}")
+        st.error(f"🔴 LIVE ENGINE ERROR : {e}")
 
 # =========================================================
-# TAB 2: OPTION CHAIN ANALYZER (MAXIMUM DENSITY ALGORITHM)
+# TAB 2 - OPTION CHAIN ANALYZER
 # =========================================================
+
 with tab2:
-    st.header("📂 INSTITUTIONAL OPTION CHAIN ANALYZER")
-    st.write("Upload official NSE option chain file (CSV / Excel).")
 
-    uploaded_file = st.file_uploader("DROP FILE HERE", type=["csv", "xlsx", "xls"])
+    st.header("📂 NSE OPTION CHAIN ANALYZER")
+
+    uploaded_file = st.file_uploader(
+        "UPLOAD NSE OPTION CHAIN FILE",
+        type=["csv", "xlsx", "xls"]
+    )
+
+    # =====================================================
+    # SAFE NUMERIC CONVERTER
+    # =====================================================
+
+    def clean_numeric(series):
+
+        return pd.to_numeric(
+            series.astype(str)
+            .str.replace(",", "")
+            .str.replace("--", "0")
+            .str.strip(),
+            errors="coerce"
+        ).fillna(0)
+
+    # =====================================================
+    # FILE PROCESS
+    # =====================================================
 
     if uploaded_file is not None:
+
         try:
+
+            # =================================================
+            # READ FILE
+            # =================================================
+
             if uploaded_file.name.endswith(".csv"):
-                raw_df = pd.read_csv(uploaded_file, engine='python', on_bad_lines='skip', header=None)
+
+                raw_df = pd.read_csv(
+                    uploaded_file,
+                    header=None,
+                    engine="python",
+                    on_bad_lines="skip"
+                )
+
             else:
-                raw_df = pd.read_excel(uploaded_file, header=None)
 
-            if raw_df is not None and not raw_df.empty:
-                # 1. FIND THE REAL HEADER BY DENSITY
-                header_idx = 0
-                max_populated_cells = 0
-                
-                # Scan top 15 rows to find the one with the most data (The true header)
-                for i in range(min(15, len(raw_df))):
-                    row_vals = [str(val).strip().upper() for val in raw_df.iloc[i].values]
-                    row_str = " ".join(row_vals)
-                    
-                    # Ensure it's an option chain row
-                    if "STRIKE" in row_str or "OI" in row_str or "VOL" in row_str:
-                        # Count how many cells actually have text
-                        populated_cells = sum(1 for val in row_vals if val not in ['NAN', 'NONE', ''])
-                        
-                        if populated_cells > max_populated_cells:
-                            max_populated_cells = populated_cells
-                            header_idx = i
+                raw_df = pd.read_excel(
+                    uploaded_file,
+                    header=None
+                )
 
-                # 2. EXTRACT REAL HEADERS & DATA
-                raw_headers = [str(val).strip().upper() for val in raw_df.iloc[header_idx].values]
-                data_df = raw_df.iloc[header_idx+1:].copy().reset_index(drop=True)
-                
-                # Drop rows that are completely empty
-                data_df.dropna(how='all', inplace=True)
+            # =================================================
+            # EMPTY CHECK
+            # =================================================
 
-                # 3. SPLIT CALLS AND PUTS SAFELY
-                strike_pos = next((i for i, h in enumerate(raw_headers) if "STRIKE" in h or "STRK" in h), len(raw_headers)//2)
+            if raw_df.empty:
+                st.error("❌ EMPTY FILE")
+                st.stop()
 
-                final_columns = []
-                for i, col in enumerate(raw_headers):
-                    col = col.replace(" ", "_").replace(".", "").replace("\n", "")
-                    if col in ['NAN', 'NONE', '']: 
-                        col = f"DATA_{i}"
+            # =================================================
+            # HEADER DETECTION
+            # =================================================
 
-                    if i < strike_pos: final_columns.append(f"CALL_{col}")
-                    elif i > strike_pos: final_columns.append(f"PUT_{col}")
-                    else: final_columns.append("STRIKE_PRICE")
+            header_idx = 0
+            best_score = 0
 
-                data_df.columns = final_columns
-                st.success("📊 NSE DATA DETECTED & STRUCTURED SUCCESSFULLY")
-                
-                # 4. UI SELECTION CONTROLS
-                st.info("🛠️ **MAPPING ENGINE:** Columns automatically categorized into Calls and Puts.")
-                col1, col2, col3 = st.columns(3)
-                cols = list(data_df.columns)
-                
-                guess_strike = "STRIKE_PRICE" if "STRIKE_PRICE" in cols else cols[0]
-                guess_call_oi = next((c for c in cols if c == "CALL_OI" or "CALL_CHNG_IN_OI" in c), cols[1] if len(cols)>1 else cols[0])
-                guess_put_oi = next((c for c in cols if c == "PUT_OI" or "PUT_CHNG_IN_OI" in c), cols[-2] if len(cols)>2 else cols[-1])
+            for i in range(min(20, len(raw_df))):
 
-                selected_strike = col1.selectbox("STRIKE PRICE Column", cols, index=cols.index(guess_strike) if guess_strike in cols else 0)
-                selected_call = col2.selectbox("CALL OI Column", cols, index=cols.index(guess_call_oi) if guess_call_oi in cols else 0)
-                selected_put = col3.selectbox("PUT OI Column", cols, index=cols.index(guess_put_oi) if guess_put_oi in cols else 0)
+                row = raw_df.iloc[i].astype(str)
 
-                with st.expander("🔍 VIEW CLEANED MATRIX DATA"):
-                    st.dataframe(data_df.head(15), use_container_width=True)
+                score = (
+                    row.str.contains(
+                        "OI|STRIKE|VOLUME|PRICE",
+                        case=False,
+                        regex=True
+                    ).sum()
+                )
 
-                # 5. MATH & CHART EXECUTION
-                if st.button("🚀 EXECUTE AI QUANTS", use_container_width=True):
-                    def clean_num(series):
-                        return pd.to_numeric(series.astype(str).str.replace(',', '').str.strip(), errors='coerce').fillna(0)
+                if score > best_score:
+                    best_score = score
+                    header_idx = i
 
-                    if selected_strike and selected_call and selected_put:
-                        strikes = clean_num(data_df[selected_strike])
-                        c_oi = clean_num(data_df[selected_call])
-                        p_oi = clean_num(data_df[selected_put])
-                        
-                        valid_mask = (strikes > 0) & ((c_oi > 0) | (p_oi > 0))
-                        strikes, c_oi, p_oi = strikes[valid_mask], c_oi[valid_mask], p_oi[valid_mask]
+            # =================================================
+            # CREATE DATAFRAME
+            # =================================================
 
-                        total_c_oi = c_oi.sum()
-                        total_p_oi = p_oi.sum()
-                        pcr = total_p_oi / total_c_oi if total_c_oi > 0 else 1.0
+            headers = raw_df.iloc[header_idx].astype(str)
 
-                        resistance = strikes.iloc[c_oi.idxmax()] if not c_oi.empty else 0
-                        support = strikes.iloc[p_oi.idxmax()] if not p_oi.empty else 0
+            headers = [
+                h.strip().upper().replace(" ", "_")
+                for h in headers
+            ]
 
-                        if pcr >= 1.15: signal, color = "🚀 BULLISH (Strong Put Support)", st.success
-                        elif pcr <= 0.85: signal, color = "🔻 BEARISH (Call Overwriting)", st.error
-                        else: signal, color = "⚠️ RANGEBOUND / NEUTRAL", st.warning
+            # DUPLICATE FIX
 
-                        st.subheader("🤖 DERIVATIVE MATRIX REPORT")
-                        color(f"🎯 DIRECTION: {signal}")
+            unique_headers = []
+            counts = {}
 
-                        m1, m2, m3, m4 = st.columns(4)
-                        m1.metric("PUT-CALL RATIO (PCR)", round(pcr, 2))
-                        m2.metric("SUPPORT (MAX PUT OI)", f"₹ {int(support)}")
-                        m3.metric("RESISTANCE (MAX CALL OI)", f"₹ {int(resistance)}")
-                        m4.metric("TOTAL OPEN CONTRACTS", f"{int(total_c_oi + total_p_oi):,}")
+            for h in headers:
 
-                        fig_bar = go.Figure()
-                        fig_bar.add_trace(go.Bar(x=strikes, y=c_oi, name='Call OI (Resistance)', marker_color='#EF4444'))
-                        fig_bar.add_trace(go.Bar(x=strikes, y=p_oi, name='Put OI (Support)', marker_color='#10B981'))
-                        fig_bar.update_layout(template="plotly_dark", barmode='group', height=450, title="OPEN INTEREST WALLS", xaxis_title="Strike Price", yaxis_title="OI Contracts")
-                        st.plotly_chart(fig_bar, use_container_width=True)
-                    else:
-                        st.error("❌ Missing required columns.")
+                if h in counts:
+                    counts[h] += 1
+                    h = f"{h}_{counts[h]}"
+                else:
+                    counts[h] = 0
+
+                unique_headers.append(h)
+
+            data_df = raw_df.iloc[header_idx + 1:].copy()
+
+            data_df.columns = unique_headers
+
+            data_df.dropna(
+                how="all",
+                inplace=True
+            )
+
+            data_df.reset_index(
+                drop=True,
+                inplace=True
+            )
+
+            # =================================================
+            # STRIKE DETECTION
+            # =================================================
+
+            strike_col = next(
+                (
+                    c for c in data_df.columns
+                    if "STRIKE" in c
+                ),
+                data_df.columns[0]
+            )
+
+            call_col = next(
+                (
+                    c for c in data_df.columns
+                    if "OI" in c
+                ),
+                data_df.columns[1]
+            )
+
+            put_col = next(
+                (
+                    c for c in reversed(data_df.columns)
+                    if "OI" in c
+                ),
+                data_df.columns[-1]
+            )
+
+            # =================================================
+            # COLUMN UI
+            # =================================================
+
+            c1, c2, c3 = st.columns(3)
+
+            selected_strike = c1.selectbox(
+                "STRIKE",
+                data_df.columns,
+                index=list(data_df.columns).index(strike_col)
+            )
+
+            selected_call = c2.selectbox(
+                "CALL OI",
+                data_df.columns,
+                index=list(data_df.columns).index(call_col)
+            )
+
+            selected_put = c3.selectbox(
+                "PUT OI",
+                data_df.columns,
+                index=list(data_df.columns).index(put_col)
+            )
+
+            # =================================================
+            # SHOW DATA
+            # =================================================
+
+            with st.expander("📊 VIEW CLEANED DATA"):
+
+                st.dataframe(
+                    data_df.head(20),
+                    use_container_width=True
+                )
+
+            # =================================================
+            # EXECUTION
+            # =================================================
+
+            if st.button("🚀 EXECUTE AI OPTION ANALYSIS"):
+
+                strikes = clean_numeric(
+                    data_df[selected_strike]
+                )
+
+                call_oi = clean_numeric(
+                    data_df[selected_call]
+                )
+
+                put_oi = clean_numeric(
+                    data_df[selected_put]
+                )
+
+                valid_mask = (
+                    (strikes > 0)
+                )
+
+                strikes = strikes[valid_mask].reset_index(drop=True)
+                call_oi = call_oi[valid_mask].reset_index(drop=True)
+                put_oi = put_oi[valid_mask].reset_index(drop=True)
+
+                # =============================================
+                # EMPTY CHECK
+                # =============================================
+
+                if len(strikes) == 0:
+                    st.error("❌ NO VALID STRIKE DATA")
+                    st.stop()
+
+                # =============================================
+                # PCR
+                # =============================================
+
+                total_call = call_oi.sum()
+                total_put = put_oi.sum()
+
+                pcr = (
+                    total_put / total_call
+                    if total_call > 0
+                    else 0
+                )
+
+                # =============================================
+                # SUPPORT / RESISTANCE
+                # =============================================
+
+                support_idx = put_oi.idxmax()
+                resistance_idx = call_oi.idxmax()
+
+                support = strikes.iloc[support_idx]
+                resistance = strikes.iloc[resistance_idx]
+
+                # =============================================
+                # SIGNAL
+                # =============================================
+
+                if pcr > 1.15:
+                    signal = "🚀 BULLISH"
+
+                elif pcr < 0.85:
+                    signal = "🔻 BEARISH"
+
+                else:
+                    signal = "⚠️ SIDEWAYS"
+
+                # =============================================
+                # REPORT
+                # =============================================
+
+                st.subheader("🤖 OPTION CHAIN REPORT")
+
+                if "BULLISH" in signal:
+                    st.success(signal)
+
+                elif "BEARISH" in signal:
+                    st.error(signal)
+
+                else:
+                    st.warning(signal)
+
+                m1, m2, m3, m4 = st.columns(4)
+
+                m1.metric(
+                    "PCR",
+                    round(pcr, 2)
+                )
+
+                m2.metric(
+                    "SUPPORT",
+                    f"₹ {int(support)}"
+                )
+
+                m3.metric(
+                    "RESISTANCE",
+                    f"₹ {int(resistance)}"
+                )
+
+                m4.metric(
+                    "TOTAL OI",
+                    f"{int(total_call + total_put):,}"
+                )
+
+                # =============================================
+                # CHART
+                # =============================================
+
+                fig2 = go.Figure()
+
+                fig2.add_trace(go.Bar(
+                    x=strikes,
+                    y=call_oi,
+                    name="CALL OI"
+                ))
+
+                fig2.add_trace(go.Bar(
+                    x=strikes,
+                    y=put_oi,
+                    name="PUT OI"
+                ))
+
+                fig2.update_layout(
+                    template="plotly_dark",
+                    barmode="group",
+                    height=550,
+                    title="OI WALL ANALYSIS"
+                )
+
+                st.plotly_chart(
+                    fig2,
+                    use_container_width=True
+                )
+
+                # =============================================
+                # DOWNLOAD CLEAN DATA
+                # =============================================
+
+                csv = data_df.to_csv(index=False)
+
+                st.download_button(
+                    "📥 DOWNLOAD CLEAN DATA",
+                    csv,
+                    file_name="clean_option_chain.csv",
+                    mime="text/csv"
+                )
+
         except Exception as e:
-            st.error(f"🔴 DATA PARSING ERROR: {str(e)}")
+
+            st.error(f"🔴 OPTION ENGINE ERROR : {e}")
 
 # =========================================================
-# SYSTEM FOOTER
+# FOOTER
 # =========================================================
+
 st.markdown("---")
-st.caption("🚀 NSE AI PRO MAX V4.0 | Institutional Quantitative High-Frequency Engine")
+
+st.caption(
+    "🚀 NSE AI PRO MAX V4.1 | Institutional AI Quant Engine"
+)
