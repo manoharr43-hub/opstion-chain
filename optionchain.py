@@ -1,36 +1,28 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V4.1 - ULTRA STABLE ENGINE
+# 🚀 NSE AI PRO MAX V5.0 - INSTITUTIONAL LIVE ENGINE
 # =========================================================
 
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import requests
 import plotly.graph_objects as go
 import pytz
 from datetime import datetime
-
-# =========================================================
-# OPTIONAL AUTO REFRESH
-# =========================================================
-
-try:
-    from streamlit_autorefresh import st_autorefresh
-except:
-    st_autorefresh = None
 
 # =========================================================
 # PAGE CONFIG
 # =========================================================
 
 st.set_page_config(
-    page_title="NSE AI PRO MAX V4.1",
+    page_title="NSE AI PRO MAX V5.0",
     page_icon="🚀",
     layout="wide"
 )
 
 # =========================================================
-# DARK UI
+# CUSTOM CSS
 # =========================================================
 
 st.markdown("""
@@ -47,9 +39,9 @@ st.markdown("""
 
 .stMetric {
     background-color: #1F2937;
-    padding: 15px;
-    border-radius: 12px;
     border: 1px solid #374151;
+    border-radius: 12px;
+    padding: 15px;
 }
 
 h1,h2,h3,h4 {
@@ -61,22 +53,22 @@ div.stButton > button:first-child {
     color: white;
     border-radius: 8px;
     border: none;
-    font-weight: bold;
     width: 100%;
+    font-weight: bold;
 }
 
 </style>
 """, unsafe_allow_html=True)
 
 # =========================================================
-# HEADER
+# TITLE
 # =========================================================
 
-st.title("🚀 NSE AI PRO MAX V4.1")
-st.caption("Institutional Quant AI Dashboard + Option Chain Intelligence")
+st.title("🚀 NSE AI PRO MAX V5.0")
+st.caption("Institutional AI Trading + Live Option Chain System")
 
 # =========================================================
-# NSE STOCK LIST
+# NSE STOCK DATABASE
 # =========================================================
 
 nse_stocks = {
@@ -110,35 +102,25 @@ selected_stock = st.sidebar.selectbox(
 )
 
 interval = st.sidebar.selectbox(
-    "TIMEFRAME",
+    "SELECT INTERVAL",
     ["5m", "15m", "30m", "1h"]
 )
 
 period = st.sidebar.selectbox(
-    "PERIOD",
+    "SELECT PERIOD",
     ["1d", "5d", "1mo"]
 )
 
 ticker = nse_stocks[selected_stock]
 
 # =========================================================
-# AUTO REFRESH
+# TIME
 # =========================================================
 
-if st_autorefresh:
-    st_autorefresh(interval=60000, key="refresh")
-    st.sidebar.success("🟢 LIVE AUTO REFRESH ACTIVE")
-else:
-    st.sidebar.warning("⚠️ Install streamlit-autorefresh")
-
-# =========================================================
-# TIMEZONE
-# =========================================================
-
-india_tz = pytz.timezone("Asia/Kolkata")
+india = pytz.timezone("Asia/Kolkata")
 
 st.sidebar.info(
-    datetime.now(india_tz).strftime(
+    datetime.now(india).strftime(
         "🕒 %d-%m-%Y %H:%M:%S IST"
     )
 )
@@ -147,18 +129,40 @@ st.sidebar.info(
 # MARKET STATUS
 # =========================================================
 
-current_hour = datetime.now(india_tz).hour
+hour = datetime.now(india).hour
 
-if 9 <= current_hour <= 15:
+if 9 <= hour <= 15:
     st.sidebar.success("🟢 MARKET OPEN")
 else:
     st.sidebar.error("🔴 MARKET CLOSED")
 
 # =========================================================
-# INDICATOR ENGINE
+# CACHE MARKET DATA
 # =========================================================
 
-def calculate_indicators(df):
+@st.cache_data(ttl=60)
+
+def load_market_data(ticker, interval, period):
+
+    data = yf.download(
+        ticker,
+        interval=interval,
+        period=period,
+        progress=False,
+        auto_adjust=True,
+        threads=True
+    )
+
+    if isinstance(data.columns, pd.MultiIndex):
+        data.columns = data.columns.get_level_values(0)
+
+    return data
+
+# =========================================================
+# TECHNICAL INDICATORS
+# =========================================================
+
+def add_indicators(df):
 
     df = df.copy()
 
@@ -205,8 +209,15 @@ def calculate_indicators(df):
         (df["Volume"].cumsum() + 1e-10)
     )
 
-    df = df.fillna(method="bfill")
-    df = df.fillna(0)
+    # VOLUME SPIKE
+
+    df["VOL_AVG"] = df["Volume"].rolling(20).mean()
+
+    df["VOLUME_SPIKE"] = (
+        df["Volume"] > df["VOL_AVG"] * 2
+    )
+
+    df.fillna(0, inplace=True)
 
     return df
 
@@ -214,7 +225,7 @@ def calculate_indicators(df):
 # AI SIGNAL ENGINE
 # =========================================================
 
-def generate_signal(latest):
+def ai_signal(latest):
 
     score = 0
 
@@ -230,11 +241,11 @@ def generate_signal(latest):
     if 55 <= latest["RSI"] <= 70:
         score += 20
 
-    elif latest["RSI"] > 75:
-        score -= 15
-
     elif latest["RSI"] < 30:
         score += 15
+
+    elif latest["RSI"] > 75:
+        score -= 15
 
     # MACD
 
@@ -250,77 +261,141 @@ def generate_signal(latest):
     else:
         score -= 20
 
+    # VOLUME
+
+    if latest["VOLUME_SPIKE"]:
+        score += 10
+
     # SIGNAL
 
     if score >= 70:
-        return "🚀 STRONG BUY", score
+        signal = "🚀 STRONG BUY"
 
     elif score >= 30:
-        return "✅ BUY", score
+        signal = "✅ BUY"
 
     elif score <= -70:
-        return "🚨 STRONG SELL", score
+        signal = "🚨 STRONG SELL"
 
     elif score <= -30:
-        return "🔻 SELL", score
+        signal = "🔻 SELL"
 
-    return "⚠️ SIDEWAYS", score
+    else:
+        signal = "⚠️ SIDEWAYS"
+
+    confidence = min(abs(score), 95)
+
+    return signal, score, confidence
+
+# =========================================================
+# LIVE OPTION CHAIN API
+# =========================================================
+
+@st.cache_data(ttl=60)
+
+def get_option_chain(symbol="NIFTY"):
+
+    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+
+    headers = {
+        "user-agent": "Mozilla/5.0"
+    }
+
+    session = requests.Session()
+
+    session.get(
+        "https://www.nseindia.com",
+        headers=headers
+    )
+
+    response = session.get(
+        url,
+        headers=headers
+    )
+
+    data = response.json()
+
+    records = data["records"]["data"]
+
+    rows = []
+
+    for item in records:
+
+        strike = item.get("strikePrice", 0)
+
+        ce = item.get("CE", {})
+        pe = item.get("PE", {})
+
+        rows.append({
+
+            "STRIKE": strike,
+
+            "CALL_OI": ce.get("openInterest", 0),
+            "CALL_CHG_OI": ce.get("changeinOpenInterest", 0),
+            "CALL_VOL": ce.get("totalTradedVolume", 0),
+
+            "PUT_OI": pe.get("openInterest", 0),
+            "PUT_CHG_OI": pe.get("changeinOpenInterest", 0),
+            "PUT_VOL": pe.get("totalTradedVolume", 0)
+
+        })
+
+    return pd.DataFrame(rows)
 
 # =========================================================
 # TABS
 # =========================================================
 
-tab1, tab2 = st.tabs([
-    "📈 LIVE TECHNICAL DASHBOARD",
-    "📂 OPTION CHAIN ANALYZER"
+tab1, tab2, tab3 = st.tabs([
+    "📈 LIVE TECHNICAL",
+    "📂 LIVE OPTION CHAIN",
+    "🤖 AI SCANNER"
 ])
 
 # =========================================================
-# TAB 1
+# TAB 1 - TECHNICAL ANALYSIS
 # =========================================================
 
 with tab1:
 
     try:
 
-        data = yf.download(
+        data = load_market_data(
             ticker,
-            interval=interval,
-            period=period,
-            progress=False,
-            auto_adjust=True,
-            threads=True
+            interval,
+            period
         )
 
         if data.empty:
-            st.error("❌ No market data found.")
+            st.error("❌ NO MARKET DATA")
             st.stop()
 
-        # MultiIndex Fix
-
-        if isinstance(data.columns, pd.MultiIndex):
-            data.columns = data.columns.get_level_values(0)
-
-        data = calculate_indicators(data)
+        data = add_indicators(data)
 
         latest = data.iloc[-1]
 
-        signal, score = generate_signal(latest)
+        signal, score, confidence = ai_signal(latest)
 
         # =====================================================
         # SIGNAL DISPLAY
         # =====================================================
 
-        st.subheader("🤖 AI QUANT SIGNAL")
+        st.subheader("🤖 AI TRADING SIGNAL")
 
         if "BUY" in signal:
-            st.success(f"{signal} | SCORE = {score}")
+            st.success(
+                f"{signal} | CONFIDENCE : {confidence}%"
+            )
 
         elif "SELL" in signal:
-            st.error(f"{signal} | SCORE = {score}")
+            st.error(
+                f"{signal} | CONFIDENCE : {confidence}%"
+            )
 
         else:
-            st.warning(f"{signal} | SCORE = {score}")
+            st.warning(
+                f"{signal} | CONFIDENCE : {confidence}%"
+            )
 
         # =====================================================
         # METRICS
@@ -354,15 +429,17 @@ with tab1:
         )
 
         # =====================================================
-        # CHART
+        # CANDLE CHART
         # =====================================================
 
         fig = go.Figure()
 
-        fig.add_trace(go.Scatter(
+        fig.add_trace(go.Candlestick(
             x=data.index,
-            y=data["Close"],
-            mode="lines",
+            open=data["Open"],
+            high=data["High"],
+            low=data["Low"],
+            close=data["Close"],
             name="PRICE"
         ))
 
@@ -382,8 +459,8 @@ with tab1:
 
         fig.update_layout(
             template="plotly_dark",
-            height=550,
-            hovermode="x unified"
+            height=650,
+            xaxis_rangeslider_visible=False
         )
 
         st.plotly_chart(
@@ -391,351 +468,265 @@ with tab1:
             use_container_width=True
         )
 
+        # =====================================================
+        # SMART MONEY DETECTOR
+        # =====================================================
+
+        spike = latest["VOLUME_SPIKE"]
+
+        st.subheader("🏦 SMART MONEY TRACKER")
+
+        if spike:
+            st.success(
+                "🔥 INSTITUTIONAL VOLUME DETECTED"
+            )
+        else:
+            st.info(
+                "Normal Market Participation"
+            )
+
     except Exception as e:
-        st.error(f"🔴 LIVE ENGINE ERROR : {e}")
+
+        st.error(f"🔴 ERROR : {e}")
 
 # =========================================================
-# TAB 2 - OPTION CHAIN ANALYZER
+# TAB 2 - LIVE OPTION CHAIN
 # =========================================================
 
 with tab2:
 
-    st.header("📂 NSE OPTION CHAIN ANALYZER")
+    st.header("📂 LIVE NSE OPTION CHAIN")
 
-    uploaded_file = st.file_uploader(
-        "UPLOAD NSE OPTION CHAIN FILE",
-        type=["csv", "xlsx", "xls"]
+    option_symbol = st.selectbox(
+        "SELECT OPTION INDEX",
+        ["NIFTY", "BANKNIFTY"]
     )
 
-    # =====================================================
-    # SAFE NUMERIC CONVERTER
-    # =====================================================
+    try:
 
-    def clean_numeric(series):
+        option_df = get_option_chain(option_symbol)
 
-        return pd.to_numeric(
-            series.astype(str)
-            .str.replace(",", "")
-            .str.replace("--", "0")
-            .str.strip(),
-            errors="coerce"
-        ).fillna(0)
+        if option_df.empty:
+            st.error("❌ NO OPTION DATA")
+            st.stop()
 
-    # =====================================================
-    # FILE PROCESS
-    # =====================================================
+        # =====================================================
+        # PCR
+        # =====================================================
 
-    if uploaded_file is not None:
+        total_call = option_df["CALL_OI"].sum()
+        total_put = option_df["PUT_OI"].sum()
+
+        pcr = (
+            total_put / total_call
+            if total_call > 0
+            else 0
+        )
+
+        # =====================================================
+        # SUPPORT / RESISTANCE
+        # =====================================================
+
+        resistance = option_df.loc[
+            option_df["CALL_OI"].idxmax(),
+            "STRIKE"
+        ]
+
+        support = option_df.loc[
+            option_df["PUT_OI"].idxmax(),
+            "STRIKE"
+        ]
+
+        # =====================================================
+        # MAX PAIN
+        # =====================================================
+
+        option_df["TOTAL_OI"] = (
+            option_df["CALL_OI"]
+            +
+            option_df["PUT_OI"]
+        )
+
+        max_pain = option_df.loc[
+            option_df["TOTAL_OI"].idxmax(),
+            "STRIKE"
+        ]
+
+        # =====================================================
+        # SIGNAL
+        # =====================================================
+
+        if pcr > 1.15:
+            direction = "🚀 BULLISH"
+
+        elif pcr < 0.85:
+            direction = "🔻 BEARISH"
+
+        else:
+            direction = "⚠️ SIDEWAYS"
+
+        # =====================================================
+        # METRICS
+        # =====================================================
+
+        st.subheader("🤖 OPTION CHAIN REPORT")
+
+        if "BULLISH" in direction:
+            st.success(direction)
+
+        elif "BEARISH" in direction:
+            st.error(direction)
+
+        else:
+            st.warning(direction)
+
+        m1, m2, m3, m4 = st.columns(4)
+
+        m1.metric(
+            "PCR",
+            round(pcr,2)
+        )
+
+        m2.metric(
+            "SUPPORT",
+            int(support)
+        )
+
+        m3.metric(
+            "RESISTANCE",
+            int(resistance)
+        )
+
+        m4.metric(
+            "MAX PAIN",
+            int(max_pain)
+        )
+
+        # =====================================================
+        # OI CHART
+        # =====================================================
+
+        fig2 = go.Figure()
+
+        fig2.add_trace(go.Bar(
+            x=option_df["STRIKE"],
+            y=option_df["CALL_OI"],
+            name="CALL OI"
+        ))
+
+        fig2.add_trace(go.Bar(
+            x=option_df["STRIKE"],
+            y=option_df["PUT_OI"],
+            name="PUT OI"
+        ))
+
+        fig2.update_layout(
+            template="plotly_dark",
+            barmode="group",
+            height=650,
+            title="LIVE OPEN INTEREST"
+        )
+
+        st.plotly_chart(
+            fig2,
+            use_container_width=True
+        )
+
+        # =====================================================
+        # OI CHANGE ANALYSIS
+        # =====================================================
+
+        st.subheader("📊 OI CHANGE ANALYSIS")
+
+        total_call_change = option_df["CALL_CHG_OI"].sum()
+        total_put_change = option_df["PUT_CHG_OI"].sum()
+
+        cc1, cc2 = st.columns(2)
+
+        cc1.metric(
+            "CALL OI CHANGE",
+            f"{int(total_call_change):,}"
+        )
+
+        cc2.metric(
+            "PUT OI CHANGE",
+            f"{int(total_put_change):,}"
+        )
+
+        # =====================================================
+        # TABLE
+        # =====================================================
+
+        with st.expander("📂 VIEW FULL OPTION DATA"):
+
+            st.dataframe(
+                option_df,
+                use_container_width=True
+            )
+
+    except Exception as e:
+
+        st.error(f"🔴 OPTION CHAIN ERROR : {e}")
+
+# =========================================================
+# TAB 3 - AI SCANNER
+# =========================================================
+
+with tab3:
+
+    st.header("🤖 MULTI STOCK AI SCANNER")
+
+    scan_results = []
+
+    progress = st.progress(0)
+
+    total = len(nse_stocks)
+
+    for idx, (name, symbol) in enumerate(nse_stocks.items()):
 
         try:
 
-            # =================================================
-            # READ FILE
-            # =================================================
-
-            if uploaded_file.name.endswith(".csv"):
-
-                raw_df = pd.read_csv(
-                    uploaded_file,
-                    header=None,
-                    engine="python",
-                    on_bad_lines="skip"
-                )
-
-            else:
-
-                raw_df = pd.read_excel(
-                    uploaded_file,
-                    header=None
-                )
-
-            # =================================================
-            # EMPTY CHECK
-            # =================================================
-
-            if raw_df.empty:
-                st.error("❌ EMPTY FILE")
-                st.stop()
-
-            # =================================================
-            # HEADER DETECTION
-            # =================================================
-
-            header_idx = 0
-            best_score = 0
-
-            for i in range(min(20, len(raw_df))):
-
-                row = raw_df.iloc[i].astype(str)
-
-                score = (
-                    row.str.contains(
-                        "OI|STRIKE|VOLUME|PRICE",
-                        case=False,
-                        regex=True
-                    ).sum()
-                )
-
-                if score > best_score:
-                    best_score = score
-                    header_idx = i
-
-            # =================================================
-            # CREATE DATAFRAME
-            # =================================================
-
-            headers = raw_df.iloc[header_idx].astype(str)
-
-            headers = [
-                h.strip().upper().replace(" ", "_")
-                for h in headers
-            ]
-
-            # DUPLICATE FIX
-
-            unique_headers = []
-            counts = {}
-
-            for h in headers:
-
-                if h in counts:
-                    counts[h] += 1
-                    h = f"{h}_{counts[h]}"
-                else:
-                    counts[h] = 0
-
-                unique_headers.append(h)
-
-            data_df = raw_df.iloc[header_idx + 1:].copy()
-
-            data_df.columns = unique_headers
-
-            data_df.dropna(
-                how="all",
-                inplace=True
+            df = load_market_data(
+                symbol,
+                "15m",
+                "5d"
             )
 
-            data_df.reset_index(
-                drop=True,
-                inplace=True
-            )
+            if not df.empty:
 
-            # =================================================
-            # STRIKE DETECTION
-            # =================================================
+                df = add_indicators(df)
 
-            strike_col = next(
-                (
-                    c for c in data_df.columns
-                    if "STRIKE" in c
-                ),
-                data_df.columns[0]
-            )
+                latest = df.iloc[-1]
 
-            call_col = next(
-                (
-                    c for c in data_df.columns
-                    if "OI" in c
-                ),
-                data_df.columns[1]
-            )
+                signal, score, confidence = ai_signal(latest)
 
-            put_col = next(
-                (
-                    c for c in reversed(data_df.columns)
-                    if "OI" in c
-                ),
-                data_df.columns[-1]
-            )
+                scan_results.append({
 
-            # =================================================
-            # COLUMN UI
-            # =================================================
+                    "STOCK": name,
+                    "PRICE": round(float(latest["Close"]),2),
+                    "RSI": round(float(latest["RSI"]),2),
+                    "SIGNAL": signal,
+                    "CONFIDENCE": confidence,
+                    "SCORE": score
 
-            c1, c2, c3 = st.columns(3)
+                })
 
-            selected_strike = c1.selectbox(
-                "STRIKE",
-                data_df.columns,
-                index=list(data_df.columns).index(strike_col)
-            )
+        except:
+            pass
 
-            selected_call = c2.selectbox(
-                "CALL OI",
-                data_df.columns,
-                index=list(data_df.columns).index(call_col)
-            )
+        progress.progress((idx + 1) / total)
 
-            selected_put = c3.selectbox(
-                "PUT OI",
-                data_df.columns,
-                index=list(data_df.columns).index(put_col)
-            )
+    scan_df = pd.DataFrame(scan_results)
 
-            # =================================================
-            # SHOW DATA
-            # =================================================
+    if not scan_df.empty:
 
-            with st.expander("📊 VIEW CLEANED DATA"):
-
-                st.dataframe(
-                    data_df.head(20),
-                    use_container_width=True
-                )
-
-            # =================================================
-            # EXECUTION
-            # =================================================
-
-            if st.button("🚀 EXECUTE AI OPTION ANALYSIS"):
-
-                strikes = clean_numeric(
-                    data_df[selected_strike]
-                )
-
-                call_oi = clean_numeric(
-                    data_df[selected_call]
-                )
-
-                put_oi = clean_numeric(
-                    data_df[selected_put]
-                )
-
-                valid_mask = (
-                    (strikes > 0)
-                )
-
-                strikes = strikes[valid_mask].reset_index(drop=True)
-                call_oi = call_oi[valid_mask].reset_index(drop=True)
-                put_oi = put_oi[valid_mask].reset_index(drop=True)
-
-                # =============================================
-                # EMPTY CHECK
-                # =============================================
-
-                if len(strikes) == 0:
-                    st.error("❌ NO VALID STRIKE DATA")
-                    st.stop()
-
-                # =============================================
-                # PCR
-                # =============================================
-
-                total_call = call_oi.sum()
-                total_put = put_oi.sum()
-
-                pcr = (
-                    total_put / total_call
-                    if total_call > 0
-                    else 0
-                )
-
-                # =============================================
-                # SUPPORT / RESISTANCE
-                # =============================================
-
-                support_idx = put_oi.idxmax()
-                resistance_idx = call_oi.idxmax()
-
-                support = strikes.iloc[support_idx]
-                resistance = strikes.iloc[resistance_idx]
-
-                # =============================================
-                # SIGNAL
-                # =============================================
-
-                if pcr > 1.15:
-                    signal = "🚀 BULLISH"
-
-                elif pcr < 0.85:
-                    signal = "🔻 BEARISH"
-
-                else:
-                    signal = "⚠️ SIDEWAYS"
-
-                # =============================================
-                # REPORT
-                # =============================================
-
-                st.subheader("🤖 OPTION CHAIN REPORT")
-
-                if "BULLISH" in signal:
-                    st.success(signal)
-
-                elif "BEARISH" in signal:
-                    st.error(signal)
-
-                else:
-                    st.warning(signal)
-
-                m1, m2, m3, m4 = st.columns(4)
-
-                m1.metric(
-                    "PCR",
-                    round(pcr, 2)
-                )
-
-                m2.metric(
-                    "SUPPORT",
-                    f"₹ {int(support)}"
-                )
-
-                m3.metric(
-                    "RESISTANCE",
-                    f"₹ {int(resistance)}"
-                )
-
-                m4.metric(
-                    "TOTAL OI",
-                    f"{int(total_call + total_put):,}"
-                )
-
-                # =============================================
-                # CHART
-                # =============================================
-
-                fig2 = go.Figure()
-
-                fig2.add_trace(go.Bar(
-                    x=strikes,
-                    y=call_oi,
-                    name="CALL OI"
-                ))
-
-                fig2.add_trace(go.Bar(
-                    x=strikes,
-                    y=put_oi,
-                    name="PUT OI"
-                ))
-
-                fig2.update_layout(
-                    template="plotly_dark",
-                    barmode="group",
-                    height=550,
-                    title="OI WALL ANALYSIS"
-                )
-
-                st.plotly_chart(
-                    fig2,
-                    use_container_width=True
-                )
-
-                # =============================================
-                # DOWNLOAD CLEAN DATA
-                # =============================================
-
-                csv = data_df.to_csv(index=False)
-
-                st.download_button(
-                    "📥 DOWNLOAD CLEAN DATA",
-                    csv,
-                    file_name="clean_option_chain.csv",
-                    mime="text/csv"
-                )
-
-        except Exception as e:
-
-            st.error(f"🔴 OPTION ENGINE ERROR : {e}")
+        st.dataframe(
+            scan_df.sort_values(
+                by="CONFIDENCE",
+                ascending=False
+            ),
+            use_container_width=True
+        )
 
 # =========================================================
 # FOOTER
@@ -744,5 +735,5 @@ with tab2:
 st.markdown("---")
 
 st.caption(
-    "🚀 NSE AI PRO MAX V4.1 | Institutional AI Quant Engine"
+    "🚀 NSE AI PRO MAX V5.0 | Institutional Quant Trading Engine"
 )
