@@ -1,14 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V7.0 SUPREME
-# =========================================================
-# LIVE NSE AI ENGINE
-# SIGNAL TIME SYSTEM
-# EXCEL DOWNLOAD
-# LIVE OPTION CHAIN
-# MAX PAIN ANALYSIS
-# SMART MONEY FLOW
-# AI STOCK SCANNER
-# INSTITUTIONAL DASHBOARD
+# 🚀 NSE AI PRO MAX V8.0 ELITE
 # =========================================================
 
 import streamlit as st
@@ -19,21 +10,30 @@ import requests
 import plotly.graph_objects as go
 import pytz
 import io
+import time
 
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+from streamlit_autorefresh import st_autorefresh
 
 # =========================================================
 # PAGE CONFIG
 # =========================================================
 
 st.set_page_config(
-    page_title="NSE AI PRO MAX V7.0 SUPREME",
+    page_title="NSE AI PRO MAX V8.0 ELITE",
     page_icon="🚀",
     layout="wide"
 )
 
 # =========================================================
-# DARK THEME
+# AUTO REFRESH
+# =========================================================
+
+st_autorefresh(interval=60000, key="refresh")
+
+# =========================================================
+# DARK UI
 # =========================================================
 
 st.markdown("""
@@ -59,15 +59,6 @@ h1,h2,h3,h4 {
     color: white !important;
 }
 
-div.stButton > button:first-child {
-    background-color: #2563EB;
-    color: white;
-    border-radius: 8px;
-    border: none;
-    width: 100%;
-    font-weight: bold;
-}
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -75,109 +66,57 @@ div.stButton > button:first-child {
 # TITLE
 # =========================================================
 
-st.title("🚀 NSE AI PRO MAX V7.0 SUPREME")
-st.caption("Institutional AI Quantitative Trading System")
+st.title("🚀 NSE AI PRO MAX V8.0 ELITE")
+st.caption("Institutional Quantitative Trading Dashboard")
 
 # =========================================================
-# NSE STOCK DATABASE
+# NSE STOCKS
 # =========================================================
 
 nse_stocks = {
 
-    # INDEX
-
     "NIFTY 50": "^NSEI",
     "BANKNIFTY": "^NSEBANK",
 
-    # BANKS
-
+    "RELIANCE": "RELIANCE.NS",
+    "TCS": "TCS.NS",
+    "INFY": "INFY.NS",
     "HDFCBANK": "HDFCBANK.NS",
     "ICICIBANK": "ICICIBANK.NS",
     "SBIN": "SBIN.NS",
     "AXISBANK": "AXISBANK.NS",
-    "KOTAKBANK": "KOTAKBANK.NS",
-    "PNB": "PNB.NS",
-    "BANKBARODA": "BANKBARODA.NS",
-    "FEDERALBNK": "FEDERALBNK.NS",
-    "IDFCFIRSTB": "IDFCFIRSTB.NS",
-
-    # IT
-
-    "TCS": "TCS.NS",
-    "INFY": "INFY.NS",
-    "WIPRO": "WIPRO.NS",
-    "HCLTECH": "HCLTECH.NS",
-    "TECHM": "TECHM.NS",
-    "LTIM": "LTIM.NS",
-
-    # AUTO
-
-    "MARUTI": "MARUTI.NS",
-    "TATAMOTORS": "TATAMOTORS.NS",
-    "M&M": "M&M.NS",
-    "BAJAJ-AUTO": "BAJAJ-AUTO.NS",
-    "HEROMOTOCO": "HEROMOTOCO.NS",
-
-    # PHARMA
-
-    "SUNPHARMA": "SUNPHARMA.NS",
-    "DRREDDY": "DRREDDY.NS",
-    "CIPLA": "CIPLA.NS",
-    "DIVISLAB": "DIVISLAB.NS",
-
-    # FMCG
-
     "ITC": "ITC.NS",
-    "HINDUNILVR": "HINDUNILVR.NS",
-    "NESTLEIND": "NESTLEIND.NS",
-
-    # ENERGY
-
-    "RELIANCE": "RELIANCE.NS",
-    "ONGC": "ONGC.NS",
-    "IOC": "IOC.NS",
-    "NTPC": "NTPC.NS",
-    "POWERGRID": "POWERGRID.NS",
-
-    # METALS
-
-    "TATASTEEL": "TATASTEEL.NS",
-    "JSWSTEEL": "JSWSTEEL.NS",
-    "HINDALCO": "HINDALCO.NS",
-
-    # TELECOM
-
-    "BHARTIARTL": "BHARTIARTL.NS",
-
-    # OTHERS
-
     "LT": "LT.NS",
+    "BHARTIARTL": "BHARTIARTL.NS",
+    "TATAMOTORS": "TATAMOTORS.NS",
+    "MARUTI": "MARUTI.NS",
     "BAJFINANCE": "BAJFINANCE.NS",
-    "BAJAJFINSV": "BAJAJFINSV.NS",
-    "TITAN": "TITAN.NS",
-    "ASIANPAINT": "ASIANPAINT.NS",
-    "IRCTC": "IRCTC.NS",
-    "ZOMATO": "ZOMATO.NS"
+    "HINDUNILVR": "HINDUNILVR.NS",
+    "SUNPHARMA": "SUNPHARMA.NS",
+    "WIPRO": "WIPRO.NS",
+    "POWERGRID": "POWERGRID.NS",
+    "NTPC": "NTPC.NS",
+    "TATASTEEL": "TATASTEEL.NS"
 }
 
 # =========================================================
 # SIDEBAR
 # =========================================================
 
-st.sidebar.header("⚙️ AI CONTROL PANEL")
+st.sidebar.header("⚙️ CONTROL PANEL")
 
 selected_stock = st.sidebar.selectbox(
-    "SELECT NSE STOCK",
-    sorted(list(nse_stocks.keys()))
+    "SELECT STOCK",
+    list(nse_stocks.keys())
 )
 
 interval = st.sidebar.selectbox(
-    "SELECT TIMEFRAME",
+    "TIMEFRAME",
     ["5m", "15m", "30m", "1h"]
 )
 
 period = st.sidebar.selectbox(
-    "SELECT PERIOD",
+    "PERIOD",
     ["1d", "5d", "1mo"]
 )
 
@@ -201,7 +140,11 @@ st.sidebar.info(
 # MARKET STATUS
 # =========================================================
 
-if 9 <= current_time.hour <= 15:
+if (
+    current_time.hour >= 9
+    and
+    current_time.hour <= 15
+):
 
     st.sidebar.success("🟢 MARKET OPEN")
 
@@ -210,14 +153,14 @@ else:
     st.sidebar.error("🔴 MARKET CLOSED")
 
 # =========================================================
-# CACHE DATA
+# DATA LOADER
 # =========================================================
 
 @st.cache_data(ttl=60)
 
-def load_market_data(ticker, interval, period):
+def load_data(ticker, interval, period):
 
-    data = yf.download(
+    df = yf.download(
         ticker,
         interval=interval,
         period=period,
@@ -226,17 +169,43 @@ def load_market_data(ticker, interval, period):
         threads=True
     )
 
-    if isinstance(data.columns, pd.MultiIndex):
+    if isinstance(df.columns, pd.MultiIndex):
 
-        data.columns = data.columns.get_level_values(0)
+        df.columns = df.columns.get_level_values(0)
 
-    return data
+    return df
 
 # =========================================================
-# TECHNICAL INDICATORS
+# ATR
 # =========================================================
 
-def calculate_indicators(df):
+def calculate_atr(df, period=14):
+
+    high_low = df["High"] - df["Low"]
+
+    high_close = np.abs(
+        df["High"] - df["Close"].shift()
+    )
+
+    low_close = np.abs(
+        df["Low"] - df["Close"].shift()
+    )
+
+    tr = pd.concat([
+        high_low,
+        high_close,
+        low_close
+    ], axis=1).max(axis=1)
+
+    atr = tr.rolling(period).mean()
+
+    return atr
+
+# =========================================================
+# INDICATORS
+# =========================================================
+
+def indicators(df):
 
     df = df.copy()
 
@@ -266,7 +235,9 @@ def calculate_indicators(df):
 
     rs = avg_gain / (avg_loss + 1e-10)
 
-    df["RSI"] = 100 - (100 / (1 + rs))
+    df["RSI"] = 100 - (
+        100 / (1 + rs)
+    )
 
     # MACD
 
@@ -276,7 +247,9 @@ def calculate_indicators(df):
 
     df["MACD"] = ema12 - ema26
 
-    df["MACD_SIGNAL"] = df["MACD"].ewm(span=9).mean()
+    df["MACD_SIGNAL"] = (
+        df["MACD"].ewm(span=9).mean()
+    )
 
     # VWAP
 
@@ -286,9 +259,15 @@ def calculate_indicators(df):
         (df["Volume"].cumsum() + 1e-10)
     )
 
-    # SMART MONEY
+    # ATR
 
-    df["VOL_AVG"] = df["Volume"].rolling(20).mean()
+    df["ATR"] = calculate_atr(df)
+
+    # VOLUME
+
+    df["VOL_AVG"] = (
+        df["Volume"].rolling(20).mean()
+    )
 
     df["SMART_MONEY"] = (
         df["Volume"] > df["VOL_AVG"] * 2
@@ -299,83 +278,65 @@ def calculate_indicators(df):
     return df
 
 # =========================================================
-# AI SIGNAL ENGINE
+# AI ENGINE
 # =========================================================
 
-def generate_signal(latest):
+def ai_signal(latest):
 
     score = 0
 
     # EMA
 
     if latest["EMA20"] > latest["EMA50"]:
-
         score += 25
-
     else:
-
         score -= 25
 
     # RSI
 
     if 55 <= latest["RSI"] <= 70:
-
         score += 20
 
     elif latest["RSI"] < 30:
-
         score += 15
 
     elif latest["RSI"] > 75:
-
         score -= 15
 
     # MACD
 
     if latest["MACD"] > latest["MACD_SIGNAL"]:
-
         score += 25
-
     else:
-
         score -= 25
 
     # VWAP
 
     if latest["Close"] > latest["VWAP"]:
-
         score += 20
-
     else:
-
         score -= 20
 
     # SMART MONEY
 
     if latest["SMART_MONEY"]:
-
         score += 10
 
-    # FINAL SIGNAL
+    # SIGNAL
 
     if score >= 70:
-
         signal = "🚀 STRONG BUY"
 
     elif score >= 30:
-
         signal = "✅ BUY"
 
     elif score <= -70:
-
         signal = "🚨 STRONG SELL"
 
     elif score <= -30:
-
         signal = "🔻 SELL"
 
     else:
-
         signal = "⚠️ SIDEWAYS"
 
     confidence = min(abs(score), 95)
@@ -383,159 +344,138 @@ def generate_signal(latest):
     return signal, score, confidence
 
 # =========================================================
-# OPTION CHAIN API
+# OPTION CHAIN
 # =========================================================
 
 @st.cache_data(ttl=60)
 
-def get_option_chain(symbol="NIFTY"):
+def option_chain(symbol="NIFTY"):
 
-    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+    try:
 
-    headers = {
-        "user-agent": "Mozilla/5.0"
-    }
+        url = (
+            f"https://www.nseindia.com/api/"
+            f"option-chain-indices?symbol={symbol}"
+        )
 
-    session = requests.Session()
+        headers = {
+            "user-agent": "Mozilla/5.0"
+        }
 
-    session.get(
-        "https://www.nseindia.com",
-        headers=headers
-    )
+        session = requests.Session()
 
-    response = session.get(
-        url,
-        headers=headers
-    )
+        session.get(
+            "https://www.nseindia.com",
+            headers=headers,
+            timeout=10
+        )
 
-    data = response.json()
+        response = session.get(
+            url,
+            headers=headers,
+            timeout=10
+        )
 
-    records = data["records"]["data"]
+        data = response.json()
 
-    rows = []
+        records = data["records"]["data"]
 
-    for item in records:
+        rows = []
 
-        strike = item.get("strikePrice", 0)
+        for item in records:
 
-        ce = item.get("CE", {})
+            strike = item.get("strikePrice", 0)
 
-        pe = item.get("PE", {})
+            ce = item.get("CE", {})
+            pe = item.get("PE", {})
 
-        rows.append({
+            rows.append({
 
-            "STRIKE": strike,
+                "STRIKE": strike,
 
-            "CALL_OI": ce.get(
-                "openInterest", 0
-            ),
+                "CALL_OI":
+                ce.get("openInterest", 0),
 
-            "PUT_OI": pe.get(
-                "openInterest", 0
-            ),
+                "PUT_OI":
+                pe.get("openInterest", 0),
 
-            "CALL_CHG_OI": ce.get(
-                "changeinOpenInterest", 0
-            ),
+                "CALL_CHG":
+                ce.get(
+                    "changeinOpenInterest", 0
+                ),
 
-            "PUT_CHG_OI": pe.get(
-                "changeinOpenInterest", 0
-            )
-        })
+                "PUT_CHG":
+                pe.get(
+                    "changeinOpenInterest", 0
+                )
+            })
 
-    return pd.DataFrame(rows)
+        return pd.DataFrame(rows)
+
+    except:
+
+        return pd.DataFrame()
 
 # =========================================================
 # TABS
 # =========================================================
 
 tab1, tab2, tab3 = st.tabs([
-    "📈 LIVE TECHNICAL",
+    "📈 TECHNICAL",
     "📂 OPTION CHAIN",
     "🤖 AI SCANNER"
 ])
 
 # =========================================================
-# TAB 1 - TECHNICAL ANALYSIS
+# TECHNICAL TAB
 # =========================================================
 
 with tab1:
 
     try:
 
-        data = load_market_data(
+        df = load_data(
             ticker,
             interval,
             period
         )
 
-        if data.empty:
+        if df.empty:
 
-            st.error("❌ NO MARKET DATA")
+            st.error("NO DATA")
 
             st.stop()
 
-        data = calculate_indicators(data)
+        df = indicators(df)
 
-        latest = data.iloc[-1]
+        latest = df.iloc[-1]
 
-        signal, score, confidence = generate_signal(latest)
+        signal, score, confidence = ai_signal(
+            latest
+        )
 
-        signal_time = datetime.now(india).strftime(
+        signal_time = datetime.now(
+            india
+        ).strftime(
             "%d-%m-%Y %H:%M:%S"
         )
 
-        # =====================================================
-        # SIGNAL DISPLAY
-        # =====================================================
+        # SIGNAL
 
-        st.subheader("🤖 AI SIGNAL ENGINE")
+        st.subheader("🤖 AI SIGNAL")
 
-        if "BUY" in signal:
+        st.success(
+            f"{signal} | "
+            f"CONFIDENCE : {confidence}%"
+        )
 
-            st.success(
-                f"""
-                {signal}
-                
-                🎯 CONFIDENCE : {confidence}%
-                
-                ⏰ SIGNAL TIME : {signal_time} IST
-                """
-            )
-
-        elif "SELL" in signal:
-
-            st.error(
-                f"""
-                {signal}
-                
-                🎯 CONFIDENCE : {confidence}%
-                
-                ⏰ SIGNAL TIME : {signal_time} IST
-                """
-            )
-
-        else:
-
-            st.warning(
-                f"""
-                {signal}
-                
-                🎯 CONFIDENCE : {confidence}%
-                
-                ⏰ SIGNAL TIME : {signal_time} IST
-                """
-            )
-
-        # =====================================================
         # METRICS
-        # =====================================================
 
-        c1, c2, c3, c4, c5 = st.columns(5)
+        c1, c2, c3, c4, c5, c6 = st.columns(6)
 
         c1.metric(
             "PRICE",
-            f"₹ {round(float(latest['Close']),2)}"
+            round(float(latest["Close"]),2)
         )
 
         c2.metric(
@@ -549,47 +489,76 @@ with tab1:
         )
 
         c4.metric(
+            "ATR",
+            round(float(latest["ATR"]),2)
+        )
+
+        c5.metric(
             "MACD",
             round(float(latest["MACD"]),2)
         )
 
-        c5.metric(
+        c6.metric(
             "AI SCORE",
             score
         )
 
-        # =====================================================
+        # ATR SL TARGET
+
+        stoploss = (
+            latest["Close"]
+            -
+            latest["ATR"] * 1.5
+        )
+
+        target = (
+            latest["Close"]
+            +
+            latest["ATR"] * 3
+        )
+
+        s1, s2 = st.columns(2)
+
+        s1.success(
+            f"🛑 STOPLOSS : "
+            f"{round(float(stoploss),2)}"
+        )
+
+        s2.success(
+            f"🎯 TARGET : "
+            f"{round(float(target),2)}"
+        )
+
         # CHART
-        # =====================================================
 
         fig = go.Figure()
 
         fig.add_trace(go.Candlestick(
-            x=data.index,
-            open=data["Open"],
-            high=data["High"],
-            low=data["Low"],
-            close=data["Close"],
+            x=df.index,
+            open=df["Open"],
+            high=df["High"],
+            low=df["Low"],
+            close=df["Close"],
             name="PRICE"
         ))
 
         fig.add_trace(go.Scatter(
-            x=data.index,
-            y=data["EMA20"],
+            x=df.index,
+            y=df["EMA20"],
             mode="lines",
             name="EMA20"
         ))
 
         fig.add_trace(go.Scatter(
-            x=data.index,
-            y=data["EMA50"],
+            x=df.index,
+            y=df["EMA50"],
             mode="lines",
             name="EMA50"
         ))
 
         fig.update_layout(
             template="plotly_dark",
-            height=650,
+            height=700,
             xaxis_rangeslider_visible=False
         )
 
@@ -598,114 +567,79 @@ with tab1:
             use_container_width=True
         )
 
-        # =====================================================
         # SMART MONEY
-        # =====================================================
 
-        st.subheader("🏦 SMART MONEY FLOW")
+        st.subheader("🏦 SMART MONEY")
 
         if latest["SMART_MONEY"]:
 
             st.success(
-                "🔥 INSTITUTIONAL BUYING DETECTED"
+                "🔥 INSTITUTIONAL ACTIVITY"
             )
 
         else:
 
             st.info(
-                "Normal Trading Activity"
+                "Normal Market Flow"
             )
 
-        # =====================================================
-        # EXCEL DOWNLOAD
-        # =====================================================
+        # DOWNLOAD
 
-        signal_df = pd.DataFrame([{
+        export_df = pd.DataFrame([{
 
             "TIME": signal_time,
-
             "STOCK": selected_stock,
-
-            "PRICE": round(
-                float(latest["Close"]),2
-            ),
-
-            "RSI": round(
-                float(latest["RSI"]),2
-            ),
-
-            "VWAP": round(
-                float(latest["VWAP"]),2
-            ),
-
-            "MACD": round(
-                float(latest["MACD"]),2
-            ),
-
+            "PRICE": latest["Close"],
+            "RSI": latest["RSI"],
+            "VWAP": latest["VWAP"],
+            "ATR": latest["ATR"],
             "SIGNAL": signal,
+            "CONFIDENCE": confidence
 
-            "CONFIDENCE": confidence,
-
-            "AI_SCORE": score
         }])
 
-        excel_buffer = io.BytesIO()
+        excel = io.BytesIO()
 
         with pd.ExcelWriter(
-            excel_buffer,
+            excel,
             engine="openpyxl"
         ) as writer:
 
-            signal_df.to_excel(
+            export_df.to_excel(
                 writer,
-                index=False,
-                sheet_name="AI_SIGNAL"
+                index=False
             )
-
-        excel_data = excel_buffer.getvalue()
 
         st.download_button(
 
-            label="📥 DOWNLOAD SIGNAL EXCEL",
+            "📥 DOWNLOAD SIGNAL",
 
-            data=excel_data,
+            data=excel.getvalue(),
 
-            file_name=f"{selected_stock}_AI_SIGNAL.xlsx",
-
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            file_name=
+            f"{selected_stock}_SIGNAL.xlsx"
         )
-
-        # =====================================================
-        # SIGNAL DATA
-        # =====================================================
-
-        with st.expander("📂 VIEW SIGNAL DATA"):
-
-            st.dataframe(
-                signal_df,
-                use_container_width=True
-            )
 
     except Exception as e:
 
-        st.error(f"🔴 ERROR : {e}")
+        st.error(str(e))
 
 # =========================================================
-# TAB 2 - OPTION CHAIN
+# OPTION CHAIN TAB
 # =========================================================
 
 with tab2:
 
-    st.header("📂 LIVE NSE OPTION CHAIN")
+    st.header("📂 LIVE OPTION CHAIN")
 
     option_symbol = st.selectbox(
-        "SELECT INDEX",
+        "INDEX",
         ["NIFTY", "BANKNIFTY"]
     )
 
-    try:
+    option_df = option_chain(option_symbol)
 
-        option_df = get_option_chain(option_symbol)
+    if not option_df.empty:
 
         total_call = option_df["CALL_OI"].sum()
 
@@ -738,51 +672,14 @@ with tab2:
             "STRIKE"
         ]
 
-        # =====================================================
-        # SIGNAL
-        # =====================================================
-
-        if pcr > 1.15:
-
-            st.success("🚀 BULLISH")
-
-        elif pcr < 0.85:
-
-            st.error("🔻 BEARISH")
-
-        else:
-
-            st.warning("⚠️ SIDEWAYS")
-
-        # =====================================================
-        # METRICS
-        # =====================================================
-
         m1, m2, m3, m4 = st.columns(4)
 
-        m1.metric(
-            "PCR",
-            round(pcr,2)
-        )
+        m1.metric("PCR", round(pcr,2))
+        m2.metric("SUPPORT", int(support))
+        m3.metric("RESISTANCE", int(resistance))
+        m4.metric("MAX PAIN", int(max_pain))
 
-        m2.metric(
-            "SUPPORT",
-            int(support)
-        )
-
-        m3.metric(
-            "RESISTANCE",
-            int(resistance)
-        )
-
-        m4.metric(
-            "MAX PAIN",
-            int(max_pain)
-        )
-
-        # =====================================================
         # OI CHART
-        # =====================================================
 
         fig2 = go.Figure()
 
@@ -801,8 +698,7 @@ with tab2:
         fig2.update_layout(
             template="plotly_dark",
             barmode="group",
-            height=650,
-            title="LIVE OI ANALYSIS"
+            height=700
         )
 
         st.plotly_chart(
@@ -810,47 +706,13 @@ with tab2:
             use_container_width=True
         )
 
-        # =====================================================
-        # DOWNLOAD OPTION DATA
-        # =====================================================
-
-        option_excel = io.BytesIO()
-
-        with pd.ExcelWriter(
-            option_excel,
-            engine="openpyxl"
-        ) as writer:
-
-            option_df.to_excel(
-                writer,
-                index=False,
-                sheet_name="OPTION_CHAIN"
-            )
-
-        option_data = option_excel.getvalue()
-
-        st.download_button(
-
-            label="📥 DOWNLOAD OPTION CHAIN EXCEL",
-
-            data=option_data,
-
-            file_name=f"{option_symbol}_OPTION_CHAIN.xlsx",
-
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-    except Exception as e:
-
-        st.error(f"🔴 OPTION ERROR : {e}")
-
 # =========================================================
-# TAB 3 - AI SCANNER
+# AI SCANNER
 # =========================================================
 
 with tab3:
 
-    st.header("🤖 NSE AI SCANNER")
+    st.header("🤖 AI SCANNER")
 
     results = []
 
@@ -858,65 +720,91 @@ with tab3:
 
     total = len(nse_stocks)
 
-    for idx, (name, symbol) in enumerate(nse_stocks.items()):
+    def process_stock(item):
+
+        name, symbol = item
 
         try:
 
-            df = load_market_data(
+            df = load_data(
                 symbol,
                 "15m",
                 "5d"
             )
 
-            if not df.empty:
+            if df.empty:
 
-                df = calculate_indicators(df)
+                return None
 
-                latest = df.iloc[-1]
+            df = indicators(df)
 
-                signal, score, confidence = generate_signal(latest)
+            latest = df.iloc[-1]
 
-                results.append({
+            signal, score, confidence = ai_signal(
+                latest
+            )
 
-                    "STOCK": name,
+            return {
 
-                    "PRICE": round(
-                        float(latest["Close"]),2
-                    ),
+                "STOCK": name,
 
-                    "RSI": round(
-                        float(latest["RSI"]),2
-                    ),
+                "PRICE":
+                round(
+                    float(latest["Close"]),2
+                ),
 
-                    "SIGNAL": signal,
+                "RSI":
+                round(
+                    float(latest["RSI"]),2
+                ),
 
-                    "CONFIDENCE": confidence,
+                "SIGNAL": signal,
 
-                    "SCORE": score
-                })
+                "CONFIDENCE":
+                confidence,
+
+                "SCORE": score
+            }
 
         except:
-            pass
 
-        progress.progress(
-            (idx + 1) / total
-        )
+            return None
+
+    with ThreadPoolExecutor(
+        max_workers=10
+    ) as executor:
+
+        for idx, result in enumerate(
+
+            executor.map(
+                process_stock,
+                nse_stocks.items()
+            )
+        ):
+
+            if result:
+
+                results.append(result)
+
+            progress.progress(
+                (idx + 1) / total
+            )
 
     scan_df = pd.DataFrame(results)
 
     if not scan_df.empty:
 
+        scan_df = scan_df.sort_values(
+            by="CONFIDENCE",
+            ascending=False
+        )
+
         st.dataframe(
-            scan_df.sort_values(
-                by="CONFIDENCE",
-                ascending=False
-            ),
+            scan_df,
             use_container_width=True
         )
 
-        # =====================================================
-        # SCANNER DOWNLOAD
-        # =====================================================
+        # DOWNLOAD
 
         scan_excel = io.BytesIO()
 
@@ -927,21 +815,16 @@ with tab3:
 
             scan_df.to_excel(
                 writer,
-                index=False,
-                sheet_name="AI_SCANNER"
+                index=False
             )
-
-        scan_data = scan_excel.getvalue()
 
         st.download_button(
 
-            label="📥 DOWNLOAD AI SCANNER EXCEL",
+            "📥 DOWNLOAD AI SCANNER",
 
-            data=scan_data,
+            data=scan_excel.getvalue(),
 
-            file_name="NSE_AI_SCANNER.xlsx",
-
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            file_name="AI_SCANNER.xlsx"
         )
 
 # =========================================================
@@ -951,5 +834,5 @@ with tab3:
 st.markdown("---")
 
 st.caption(
-    "🚀 NSE AI PRO MAX V7.0 SUPREME | Institutional Quantitative Trading System"
+    "🚀 NSE AI PRO MAX V8.0 ELITE"
 )
