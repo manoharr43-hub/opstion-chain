@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V8.0 ELITE
+# 🚀 NSE AI PRO MAX V8.1 INSTITUTIONAL
 # =========================================================
 
 import streamlit as st
@@ -11,17 +11,20 @@ import plotly.graph_objects as go
 import pytz
 import io
 import time
+import urllib3
 
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from streamlit_autorefresh import st_autorefresh
+
+urllib3.disable_warnings()
 
 # =========================================================
 # PAGE CONFIG
 # =========================================================
 
 st.set_page_config(
-    page_title="NSE AI PRO MAX V8.0 ELITE",
+    page_title="NSE AI PRO MAX V8.1",
     page_icon="🚀",
     layout="wide"
 )
@@ -50,13 +53,22 @@ st.markdown("""
 
 .stMetric {
     background-color: #1F2937;
-    border: 1px solid #374151;
     border-radius: 12px;
     padding: 15px;
+    border: 1px solid #374151;
 }
 
 h1,h2,h3,h4 {
     color: white !important;
+}
+
+div.stButton > button:first-child {
+    background-color: #2563EB;
+    color: white;
+    border-radius: 10px;
+    width: 100%;
+    border: none;
+    font-weight: bold;
 }
 
 </style>
@@ -66,7 +78,7 @@ h1,h2,h3,h4 {
 # TITLE
 # =========================================================
 
-st.title("🚀 NSE AI PRO MAX V8.0 ELITE")
+st.title("🚀 NSE AI PRO MAX V8.1")
 st.caption("Institutional Quantitative Trading Dashboard")
 
 # =========================================================
@@ -183,11 +195,11 @@ def calculate_atr(df, period=14):
 
     high_low = df["High"] - df["Low"]
 
-    high_close = np.abs(
+    high_close = abs(
         df["High"] - df["Close"].shift()
     )
 
-    low_close = np.abs(
+    low_close = abs(
         df["Low"] - df["Close"].shift()
     )
 
@@ -211,15 +223,17 @@ def indicators(df):
 
     # EMA
 
-    df["EMA20"] = df["Close"].ewm(
-        span=20,
-        adjust=False
-    ).mean()
+    df["EMA20"] = (
+        df["Close"]
+        .ewm(span=20, adjust=False)
+        .mean()
+    )
 
-    df["EMA50"] = df["Close"].ewm(
-        span=50,
-        adjust=False
-    ).mean()
+    df["EMA50"] = (
+        df["Close"]
+        .ewm(span=50, adjust=False)
+        .mean()
+    )
 
     # RSI
 
@@ -235,8 +249,8 @@ def indicators(df):
 
     rs = avg_gain / (avg_loss + 1e-10)
 
-    df["RSI"] = 100 - (
-        100 / (1 + rs)
+    df["RSI"] = (
+        100 - (100 / (1 + rs))
     )
 
     # MACD
@@ -248,7 +262,9 @@ def indicators(df):
     df["MACD"] = ema12 - ema26
 
     df["MACD_SIGNAL"] = (
-        df["MACD"].ewm(span=9).mean()
+        df["MACD"]
+        .ewm(span=9)
+        .mean()
     )
 
     # VWAP
@@ -263,14 +279,18 @@ def indicators(df):
 
     df["ATR"] = calculate_atr(df)
 
-    # VOLUME
+    # SMART MONEY
 
     df["VOL_AVG"] = (
-        df["Volume"].rolling(20).mean()
+        df["Volume"]
+        .rolling(20)
+        .mean()
     )
 
     df["SMART_MONEY"] = (
-        df["Volume"] > df["VOL_AVG"] * 2
+        df["Volume"]
+        >
+        df["VOL_AVG"] * 2
     )
 
     df.fillna(0, inplace=True)
@@ -278,21 +298,17 @@ def indicators(df):
     return df
 
 # =========================================================
-# AI ENGINE
+# AI SIGNAL ENGINE
 # =========================================================
 
 def ai_signal(latest):
 
     score = 0
 
-    # EMA
-
     if latest["EMA20"] > latest["EMA50"]:
         score += 25
     else:
         score -= 25
-
-    # RSI
 
     if 55 <= latest["RSI"] <= 70:
         score += 20
@@ -303,26 +319,18 @@ def ai_signal(latest):
     elif latest["RSI"] > 75:
         score -= 15
 
-    # MACD
-
     if latest["MACD"] > latest["MACD_SIGNAL"]:
         score += 25
     else:
         score -= 25
-
-    # VWAP
 
     if latest["Close"] > latest["VWAP"]:
         score += 20
     else:
         score -= 20
 
-    # SMART MONEY
-
     if latest["SMART_MONEY"]:
         score += 10
-
-    # SIGNAL
 
     if score >= 70:
         signal = "🚀 STRONG BUY"
@@ -359,7 +367,15 @@ def option_chain(symbol="NIFTY"):
         )
 
         headers = {
-            "user-agent": "Mozilla/5.0"
+
+            "user-agent":
+            "Mozilla/5.0",
+
+            "accept-language":
+            "en-US,en;q=0.9",
+
+            "accept-encoding":
+            "gzip, deflate, br"
         }
 
         session = requests.Session()
@@ -367,24 +383,43 @@ def option_chain(symbol="NIFTY"):
         session.get(
             "https://www.nseindia.com",
             headers=headers,
-            timeout=10
+            timeout=10,
+            verify=False
         )
+
+        time.sleep(2)
 
         response = session.get(
             url,
             headers=headers,
-            timeout=10
+            timeout=10,
+            verify=False
         )
 
-        data = response.json()
+        if response.status_code != 200:
 
-        records = data["records"]["data"]
+            st.error(
+                f"NSE API ERROR : "
+                f"{response.status_code}"
+            )
+
+            return pd.DataFrame()
+
+        json_data = response.json()
+
+        records = (
+            json_data
+            .get("records", {})
+            .get("data", [])
+        )
 
         rows = []
 
         for item in records:
 
-            strike = item.get("strikePrice", 0)
+            strike = item.get(
+                "strikePrice", 0
+            )
 
             ce = item.get("CE", {})
             pe = item.get("PE", {})
@@ -394,25 +429,43 @@ def option_chain(symbol="NIFTY"):
                 "STRIKE": strike,
 
                 "CALL_OI":
-                ce.get("openInterest", 0),
+                ce.get(
+                    "openInterest", 0
+                ),
 
                 "PUT_OI":
-                pe.get("openInterest", 0),
+                pe.get(
+                    "openInterest", 0
+                ),
 
-                "CALL_CHG":
+                "CALL_CHG_OI":
                 ce.get(
                     "changeinOpenInterest", 0
                 ),
 
-                "PUT_CHG":
+                "PUT_CHG_OI":
                 pe.get(
                     "changeinOpenInterest", 0
+                ),
+
+                "CALL_LTP":
+                ce.get(
+                    "lastPrice", 0
+                ),
+
+                "PUT_LTP":
+                pe.get(
+                    "lastPrice", 0
                 )
             })
 
         return pd.DataFrame(rows)
 
-    except:
+    except Exception as e:
+
+        st.error(
+            f"OPTION ERROR : {e}"
+        )
 
         return pd.DataFrame()
 
@@ -427,7 +480,7 @@ tab1, tab2, tab3 = st.tabs([
 ])
 
 # =========================================================
-# TECHNICAL TAB
+# TECHNICAL
 # =========================================================
 
 with tab1:
@@ -442,7 +495,7 @@ with tab1:
 
         if df.empty:
 
-            st.error("NO DATA")
+            st.error("NO MARKET DATA")
 
             st.stop()
 
@@ -454,20 +507,25 @@ with tab1:
             latest
         )
 
-        signal_time = datetime.now(
-            india
-        ).strftime(
-            "%d-%m-%Y %H:%M:%S"
-        )
-
-        # SIGNAL
-
         st.subheader("🤖 AI SIGNAL")
 
-        st.success(
-            f"{signal} | "
-            f"CONFIDENCE : {confidence}%"
-        )
+        if "BUY" in signal:
+
+            st.success(
+                f"{signal} | "
+                f"CONFIDENCE : {confidence}%"
+            )
+
+        elif "SELL" in signal:
+
+            st.error(
+                f"{signal} | "
+                f"CONFIDENCE : {confidence}%"
+            )
+
+        else:
+
+            st.warning(signal)
 
         # METRICS
 
@@ -503,7 +561,7 @@ with tab1:
             score
         )
 
-        # ATR SL TARGET
+        # STOPLOSS TARGET
 
         stoploss = (
             latest["Close"]
@@ -520,7 +578,7 @@ with tab1:
         s1, s2 = st.columns(2)
 
         s1.success(
-            f"🛑 STOPLOSS : "
+            f"🛑 SL : "
             f"{round(float(stoploss),2)}"
         )
 
@@ -574,7 +632,7 @@ with tab1:
         if latest["SMART_MONEY"]:
 
             st.success(
-                "🔥 INSTITUTIONAL ACTIVITY"
+                "🔥 INSTITUTIONAL BUYING"
             )
 
         else:
@@ -583,49 +641,12 @@ with tab1:
                 "Normal Market Flow"
             )
 
-        # DOWNLOAD
-
-        export_df = pd.DataFrame([{
-
-            "TIME": signal_time,
-            "STOCK": selected_stock,
-            "PRICE": latest["Close"],
-            "RSI": latest["RSI"],
-            "VWAP": latest["VWAP"],
-            "ATR": latest["ATR"],
-            "SIGNAL": signal,
-            "CONFIDENCE": confidence
-
-        }])
-
-        excel = io.BytesIO()
-
-        with pd.ExcelWriter(
-            excel,
-            engine="openpyxl"
-        ) as writer:
-
-            export_df.to_excel(
-                writer,
-                index=False
-            )
-
-        st.download_button(
-
-            "📥 DOWNLOAD SIGNAL",
-
-            data=excel.getvalue(),
-
-            file_name=
-            f"{selected_stock}_SIGNAL.xlsx"
-        )
-
     except Exception as e:
 
         st.error(str(e))
 
 # =========================================================
-# OPTION CHAIN TAB
+# OPTION CHAIN
 # =========================================================
 
 with tab2:
@@ -679,8 +700,6 @@ with tab2:
         m3.metric("RESISTANCE", int(resistance))
         m4.metric("MAX PAIN", int(max_pain))
 
-        # OI CHART
-
         fig2 = go.Figure()
 
         fig2.add_trace(go.Bar(
@@ -706,13 +725,18 @@ with tab2:
             use_container_width=True
         )
 
+        st.dataframe(
+            option_df,
+            use_container_width=True
+        )
+
 # =========================================================
 # AI SCANNER
 # =========================================================
 
 with tab3:
 
-    st.header("🤖 AI SCANNER")
+    st.header("🤖 NSE AI SCANNER")
 
     results = []
 
@@ -733,7 +757,6 @@ with tab3:
             )
 
             if df.empty:
-
                 return None
 
             df = indicators(df)
@@ -760,14 +783,12 @@ with tab3:
 
                 "SIGNAL": signal,
 
-                "CONFIDENCE":
-                confidence,
+                "CONFIDENCE": confidence,
 
                 "SCORE": score
             }
 
         except:
-
             return None
 
     with ThreadPoolExecutor(
@@ -804,29 +825,6 @@ with tab3:
             use_container_width=True
         )
 
-        # DOWNLOAD
-
-        scan_excel = io.BytesIO()
-
-        with pd.ExcelWriter(
-            scan_excel,
-            engine="openpyxl"
-        ) as writer:
-
-            scan_df.to_excel(
-                writer,
-                index=False
-            )
-
-        st.download_button(
-
-            "📥 DOWNLOAD AI SCANNER",
-
-            data=scan_excel.getvalue(),
-
-            file_name="AI_SCANNER.xlsx"
-        )
-
 # =========================================================
 # FOOTER
 # =========================================================
@@ -834,5 +832,5 @@ with tab3:
 st.markdown("---")
 
 st.caption(
-    "🚀 NSE AI PRO MAX V8.0 ELITE"
+    "🚀 NSE AI PRO MAX V8.1 INSTITUTIONAL"
 )
