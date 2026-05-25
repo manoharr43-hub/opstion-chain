@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V10.0 ULTRA - SHOONYA EDITION (DEBUG)
+# 🚀 NSE AI PRO MAX V9.0 ULTRA + SHOONYA INTEGRATION
 # =========================================================
 
 import streamlit as st
@@ -12,22 +12,21 @@ import pytz
 import io
 import time
 import urllib3
-import pyotp
-import logging
-from NorenRestApiPy.NorenApi import NorenApi
+import hashlib
+import json
+
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from streamlit_autorefresh import st_autorefresh
 
 urllib3.disable_warnings()
-logging.basicConfig(level=logging.ERROR)
 
 # =========================================================
 # PAGE CONFIG
 # =========================================================
 
 st.set_page_config(
-    page_title="NSE AI PRO MAX V10.0",
+    page_title="NSE AI PRO MAX V9.0 + SHOONYA",
     page_icon="🚀",
     layout="wide"
 )
@@ -39,26 +38,35 @@ st.set_page_config(
 st_autorefresh(interval=60000, key="refresh")
 
 # =========================================================
-# DARK THEME - UPGRADED UI
+# DARK THEME
 # =========================================================
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Exo+2:wght@300;400;600;800&display=swap');
-html, body, [class*="css"] { font-family: 'Exo 2', sans-serif; }
-.main { background: linear-gradient(135deg, #0a0e1a 0%, #0d1117 50%, #0a1628 100%); color: #e2e8f0; }
-[data-testid="stSidebar"] { background: linear-gradient(180deg, #0d1117 0%, #111827 100%); border-right: 1px solid #1e3a5f; }
-.stMetric { background: linear-gradient(135deg, #1a2332 0%, #1e2d42 100%); border: 1px solid #2563eb44; border-radius: 16px; padding: 18px; box-shadow: 0 4px 20px rgba(37, 99, 235, 0.1); transition: all 0.3s ease; }
-.stMetric:hover { border-color: #2563eb; box-shadow: 0 8px 30px rgba(37, 99, 235, 0.2); transform: translateY(-2px); }
-h1, h2, h3, h4 { color: #f0f9ff !important; font-family: 'Exo 2', sans-serif !important; font-weight: 800 !important; letter-spacing: 1px; }
-div.stButton > button:first-child { background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #3b82f6 100%); color: white; border-radius: 12px; border: none; width: 100%; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 12px; box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3); transition: all 0.3s ease; }
-div.stButton > button:first-child:hover { box-shadow: 0 8px 25px rgba(37, 99, 235, 0.5); transform: translateY(-2px); }
-.stAlert { border-radius: 12px; font-weight: 600; }
-.stSelectbox > div > div { background-color: #1a2332; border: 1px solid #2563eb44; border-radius: 10px; }
-.stDataFrame { border-radius: 12px; overflow: hidden; }
-.stTabs [data-baseweb="tab-list"] { background-color: #111827; border-radius: 12px; padding: 4px; }
-.stTabs [data-baseweb="tab"] { background-color: transparent; color: #94a3b8; border-radius: 8px; font-weight: 600; letter-spacing: 0.5px; }
-.stTabs [aria-selected="true"] { background-color: #1d4ed8 !important; color: white !important; }
+.main { background-color: #0E1117; color: white; }
+[data-testid="stSidebar"] { background-color: #111827; }
+.stMetric {
+    background-color: #1F2937;
+    border: 1px solid #374151;
+    border-radius: 12px;
+    padding: 15px;
+}
+h1,h2,h3,h4 { color: white !important; }
+div.stButton > button:first-child {
+    background-color: #2563EB;
+    color: white;
+    border-radius: 10px;
+    border: none;
+    width: 100%;
+    font-weight: bold;
+}
+.shoonya-box {
+    background: linear-gradient(135deg, #1a2332, #1e3a5f);
+    border: 1px solid #2563eb;
+    border-radius: 12px;
+    padding: 15px;
+    margin: 10px 0;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -66,170 +74,386 @@ div.stButton > button:first-child:hover { box-shadow: 0 8px 25px rgba(37, 99, 23
 # TITLE
 # =========================================================
 
-st.markdown("""
-<div style='text-align:center; padding: 20px 0;'>
-    <h1 style='font-size: 2.5rem; background: linear-gradient(135deg, #3b82f6, #60a5fa, #93c5fd);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
-    font-family: Exo 2, sans-serif; font-weight: 800; letter-spacing: 3px;'>
-    🚀 NSE AI PRO MAX V10.0 ULTRA
-    </h1>
-    <p style='color: #64748b; letter-spacing: 4px; font-size: 0.85rem; text-transform: uppercase;'>
-    Institutional AI Quantitative Trading System — Shoonya Powered Edition
-    </p>
-</div>
-""", unsafe_allow_html=True)
+st.title("🚀 NSE AI PRO MAX V9.0 ULTRA")
+st.caption("Institutional AI Quantitative Trading System + Shoonya Live Data")
 
 # =========================================================
-# NIFTY 500 STOCK DATABASE (Major stocks)
+# NSE STOCK DATABASE
 # =========================================================
 
 nse_stocks = {
-    # INDEX
-    "NIFTY 50": "^NSEI", "BANKNIFTY": "^NSEBANK", "NIFTY IT": "^CNXIT",
-    "NIFTY PHARMA": "^CNXPHARMA", "NIFTY AUTO": "^CNXAUTO", "NIFTY FMCG": "^CNXFMCG",
-    # LARGE CAP
-    "RELIANCE": "RELIANCE.NS", "TCS": "TCS.NS", "INFY": "INFY.NS", "HDFCBANK": "HDFCBANK.NS",
-    "ICICIBANK": "ICICIBANK.NS", "SBIN": "SBIN.NS", "AXISBANK": "AXISBANK.NS", "ITC": "ITC.NS",
-    "LT": "LT.NS", "BHARTIARTL": "BHARTIARTL.NS", "TATAMOTORS": "TATAMOTORS.NS", "MARUTI": "MARUTI.NS",
-    "BAJFINANCE": "BAJFINANCE.NS", "HINDUNILVR": "HINDUNILVR.NS", "SUNPHARMA": "SUNPHARMA.NS",
-    "WIPRO": "WIPRO.NS", "POWERGRID": "POWERGRID.NS", "NTPC": "NTPC.NS", "TATASTEEL": "TATASTEEL.NS",
-    "HCLTECH": "HCLTECH.NS", "TECHM": "TECHM.NS", "KOTAKBANK": "KOTAKBANK.NS", "TITAN": "TITAN.NS",
-    "ASIANPAINT": "ASIANPAINT.NS", "DRREDDY": "DRREDDY.NS", "CIPLA": "CIPLA.NS",
-    # ADANI & TATA
-    "ADANIENT": "ADANIENT.NS", "ADANIPORTS": "ADANIPORTS.NS", "ADANIPOWER": "ADANIPOWER.NS",
-    "TATAPOWER": "TATAPOWER.NS", "TRENT": "TRENT.NS", "VOLTAS": "VOLTAS.NS",
-    # MIDCAP & OTHERS
-    "PIDILITIND": "PIDILITIND.NS", "HAVELLS": "HAVELLS.NS", "MARICO": "MARICO.NS",
-    "BANKBARODA": "BANKBARODA.NS", "PNB": "PNB.NS", "CANBK": "CANBK.NS",
-    "HAL": "HAL.NS", "BEL": "BEL.NS", "RVNL": "RVNL.NS", "IRFC": "IRFC.NS",
-    "TVSMOTOR": "TVSMOTOR.NS", "ASHOKLEY": "ASHOKLEY.NS", "ESCORTS": "ESCORTS.NS"
+    "NIFTY 50": "^NSEI",
+    "BANKNIFTY": "^NSEBANK",
+    "RELIANCE": "RELIANCE.NS",
+    "TCS": "TCS.NS",
+    "INFY": "INFY.NS",
+    "HDFCBANK": "HDFCBANK.NS",
+    "ICICIBANK": "ICICIBANK.NS",
+    "SBIN": "SBIN.NS",
+    "AXISBANK": "AXISBANK.NS",
+    "ITC": "ITC.NS",
+    "LT": "LT.NS",
+    "BHARTIARTL": "BHARTIARTL.NS",
+    "TATAMOTORS": "TATAMOTORS.NS",
+    "MARUTI": "MARUTI.NS",
+    "BAJFINANCE": "BAJFINANCE.NS",
+    "HINDUNILVR": "HINDUNILVR.NS",
+    "SUNPHARMA": "SUNPHARMA.NS",
+    "WIPRO": "WIPRO.NS",
+    "POWERGRID": "POWERGRID.NS",
+    "NTPC": "NTPC.NS",
+    "TATASTEEL": "TATASTEEL.NS",
+    "JSWSTEEL": "JSWSTEEL.NS",
+    "HINDALCO": "HINDALCO.NS",
+    "ONGC": "ONGC.NS",
+    "IOC": "IOC.NS",
+    "ZOMATO": "ZOMATO.NS",
+    "IRCTC": "IRCTC.NS"
 }
 
-category_filters = {
-    "INDEX": ["NIFTY 50", "BANKNIFTY", "NIFTY IT", "NIFTY PHARMA", "NIFTY AUTO", "NIFTY FMCG"],
-    "Large Cap": ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN", "AXISBANK", "ITC", "LT", "BHARTIARTL", "TATAMOTORS", "MARUTI", "BAJFINANCE", "HINDUNILVR", "SUNPHARMA", "WIPRO", "HCLTECH", "TECHM", "KOTAKBANK", "TITAN", "ASIANPAINT"],
-    "Adani Group": ["ADANIENT", "ADANIPORTS", "ADANIPOWER"],
-    "Tata Group": ["TCS", "TATAMOTORS", "TATASTEEL", "TATAPOWER", "TRENT", "VOLTAS", "TITAN"],
-    "Banking": ["HDFCBANK", "ICICIBANK", "SBIN", "AXISBANK", "KOTAKBANK", "BANKBARODA", "PNB", "CANBK"],
-    "IT": ["TCS", "INFY", "WIPRO", "HCLTECH", "TECHM"],
-    "Pharma": ["SUNPHARMA", "DRREDDY", "CIPLA"],
+# Shoonya exchange symbol mapping (NSE)
+shoonya_symbols = {
+    "RELIANCE": "RELIANCE",
+    "TCS": "TCS",
+    "INFY": "INFY",
+    "HDFCBANK": "HDFCBANK",
+    "ICICIBANK": "ICICIBANK",
+    "SBIN": "SBIN",
+    "AXISBANK": "AXISBANK",
+    "ITC": "ITC",
+    "LT": "LT",
+    "BHARTIARTL": "BHARTIARTL",
+    "TATAMOTORS": "TATAMOTORS",
+    "MARUTI": "MARUTI",
+    "BAJFINANCE": "BAJFINANCE",
+    "HINDUNILVR": "HINDUNILVR",
+    "SUNPHARMA": "SUNPHARMA",
+    "WIPRO": "WIPRO",
+    "POWERGRID": "POWERGRID",
+    "NTPC": "NTPC",
+    "TATASTEEL": "TATASTEEL",
+    "JSWSTEEL": "JSWSTEEL",
+    "HINDALCO": "HINDALCO",
+    "ONGC": "ONGC",
+    "IOC": "IOC",
+    "ZOMATO": "ZOMATO",
+    "IRCTC": "IRCTC",
 }
+
+# =========================================================
+# SHOONYA API CLASS
+# =========================================================
+
+class ShoonyaAPI:
+    """
+    Shoonya (Finvasia) REST API Integration
+    Docs: https://shoonya.com/api-documentation
+    """
+
+    BASE_URL = "https://api.shoonya.com/NorenWClientTP"
+
+    def __init__(self):
+        self.session_token = None
+        self.user_id = None
+        self.headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    def login(self, user_id, password, totp, vendor_code, api_secret, imei="abc1234"):
+        """
+        Shoonya Login — SHA256 password hash కావాలి
+        """
+        try:
+            pwd_hash = hashlib.sha256(password.encode()).hexdigest()
+            app_key = f"{user_id}|{api_secret}"
+            app_key_hash = hashlib.sha256(app_key.encode()).hexdigest()
+
+            payload = (
+                f"jData={{\"uid\":\"{user_id}\","
+                f"\"pwd\":\"{pwd_hash}\","
+                f"\"factor2\":\"{totp}\","
+                f"\"vc\":\"{vendor_code}\","
+                f"\"appkey\":\"{app_key_hash}\","
+                f"\"imei\":\"{imei}\","
+                f"\"source\":\"API\"}}"
+            )
+
+            response = requests.post(
+                f"{self.BASE_URL}/QuickAuth",
+                data=payload,
+                headers=self.headers,
+                timeout=15
+            )
+
+            data = response.json()
+
+            if data.get("stat") == "Ok":
+                self.session_token = data.get("susertoken")
+                self.user_id = user_id
+                return True, "✅ Login Successful"
+            else:
+                return False, f"❌ Login Failed: {data.get('emsg', 'Unknown error')}"
+
+        except Exception as e:
+            return False, f"❌ Error: {str(e)}"
+
+    def _post(self, endpoint, jdata):
+        """Internal POST helper"""
+        try:
+            payload = f"jData={json.dumps(jdata)}&jKey={self.session_token}"
+            response = requests.post(
+                f"{self.BASE_URL}/{endpoint}",
+                data=payload,
+                headers=self.headers,
+                timeout=15
+            )
+            return response.json()
+        except Exception as e:
+            return {"stat": "Not_Ok", "emsg": str(e)}
+
+    def get_quote(self, exchange, symbol):
+        """
+        Live Quote తీసుకోండి
+        exchange: NSE, BSE, NFO
+        """
+        if not self.session_token:
+            return None
+        data = self._post("GetQuotes", {
+            "uid": self.user_id,
+            "exch": exchange,
+            "token": symbol
+        })
+        return data if data.get("stat") == "Ok" else None
+
+    def get_option_chain(self, symbol, expiry, strike_count=10):
+        """
+        Option Chain data తీసుకోండి
+        symbol: NIFTY or BANKNIFTY
+        expiry: format like 24-Oct-2024
+        """
+        if not self.session_token:
+            return pd.DataFrame()
+
+        try:
+            data = self._post("GetOptionChain", {
+                "uid": self.user_id,
+                "tsym": symbol,
+                "exch": "NFO",
+                "expd": expiry,
+                "strprc": "0",
+                "cnt": str(strike_count)
+            })
+
+            if data.get("stat") != "Ok":
+                return pd.DataFrame()
+
+            rows = []
+            values = data.get("values", [])
+
+            for item in values:
+                optt = item.get("optt", "")
+                rows.append({
+                    "STRIKE": float(item.get("strprc", 0)),
+                    "EXPIRY": item.get("expd", ""),
+                    "TYPE": optt,
+                    "LTP": float(item.get("lp", 0)),
+                    "OI": float(item.get("oi", 0)),
+                    "CHG_OI": float(item.get("oic", 0)),
+                    "VOLUME": float(item.get("v", 0)),
+                    "IV": float(item.get("iv", 0)) if item.get("iv") else 0,
+                    "DELTA": float(item.get("delta", 0)) if item.get("delta") else 0,
+                })
+
+            df = pd.DataFrame(rows)
+
+            if df.empty:
+                return df
+
+            # CALL / PUT split
+            calls = df[df["TYPE"] == "CE"].rename(columns={
+                "LTP": "CALL_LTP", "OI": "CALL_OI",
+                "CHG_OI": "CALL_CHG_OI", "IV": "CALL_IV",
+                "DELTA": "CALL_DELTA", "VOLUME": "CALL_VOL"
+            }).drop(columns=["TYPE", "EXPIRY"])
+
+            puts = df[df["TYPE"] == "PE"].rename(columns={
+                "LTP": "PUT_LTP", "OI": "PUT_OI",
+                "CHG_OI": "PUT_CHG_OI", "IV": "PUT_IV",
+                "DELTA": "PUT_DELTA", "VOLUME": "PUT_VOL"
+            }).drop(columns=["TYPE", "EXPIRY"])
+
+            merged = pd.merge(calls, puts, on="STRIKE", how="outer")
+            merged = merged.sort_values("STRIKE").reset_index(drop=True)
+            merged = merged.fillna(0)
+
+            return merged
+
+        except Exception as e:
+            return pd.DataFrame()
+
+    def get_live_ltp_bulk(self, symbols_list):
+        """
+        Scanner కోసం bulk LTP fetch
+        symbols_list: [("NSE", "RELIANCE"), ("NSE", "TCS"), ...]
+        """
+        if not self.session_token:
+            return {}
+
+        results = {}
+        for exch, sym in symbols_list:
+            try:
+                quote = self.get_quote(exch, sym)
+                if quote:
+                    results[sym] = {
+                        "ltp": float(quote.get("lp", 0)),
+                        "open": float(quote.get("o", 0)),
+                        "high": float(quote.get("h", 0)),
+                        "low": float(quote.get("l", 0)),
+                        "close": float(quote.get("c", 0)),
+                        "volume": float(quote.get("v", 0)),
+                        "change_pct": float(quote.get("pc", 0)),
+                    }
+                time.sleep(0.1)  # Rate limit avoid
+            except:
+                pass
+        return results
+
+    def get_expiry_list(self, symbol):
+        """Option expiry dates తీసుకోండి"""
+        if not self.session_token:
+            return []
+        data = self._post("GetExpiryDates", {
+            "uid": self.user_id,
+            "exch": "NFO",
+            "tsym": symbol
+        })
+        if data.get("stat") == "Ok":
+            return data.get("exd", [])
+        return []
+
+
+# =========================================================
+# SESSION STATE — Shoonya instance store
+# =========================================================
+
+if "shoonya" not in st.session_state:
+    st.session_state.shoonya = ShoonyaAPI()
+
+if "shoonya_logged_in" not in st.session_state:
+    st.session_state.shoonya_logged_in = False
+
+if "shoonya_live_data" not in st.session_state:
+    st.session_state.shoonya_live_data = {}
 
 # =========================================================
 # SIDEBAR
 # =========================================================
 
-st.sidebar.markdown("## ⚙️ AI CONTROL PANEL")
+st.sidebar.header("⚙️ AI CONTROL PANEL")
 
-category = st.sidebar.selectbox(
-    "📂 CATEGORY",
-    ["All Stocks", "INDEX", "Large Cap", "Adani Group", "Tata Group", "Banking", "IT", "Pharma"]
+# --- SHOONYA LOGIN SECTION ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🔐 SHOONYA LOGIN")
+
+if not st.session_state.shoonya_logged_in:
+    with st.sidebar.expander("🔑 Login Credentials", expanded=True):
+        sh_user = st.text_input("User ID", placeholder="SH12345")
+        sh_pass = st.text_input("Password", type="password")
+        sh_totp = st.text_input("TOTP (Google Authenticator)", placeholder="123456")
+        sh_vc = st.text_input("Vendor Code", placeholder="SH12345_U")
+        sh_secret = st.text_input("API Secret", type="password")
+
+        if st.button("🚀 SHOONYA LOGIN"):
+            if sh_user and sh_pass and sh_totp and sh_vc and sh_secret:
+                with st.spinner("Logging in..."):
+                    success, msg = st.session_state.shoonya.login(
+                        user_id=sh_user,
+                        password=sh_pass,
+                        totp=sh_totp,
+                        vendor_code=sh_vc,
+                        api_secret=sh_secret
+                    )
+                if success:
+                    st.session_state.shoonya_logged_in = True
+                    st.sidebar.success(msg)
+                    st.rerun()
+                else:
+                    st.sidebar.error(msg)
+            else:
+                st.sidebar.warning("⚠️ అన్ని fields fill చేయండి!")
+
+        st.caption("Shoonya credentials: [shoonya.com](https://shoonya.com)")
+
+else:
+    st.sidebar.success("✅ Shoonya Connected")
+    if st.sidebar.button("🔓 Logout"):
+        st.session_state.shoonya_logged_in = False
+        st.session_state.shoonya = ShoonyaAPI()
+        st.session_state.shoonya_live_data = {}
+        st.rerun()
+
+st.sidebar.markdown("---")
+
+selected_stock = st.sidebar.selectbox(
+    "SELECT STOCK",
+    sorted(list(nse_stocks.keys()))
 )
 
-if category == "All Stocks":
-    filtered_stocks = nse_stocks
-else:
-    keys = category_filters.get(category, list(nse_stocks.keys()))
-    filtered_stocks = {k: v for k, v in nse_stocks.items() if k in keys}
+interval = st.sidebar.selectbox(
+    "TIMEFRAME",
+    ["5m", "15m", "30m", "1h"]
+)
 
-selected_stock = st.sidebar.selectbox("📊 SELECT STOCK", sorted(list(filtered_stocks.keys())))
-interval = st.sidebar.selectbox("⏱ TIMEFRAME", ["5m", "15m", "30m", "1h"])
-period = st.sidebar.selectbox("📅 PERIOD", ["1d", "5d", "1mo"])
-ticker = filtered_stocks[selected_stock]
+period = st.sidebar.selectbox(
+    "PERIOD",
+    ["1d", "5d", "1mo"]
+)
+
+ticker = nse_stocks[selected_stock]
+
+# =========================================================
+# INDIA TIME + MARKET STATUS
+# =========================================================
 
 india = pytz.timezone("Asia/Kolkata")
 current_time = datetime.now(india)
-st.sidebar.markdown("---")
 st.sidebar.info(current_time.strftime("🕒 %d-%m-%Y %H:%M:%S IST"))
 
-hour, minute, weekday = current_time.hour, current_time.minute, current_time.weekday()
-if weekday < 5 and ((hour == 9 and minute >= 15) or (10 <= hour <= 14) or (hour == 15 and minute <= 30)):
+hour = current_time.hour
+minute = current_time.minute
+weekday = current_time.weekday()
+
+market_open = (
+    weekday < 5 and
+    ((hour == 9 and minute >= 15) or
+     (10 <= hour <= 14) or
+     (hour == 15 and minute <= 30))
+)
+
+if market_open:
     st.sidebar.success("🟢 MARKET OPEN")
 else:
     st.sidebar.error("🔴 MARKET CLOSED")
 
 # =========================================================
-# SHOONYA API LOGIC (WITH DEBUGGING)
-# =========================================================
-
-class ShoonyaApiPy(NorenApi):
-    def __init__(self):
-        NorenApi.__init__(self, host='https://api.shoonya.com/NorenWClientTP/', websocket='wss://api.shoonya.com/NorenWSTP/')
-
-@st.cache_resource(ttl=3600)
-def shoonya_login():
-    try:
-        api = ShoonyaApiPy()
-        
-        user = st.secrets["shoonya"]["user_id"].strip()
-        pwd = st.secrets["shoonya"]["password"].strip()
-        vc = st.secrets["shoonya"]["vendor_code"].strip()
-        apikey = st.secrets["shoonya"]["api_secret"].strip()
-        imei = st.secrets["shoonya"]["imei"].strip()
-        totp_secret = st.secrets["shoonya"]["totp"].strip()
-        
-        factor2 = pyotp.TOTP(totp_secret).now()
-        
-        login_res = api.login(userid=user, password=pwd, twoFA=factor2, vendor_code=vc, api_secret=apikey, imei=imei)
-        
-        if login_res and login_res.get('stat') == 'Ok':
-            return api
-        else:
-            # లాగిన్ ఫెయిల్ అయితే, ఏ కారణం చేత ఫెయిల్ అయిందో స్క్రీన్ మీద ప్రింట్ చేస్తుంది
-            st.error(f"🛑 లాగిన్ ఫెయిల్ అయింది. Shoonya సర్వర్ మెసేజ్: {login_res}")
-            return None
-            
-    except Exception as e:
-        # సిస్టమ్ క్రాష్ అయితే, అసలు ఎర్రర్ ఏంటో చూపిస్తుంది
-        st.error(f"🛑 సర్వర్ ఎర్రర్: {str(e)}")
-        st.warning("💡 గమనిక: ఇది Streamlit Cloud IP ని Shoonya బ్లాక్ చేయడం వల్ల వచ్చిన ఎర్రర్ కావచ్చు.")
-        return None
-
-@st.cache_data(ttl=60)
-def fetch_shoonya_option_chain(symbol="NIFTY"):
-    api = shoonya_login()
-    if not api: return pd.DataFrame(), "error"
-
-    index_token = "26000" if symbol == "NIFTY" else "26009"
-    quote = api.get_quotes(exchange="NSE", token=index_token)
-    
-    if not quote or 'lp' not in quote: return pd.DataFrame(), "error"
-    
-    ltp = float(quote['lp'])
-    step = 50 if symbol == "NIFTY" else 100
-    atm = int(round(ltp / step) * step)
-    
-    strikes = [atm + (i * step) for i in range(-15, 16)]
-    
-    # Placeholder simulator until specific token websocket logic is connected
-    rows = []
-    np.random.seed(int(time.time())) 
-    for s in strikes:
-        rows.append({
-            "STRIKE": s,
-            "CALL_OI": int(np.random.randint(10000, 500000)),
-            "PUT_OI": int(np.random.randint(10000, 500000)),
-            "CALL_CHG_OI": int(np.random.randint(-50000, 50000)),
-            "PUT_CHG_OI": int(np.random.randint(-50000, 50000)),
-            "CALL_LTP": round(abs(atm - s)*0.1 + np.random.uniform(5, 50), 2),
-            "PUT_LTP": round(abs(atm - s)*0.1 + np.random.uniform(5, 50), 2),
-        })
-        
-    return pd.DataFrame(rows), "live"
-
-# =========================================================
-# INDICATORS & DATA LOGIC
+# DATA LOADER
 # =========================================================
 
 @st.cache_data(ttl=60)
 def load_market_data(ticker, interval, period):
     try:
-        df = yf.download(ticker, interval=interval, period=period, progress=False, auto_adjust=True, threads=True)
+        df = yf.download(
+            ticker, interval=interval,
+            period=period, progress=False,
+            auto_adjust=True, threads=True
+        )
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
         return df
     except:
         return pd.DataFrame()
+
+# =========================================================
+# ATR
+# =========================================================
 
 def calculate_atr(df, period=14):
     high_low = df["High"] - df["Low"]
@@ -238,319 +462,402 @@ def calculate_atr(df, period=14):
     tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
     return tr.rolling(period).mean()
 
-def calculate_supertrend(df, period=10, multiplier=3.0):
-    atr = calculate_atr(df, period)
-    hl2 = (df["High"] + df["Low"]) / 2
-    upper_band = hl2 + (multiplier * atr)
-    lower_band = hl2 - (multiplier * atr)
-    supertrend = pd.Series(index=df.index, dtype=float)
-    direction = pd.Series(index=df.index, dtype=int)
-    for i in range(1, len(df)):
-        if df["Close"].iloc[i] > upper_band.iloc[i - 1]: direction.iloc[i] = 1
-        elif df["Close"].iloc[i] < lower_band.iloc[i - 1]: direction.iloc[i] = -1
-        else: direction.iloc[i] = direction.iloc[i - 1]
-        supertrend.iloc[i] = lower_band.iloc[i] if direction.iloc[i] == 1 else upper_band.iloc[i]
-    return supertrend, direction
-
-def calculate_bollinger(df, period=20, std_dev=2):
-    sma = df["Close"].rolling(period).mean()
-    std = df["Close"].rolling(period).std()
-    return sma + (std_dev * std), sma, sma - (std_dev * std)
+# =========================================================
+# INDICATORS
+# =========================================================
 
 def calculate_indicators(df):
     df = df.copy()
+
     df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
     df["EMA50"] = df["Close"].ewm(span=50, adjust=False).mean()
+
     delta = df["Close"].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
-    rs = gain.rolling(14).mean() / (loss.rolling(14).mean() + 1e-10)
+    avg_gain = gain.rolling(14).mean()
+    avg_loss = loss.rolling(14).mean()
+    rs = avg_gain / (avg_loss + 1e-10)
     df["RSI"] = 100 - (100 / (1 + rs))
+
     ema12 = df["Close"].ewm(span=12).mean()
     ema26 = df["Close"].ewm(span=26).mean()
     df["MACD"] = ema12 - ema26
     df["MACD_SIGNAL"] = df["MACD"].ewm(span=9).mean()
-    df["VWAP"] = (df["Close"] * df["Volume"]).cumsum() / (df["Volume"].cumsum() + 1e-10)
+
+    df["VWAP"] = (
+        (df["Close"] * df["Volume"]).cumsum()
+        / (df["Volume"].cumsum() + 1e-10)
+    )
+
     df["ATR"] = calculate_atr(df)
-    df["BB_UPPER"], df["BB_MID"], df["BB_LOWER"] = calculate_bollinger(df)
-    df["BB_WIDTH"] = (df["BB_UPPER"] - df["BB_LOWER"]) / df["BB_MID"]
-    df["BB_SIGNAL"] = np.where(df["Close"] < df["BB_LOWER"], "OVERSOLD", np.where(df["Close"] > df["BB_UPPER"], "OVERBOUGHT", "NEUTRAL"))
-    df["SUPERTREND"], df["ST_DIRECTION"] = calculate_supertrend(df)
+
     df["VOL_AVG"] = df["Volume"].rolling(20).mean()
     df["SMART_MONEY"] = df["Volume"] > df["VOL_AVG"] * 2
-    low14 = df["Low"].rolling(14).min()
-    high14 = df["High"].rolling(14).max()
-    df["STOCH_K"] = 100 * (df["Close"] - low14) / (high14 - low14 + 1e-10)
+
     df.fillna(0, inplace=True)
     return df
 
+# =========================================================
+# AI SIGNAL
+# =========================================================
+
 def generate_signal(latest):
     score = 0
-    signals = []
-    if latest["EMA20"] > latest["EMA50"]: score += 25; signals.append("✅ EMA Bullish")
-    else: score -= 25; signals.append("🔻 EMA Bearish")
-    
-    if 55 <= latest["RSI"] <= 70: score += 20; signals.append("✅ RSI Bullish Zone")
-    elif latest["RSI"] < 30: score += 15; signals.append("⚡ RSI Oversold")
-    elif latest["RSI"] > 75: score -= 15; signals.append("⚠️ RSI Overbought")
-    
-    if latest["MACD"] > latest["MACD_SIGNAL"]: score += 20; signals.append("✅ MACD Bullish")
-    else: score -= 20; signals.append("🔻 MACD Bearish")
-    
-    if latest["Close"] > latest["VWAP"]: score += 15; signals.append("✅ Above VWAP")
-    else: score -= 15; signals.append("🔻 Below VWAP")
-    
-    if latest["ST_DIRECTION"] == 1: score += 15; signals.append("🚀 Supertrend BUY")
-    elif latest["ST_DIRECTION"] == -1: score -= 15; signals.append("🔻 Supertrend SELL")
-    
-    if latest["BB_SIGNAL"] == "OVERSOLD": score += 10; signals.append("⚡ BB Oversold")
-    elif latest["BB_SIGNAL"] == "OVERBOUGHT": score -= 10; signals.append("⚠️ BB Overbought")
-    
-    if latest["SMART_MONEY"]: score += 10; signals.append("💰 Smart Money Flow")
-    
-    if score >= 70: signal = "🚀 STRONG BUY"
-    elif score >= 30: signal = "✅ BUY"
-    elif score <= -70: signal = "🚨 STRONG SELL"
-    elif score <= -30: signal = "🔻 SELL"
-    else: signal = "⚠️ SIDEWAYS"
-    
-    return signal, score, min(abs(score), 95), signals
+
+    if latest["EMA20"] > latest["EMA50"]:
+        score += 25
+    else:
+        score -= 25
+
+    if 55 <= latest["RSI"] <= 70:
+        score += 20
+    elif latest["RSI"] < 30:
+        score += 15
+    elif latest["RSI"] > 75:
+        score -= 15
+
+    if latest["MACD"] > latest["MACD_SIGNAL"]:
+        score += 25
+    else:
+        score -= 25
+
+    if latest["Close"] > latest["VWAP"]:
+        score += 20
+    else:
+        score -= 20
+
+    if latest["SMART_MONEY"]:
+        score += 10
+
+    if score >= 70:
+        signal = "🚀 STRONG BUY"
+    elif score >= 30:
+        signal = "✅ BUY"
+    elif score <= -70:
+        signal = "🚨 STRONG SELL"
+    elif score <= -30:
+        signal = "🔻 SELL"
+    else:
+        signal = "⚠️ SIDEWAYS"
+
+    confidence = min(abs(score), 95)
+    return signal, score, confidence
 
 # =========================================================
-# TABS INTERFACE
+# TABS
 # =========================================================
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3 = st.tabs([
     "📈 LIVE TECHNICAL",
-    "📊 BOLLINGER + SUPERTREND",
-    "📂 OPTION CHAIN (SHOONYA)",
+    "📂 OPTION CHAIN",
     "🤖 AI SCANNER"
 ])
 
-# ----------------- TAB 1: TECHNICAL -----------------
+# =========================================================
+# TAB 1 — TECHNICAL
+# =========================================================
+
 with tab1:
     data = load_market_data(ticker, interval, period)
+
+    # Shoonya live price override
+    if st.session_state.shoonya_logged_in and selected_stock in shoonya_symbols:
+        sh_sym = shoonya_symbols[selected_stock]
+        live = st.session_state.shoonya.get_quote("NSE", sh_sym)
+        if live:
+            ltp = float(live.get("lp", 0))
+            chg = float(live.get("pc", 0))
+            col_a, col_b, col_c = st.columns(3)
+            col_a.metric("🟢 SHOONYA LIVE LTP", f"₹{ltp}", f"{chg}%")
+            col_b.metric("HIGH", f"₹{float(live.get('h', 0))}")
+            col_c.metric("LOW", f"₹{float(live.get('l', 0))}")
+            st.caption(f"Volume: {float(live.get('v', 0)):,.0f} | Open: ₹{float(live.get('o', 0))}")
+
     if not data.empty:
         data = calculate_indicators(data)
         latest = data.iloc[-1]
-        signal, score, confidence, signal_list = generate_signal(latest)
+        signal, score, confidence = generate_signal(latest)
 
         st.subheader("🤖 AI SIGNAL ENGINE")
-        col_sig, col_conf = st.columns([2, 1])
-        with col_sig:
-            if "BUY" in signal: st.success(f"{signal} | CONFIDENCE: {confidence}%")
-            elif "SELL" in signal: st.error(f"{signal} | CONFIDENCE: {confidence}%")
-            else: st.warning(signal)
-            
-        with col_conf:
-            st.markdown(f"""
-            <div style='background: #1a2332; border: 1px solid #374151; border-radius: 12px; padding: 15px; text-align: center;'>
-                <div style='color: #94a3b8; font-size: 0.75rem; letter-spacing: 2px;'>AI SCORE</div>
-                <div style='color: {"#22c55e" if score > 0 else "#ef4444"}; font-size: 2rem; font-weight: 800;'>{score}</div>
-            </div>
-            """, unsafe_allow_html=True)
 
-        with st.expander("🔍 SIGNAL BREAKDOWN"):
-            cols = st.columns(4)
-            for i, s in enumerate(signal_list):
-                cols[i % 4].markdown(f"- {s}")
+        if "BUY" in signal:
+            st.success(f"{signal} | CONFIDENCE {confidence}%")
+        elif "SELL" in signal:
+            st.error(f"{signal} | CONFIDENCE {confidence}%")
+        else:
+            st.warning(signal)
 
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("PRICE", round(float(latest["Close"]), 2))
         c2.metric("RSI", round(float(latest["RSI"]), 2))
         c3.metric("VWAP", round(float(latest["VWAP"]), 2))
-        c4.metric("MACD", round(float(latest["MACD"]), 4))
-        c5.metric("STOCH %K", round(float(latest["STOCH_K"]), 2))
+        c4.metric("MACD", round(float(latest["MACD"]), 2))
+        c5.metric("AI SCORE", score)
 
         sl = latest["Close"] - latest["ATR"] * 1.5
-        target1 = latest["Close"] + latest["ATR"] * 2
-        target2 = latest["Close"] + latest["ATR"] * 4
+        target = latest["Close"] + latest["ATR"] * 3
 
-        s1, s2, s3 = st.columns(3)
+        s1, s2 = st.columns(2)
         s1.error(f"🛑 STOPLOSS : {round(float(sl), 2)}")
-        s2.success(f"🎯 TARGET 1 : {round(float(target1), 2)}")
-        s3.success(f"🎯 TARGET 2 : {round(float(target2), 2)}")
+        s2.success(f"🎯 TARGET : {round(float(target), 2)}")
 
         fig = go.Figure()
-        fig.add_trace(go.Candlestick(x=data.index, open=data["Open"], high=data["High"], low=data["Low"], close=data["Close"], name="PRICE"))
-        fig.add_trace(go.Scatter(x=data.index, y=data["EMA20"], name="EMA20", line=dict(color="#3b82f6", width=1.5)))
-        fig.add_trace(go.Scatter(x=data.index, y=data["EMA50"], name="EMA50", line=dict(color="#f59e0b", width=1.5)))
-        fig.add_trace(go.Scatter(x=data.index, y=data["VWAP"], name="VWAP", line=dict(color="#a78bfa", width=1.5, dash="dot")))
-        fig.update_layout(template="plotly_dark", height=700, xaxis_rangeslider_visible=False, plot_bgcolor="#0d1117", paper_bgcolor="#0d1117")
+        fig.add_trace(go.Candlestick(
+            x=data.index, open=data["Open"],
+            high=data["High"], low=data["Low"],
+            close=data["Close"], name="PRICE"
+        ))
+        fig.add_trace(go.Scatter(x=data.index, y=data["EMA20"], mode="lines", name="EMA20"))
+        fig.add_trace(go.Scatter(x=data.index, y=data["EMA50"], mode="lines", name="EMA50"))
+        fig.update_layout(template="plotly_dark", height=700, xaxis_rangeslider_visible=False)
         st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.error("❌ Data load అవ్వలేదు. వేరే stock try చేయండి.")
 
-# ----------------- TAB 2: BOLLINGER -----------------
+# =========================================================
+# TAB 2 — OPTION CHAIN (SHOONYA)
+# =========================================================
+
 with tab2:
-    st.subheader("📊 BOLLINGER BANDS + SUPERTREND")
-    if not data.empty:
-        bb_col1, bb_col2, bb_col3, bb_col4 = st.columns(4)
-        bb_col1.metric("BB UPPER", round(float(latest["BB_UPPER"]), 2))
-        bb_col2.metric("BB MID", round(float(latest["BB_MID"]), 2))
-        bb_col3.metric("BB LOWER", round(float(latest["BB_LOWER"]), 2))
-        if str(latest["BB_SIGNAL"]) == "OVERSOLD": bb_col4.success("⚡ OVERSOLD")
-        elif str(latest["BB_SIGNAL"]) == "OVERBOUGHT": bb_col4.error("⚠️ OVERBOUGHT")
-        else: bb_col4.info("➡️ NEUTRAL")
+    st.header("📂 LIVE OPTION CHAIN")
 
-        st_col1, st_col2 = st.columns(2)
-        st_dir = int(latest["ST_DIRECTION"])
-        st_col1.metric("SUPERTREND", round(float(latest["SUPERTREND"]), 2))
-        if st_dir == 1: st_col2.success("🚀 SUPERTREND: BUY")
-        elif st_dir == -1: st_col2.error("🔻 SUPERTREND: SELL")
-        else: st_col2.warning("⚠️ SUPERTREND: NEUTRAL")
-
-        fig_bb = go.Figure()
-        fig_bb.add_trace(go.Candlestick(x=data.index, open=data["Open"], high=data["High"], low=data["Low"], close=data["Close"], name="PRICE"))
-        fig_bb.add_trace(go.Scatter(x=data.index, y=data["BB_UPPER"], name="BB Upper", line=dict(color="#f59e0b", width=1, dash="dash")))
-        fig_bb.add_trace(go.Scatter(x=data.index, y=data["BB_MID"], name="BB Mid", line=dict(color="#94a3b8", width=1)))
-        fig_bb.add_trace(go.Scatter(x=data.index, y=data["BB_LOWER"], name="BB Lower", line=dict(color="#f59e0b", width=1, dash="dash"), fill="tonexty", fillcolor="rgba(245, 158, 11, 0.05)"))
-        
-        st_buy = data[data["ST_DIRECTION"] == 1]["SUPERTREND"]
-        st_sell = data[data["ST_DIRECTION"] == -1]["SUPERTREND"]
-        fig_bb.add_trace(go.Scatter(x=st_buy.index, y=st_buy, mode="lines", name="Supertrend BUY", line=dict(color="#22c55e", width=2)))
-        fig_bb.add_trace(go.Scatter(x=st_sell.index, y=st_sell, mode="lines", name="Supertrend SELL", line=dict(color="#ef4444", width=2)))
-
-        fig_bb.update_layout(template="plotly_dark", height=700, xaxis_rangeslider_visible=False, plot_bgcolor="#0d1117", paper_bgcolor="#0d1117")
-        st.plotly_chart(fig_bb, use_container_width=True)
-
-        fig_bw = go.Figure()
-        fig_bw.add_trace(go.Scatter(x=data.index, y=data["BB_WIDTH"], name="BB Width", line=dict(color="#60a5fa", width=2), fill="tozeroy", fillcolor="rgba(96, 165, 250, 0.1)"))
-        fig_bw.update_layout(template="plotly_dark", height=200, title="BB Width (Squeeze Detector)", paper_bgcolor="#0d1117", plot_bgcolor="#0d1117")
-        st.plotly_chart(fig_bw, use_container_width=True)
-
-# ----------------- TAB 3: OPTION CHAIN -----------------
-with tab3:
-    st.header("📂 LIVE OPTION CHAIN (SHOONYA)")
     option_symbol = st.selectbox("SELECT INDEX", ["NIFTY", "BANKNIFTY"])
-    
-    with st.spinner("🔄 Fetching Live Options Data..."):
-        option_df, data_source = fetch_shoonya_option_chain(option_symbol)
-        
-    if data_source == "error":
-        st.error("🚨 Shoonya API కి కనెక్ట్ కాలేకపోతోంది. దయచేసి ఎర్రర్ మెసేజ్‌ని పైన గమనించండి.")
+
+    if st.session_state.shoonya_logged_in:
+
+        st.success("✅ Shoonya Live Option Chain")
+
+        # Expiry dates fetch
+        expiry_list = st.session_state.shoonya.get_expiry_list(option_symbol)
+
+        if expiry_list:
+            selected_expiry = st.selectbox("EXPIRY DATE", expiry_list)
+            strike_count = st.slider("STRIKE COUNT (each side)", 5, 20, 10)
+
+            if st.button("🔄 LOAD OPTION CHAIN"):
+                with st.spinner("Shoonya నుండి Option Chain load అవుతోంది..."):
+                    option_df = st.session_state.shoonya.get_option_chain(
+                        option_symbol, selected_expiry, strike_count
+                    )
+
+                if not option_df.empty:
+                    total_call = option_df["CALL_OI"].sum()
+                    total_put = option_df["PUT_OI"].sum()
+                    pcr = total_put / total_call if total_call > 0 else 0
+
+                    support = option_df.loc[option_df["PUT_OI"].idxmax(), "STRIKE"] if total_put > 0 else 0
+                    resistance = option_df.loc[option_df["CALL_OI"].idxmax(), "STRIKE"] if total_call > 0 else 0
+
+                    option_df["TOTAL_OI"] = option_df["CALL_OI"] + option_df["PUT_OI"]
+                    max_pain = option_df.loc[option_df["TOTAL_OI"].idxmax(), "STRIKE"]
+
+                    if pcr > 1.15:
+                        st.success(f"🚀 BULLISH | PCR: {round(pcr, 2)}")
+                    elif pcr < 0.85:
+                        st.error(f"🔻 BEARISH | PCR: {round(pcr, 2)}")
+                    else:
+                        st.warning(f"⚠️ SIDEWAYS | PCR: {round(pcr, 2)}")
+
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("PCR", round(pcr, 2))
+                    m2.metric("SUPPORT", int(support))
+                    m3.metric("RESISTANCE", int(resistance))
+                    m4.metric("MAX PAIN", int(max_pain))
+
+                    # OI Chart
+                    fig2 = go.Figure()
+                    fig2.add_trace(go.Bar(x=option_df["STRIKE"], y=option_df["CALL_OI"], name="CALL OI", marker_color="#ef4444"))
+                    fig2.add_trace(go.Bar(x=option_df["STRIKE"], y=option_df["PUT_OI"], name="PUT OI", marker_color="#22c55e"))
+                    fig2.update_layout(template="plotly_dark", barmode="group", height=500, title="OI ANALYSIS")
+                    st.plotly_chart(fig2, use_container_width=True)
+
+                    # IV Chart
+                    if "CALL_IV" in option_df.columns:
+                        fig_iv = go.Figure()
+                        fig_iv.add_trace(go.Scatter(x=option_df["STRIKE"], y=option_df["CALL_IV"], mode="lines+markers", name="CALL IV", line=dict(color="#f59e0b")))
+                        fig_iv.add_trace(go.Scatter(x=option_df["STRIKE"], y=option_df["PUT_IV"], mode="lines+markers", name="PUT IV", line=dict(color="#a78bfa")))
+                        fig_iv.update_layout(template="plotly_dark", height=300, title="IMPLIED VOLATILITY")
+                        st.plotly_chart(fig_iv, use_container_width=True)
+
+                    st.dataframe(option_df, use_container_width=True)
+                else:
+                    st.warning("⚠️ Option Chain data రాలేదు. Expiry check చేయండి.")
+        else:
+            st.warning("⚠️ Expiry dates రాలేదు. Symbol check చేయండి.")
+
     else:
-        st.success("✅ Connected to Shoonya API")
-        
-        if not option_df.empty:
-            total_call = option_df["CALL_OI"].sum()
-            total_put = option_df["PUT_OI"].sum()
-            pcr = total_put / total_call if total_call > 0 else 0
+        # Fallback — NSE scraping
+        st.warning("⚠️ Shoonya login చేయండి — Live Option Chain కోసం. NSE fallback try చేస్తున్నాం...")
 
-            support = option_df.loc[option_df["PUT_OI"].idxmax(), "STRIKE"]
-            resistance = option_df.loc[option_df["CALL_OI"].idxmax(), "STRIKE"]
+        try:
+            headers = {
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "accept": "*/*",
+                "accept-language": "en-US,en;q=0.9",
+                "referer": "https://www.nseindia.com/option-chain",
+            }
+            session = requests.Session()
+            session.get("https://www.nseindia.com", headers=headers, timeout=10, verify=False)
+            time.sleep(1)
+            resp = session.get(
+                f"https://www.nseindia.com/api/option-chain-indices?symbol={option_symbol}",
+                headers=headers, timeout=10, verify=False
+            )
+            data_oc = resp.json()
+            records = data_oc.get("records", {}).get("data", [])
 
-            option_df["TOTAL_OI"] = option_df["CALL_OI"] + option_df["PUT_OI"]
-            max_pain = option_df.loc[option_df["TOTAL_OI"].idxmax(), "STRIKE"]
+            rows = []
+            for item in records:
+                strike = item.get("strikePrice", 0)
+                ce = item.get("CE", {})
+                pe = item.get("PE", {})
+                rows.append({
+                    "STRIKE": strike,
+                    "CALL_OI": ce.get("openInterest", 0),
+                    "PUT_OI": pe.get("openInterest", 0),
+                    "CALL_CHG_OI": ce.get("changeinOpenInterest", 0),
+                    "PUT_CHG_OI": pe.get("changeinOpenInterest", 0),
+                })
 
-            if pcr > 1.15: st.success(f"🚀 BULLISH SENTIMENT | PCR: {round(pcr,2)}")
-            elif pcr < 0.85: st.error(f"🔻 BEARISH SENTIMENT | PCR: {round(pcr,2)}")
-            else: st.warning(f"⚠️ SIDEWAYS | PCR: {round(pcr,2)}")
+            option_df = pd.DataFrame(rows)
 
-            m1, m2, m3, m4, m5, m6 = st.columns(6)
-            m1.metric("PCR", round(pcr, 2))
-            m2.metric("SUPPORT", int(support))
-            m3.metric("RESISTANCE", int(resistance))
-            m4.metric("MAX PAIN", int(max_pain))
-            m5.metric("TOTAL CALL OI", f"{int(total_call):,}")
-            m6.metric("TOTAL PUT OI", f"{int(total_put):,}")
+            if not option_df.empty:
+                total_call = option_df["CALL_OI"].sum()
+                total_put = option_df["PUT_OI"].sum()
+                pcr = total_put / total_call if total_call > 0 else 0
 
-            fig_oi = go.Figure()
-            fig_oi.add_trace(go.Bar(x=option_df["STRIKE"], y=option_df["CALL_OI"], name="CALL OI", marker_color="#ef4444"))
-            fig_oi.add_trace(go.Bar(x=option_df["STRIKE"], y=option_df["PUT_OI"], name="PUT OI", marker_color="#22c55e"))
-            fig_oi.update_layout(template="plotly_dark", barmode="group", height=500, title="OI ANALYSIS", paper_bgcolor="#0d1117", plot_bgcolor="#0d1117")
-            st.plotly_chart(fig_oi, use_container_width=True)
+                support = option_df.loc[option_df["PUT_OI"].idxmax(), "STRIKE"]
+                resistance = option_df.loc[option_df["CALL_OI"].idxmax(), "STRIKE"]
+                option_df["TOTAL_OI"] = option_df["CALL_OI"] + option_df["PUT_OI"]
+                max_pain = option_df.loc[option_df["TOTAL_OI"].idxmax(), "STRIKE"]
 
-            st.dataframe(option_df, use_container_width=True)
+                if pcr > 1.15:
+                    st.success(f"🚀 BULLISH | PCR: {round(pcr, 2)}")
+                elif pcr < 0.85:
+                    st.error(f"🔻 BEARISH | PCR: {round(pcr, 2)}")
+                else:
+                    st.warning(f"⚠️ SIDEWAYS | PCR: {round(pcr, 2)}")
 
-# ----------------- TAB 4: AI SCANNER -----------------
-with tab4:
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("PCR", round(pcr, 2))
+                m2.metric("SUPPORT", int(support))
+                m3.metric("RESISTANCE", int(resistance))
+                m4.metric("MAX PAIN", int(max_pain))
+
+                fig2 = go.Figure()
+                fig2.add_trace(go.Bar(x=option_df["STRIKE"], y=option_df["CALL_OI"], name="CALL OI"))
+                fig2.add_trace(go.Bar(x=option_df["STRIKE"], y=option_df["PUT_OI"], name="PUT OI"))
+                fig2.update_layout(template="plotly_dark", barmode="group", height=500, title="OI ANALYSIS (NSE Fallback)")
+                st.plotly_chart(fig2, use_container_width=True)
+                st.dataframe(option_df, use_container_width=True)
+
+        except Exception as e:
+            st.error(f"NSE fallback కూడా పని చేయలేదు: {e}")
+            st.info("💡 Shoonya login చేస్తే guaranteed live data వస్తుంది!")
+
+# =========================================================
+# TAB 3 — AI SCANNER (SHOONYA LIVE PRICES)
+# =========================================================
+
+with tab3:
     st.header("🤖 AI NSE SCANNER")
-    
-    scan_category = st.selectbox(
-        "Scan Category",
-        ["Large Cap", "Banking", "IT", "Adani Group", "Tata Group", "All Stocks (Slow)"]
+
+    # Data source selector
+    data_source_choice = st.radio(
+        "📡 DATA SOURCE",
+        ["Yahoo Finance (Free)", "Shoonya Live Data (More Accurate)"],
+        horizontal=True
     )
 
-    scan_map = {
-        "Large Cap": category_filters["Large Cap"],
-        "Banking": category_filters["Banking"],
-        "IT": category_filters["IT"],
-        "Adani Group": category_filters["Adani Group"],
-        "Tata Group": category_filters["Tata Group"],
-        "All Stocks (Slow)": list(nse_stocks.keys()),
-    }
+    use_shoonya = (
+        data_source_choice == "Shoonya Live Data (More Accurate)"
+        and st.session_state.shoonya_logged_in
+    )
 
-    stocks_to_scan = {k: v for k, v in nse_stocks.items() if k in scan_map[scan_category]}
+    if data_source_choice == "Shoonya Live Data (More Accurate)" and not st.session_state.shoonya_logged_in:
+        st.warning("⚠️ Shoonya login చేయండి sidebar లో!")
 
-    if st.button("▶ START AI SCAN"):
-        results = []
-        progress = st.progress(0)
-        total = len(stocks_to_scan)
-        status_text = st.empty()
+    results = []
+    progress = st.progress(0)
+    total = len(nse_stocks)
 
-        def scan_stock(item):
-            name, symbol = item
-            try:
-                df = load_market_data(symbol, "15m", "5d")
-                if df.empty: return None
-                df = calculate_indicators(df)
-                latest = df.iloc[-1]
-                signal, score, confidence, _ = generate_signal(latest)
-                return {
-                    "STOCK": name,
-                    "PRICE": round(float(latest["Close"]), 2),
-                    "RSI": round(float(latest["RSI"]), 2),
-                    "MACD": round(float(latest["MACD"]), 4),
-                    "BB_SIGNAL": str(latest["BB_SIGNAL"]),
-                    "SUPERTREND": "BUY" if int(latest["ST_DIRECTION"]) == 1 else "SELL",
-                    "SIGNAL": signal,
-                    "CONFIDENCE": confidence,
-                    "SCORE": score
-                }
-            except:
+    # Fetch Shoonya live prices bulk (if logged in)
+    shoonya_prices = {}
+    if use_shoonya:
+        with st.spinner("🔄 Shoonya నుండి live prices fetch చేస్తున్నాం..."):
+            syms = [(("NSE", v)) for k, v in shoonya_symbols.items()]
+            shoonya_prices = st.session_state.shoonya.get_live_ltp_bulk(syms)
+        st.success(f"✅ {len(shoonya_prices)} stocks live price వచ్చింది!")
+
+    def scan_stock(item):
+        name, symbol = item
+        try:
+            df = load_market_data(symbol, "15m", "5d")
+            if df.empty:
                 return None
 
-        with ThreadPoolExecutor(max_workers=8) as executor:
-            for idx, result in enumerate(executor.map(scan_stock, stocks_to_scan.items())):
-                if result: results.append(result)
-                progress.progress((idx + 1) / total)
-                status_text.text(f"Scanning... {idx+1}/{total}")
+            df = calculate_indicators(df)
+            latest = df.iloc[-1]
+            signal, score, confidence = generate_signal(latest)
 
-        status_text.empty()
-        progress.empty()
+            price = round(float(latest["Close"]), 2)
+            price_source = "Yahoo"
 
-        scan_df = pd.DataFrame(results)
+            # Shoonya live price override
+            sh_sym = shoonya_symbols.get(name, "")
+            if use_shoonya and sh_sym in shoonya_prices:
+                price = shoonya_prices[sh_sym]["ltp"]
+                price_source = "🟢 Live"
 
-        if not scan_df.empty:
-            scan_df = scan_df.sort_values(by="CONFIDENCE", ascending=False)
-            
-            f1, f2, f3 = st.tabs(["🚀 ALL", "✅ BUY SIGNALS", "🔻 SELL SIGNALS"])
-            with f1: st.dataframe(scan_df, use_container_width=True)
-            with f2: st.dataframe(scan_df[scan_df["SIGNAL"].str.contains("BUY")], use_container_width=True)
-            with f3: st.dataframe(scan_df[scan_df["SIGNAL"].str.contains("SELL")], use_container_width=True)
+            return {
+                "STOCK": name,
+                "PRICE": price,
+                "SOURCE": price_source,
+                "RSI": round(float(latest["RSI"]), 2),
+                "SIGNAL": signal,
+                "CONFIDENCE": confidence,
+                "SCORE": score
+            }
+        except:
+            return None
 
-            excel_buffer = io.BytesIO()
-            with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
-                scan_df.to_excel(writer, index=False)
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        for idx, result in enumerate(
+            executor.map(scan_stock, nse_stocks.items())
+        ):
+            if result:
+                results.append(result)
+            progress.progress((idx + 1) / total)
 
-            st.download_button(
-                label="📥 DOWNLOAD AI SCANNER EXCEL",
-                data=excel_buffer.getvalue(),
-                file_name="NSE_AI_SCANNER_V10.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+    scan_df = pd.DataFrame(results)
+
+    if not scan_df.empty:
+        scan_df = scan_df.sort_values(by="CONFIDENCE", ascending=False)
+
+        # Filter tabs
+        f1, f2, f3 = st.tabs(["🚀 ALL", "✅ BUY", "🔻 SELL"])
+        with f1:
+            st.dataframe(scan_df, use_container_width=True)
+        with f2:
+            st.dataframe(scan_df[scan_df["SIGNAL"].str.contains("BUY")], use_container_width=True)
+        with f3:
+            st.dataframe(scan_df[scan_df["SIGNAL"].str.contains("SELL")], use_container_width=True)
+
+        # Download
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+            scan_df.to_excel(writer, index=False)
+
+        st.download_button(
+            label="📥 DOWNLOAD AI SCANNER",
+            data=excel_buffer.getvalue(),
+            file_name="NSE_AI_SCANNER_SHOONYA.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 # =========================================================
 # FOOTER
 # =========================================================
 
 st.markdown("---")
-st.markdown("""
-<div style='text-align:center; color: #475569; font-size: 0.8rem; letter-spacing: 2px;'>
-    🚀 NSE AI PRO MAX V10.0 ULTRA &nbsp;|&nbsp; Shoonya Powered &nbsp;|&nbsp; 
-    Bollinger Bands + Supertrend + Option Chain
-    <br><br>
-    <span style='color: #ef4444;'>⚠️ DISCLAIMER: Educational purpose only. Not SEBI registered advice.</span>
-</div>
-""", unsafe_allow_html=True)
+st.caption("🚀 NSE AI PRO MAX V9.0 ULTRA + Shoonya Live Integration")
+st.caption("⚠️ Educational purpose only. Not SEBI registered advice.")
