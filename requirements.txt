@@ -6,3 +6,5 @@ numpy
 openpyxl
 pytz
 streamlit-autorefresh
+NorenRestApiPy
+pyotp
