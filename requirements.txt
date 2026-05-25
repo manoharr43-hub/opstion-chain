@@ -1,10 +1,11 @@
 streamlit
 yfinance
-plotly
 pandas
 numpy
-openpyxl
+requests
+plotly
 pytz
-streamlit-autorefresh
-NorenRestApiPy
+streamlit_autorefresh
+openpyxl
 pyotp
+NorenRestApiPy
