@@ -636,57 +636,31 @@ def generate_signal(latest):
     return signal, score, confidence, signals
 
 # =========================================================
-# OPTION CHAIN — FIXED WITH PROXY + RETRY
+# OPTION CHAIN — HIGHLY OPTIMIZED (NO FAKE DATA)
 # =========================================================
 
 @st.cache_data(ttl=60)
 def get_option_chain(symbol="NIFTY"):
     headers = {
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "accept": "*/*",
-        "accept-language": "en-US,en;q=0.9",
-        "accept-encoding": "gzip, deflate, br",
-        "referer": "https://www.nseindia.com/option-chain",
-        "x-requested-with": "XMLHttpRequest",
-        "connection": "keep-alive",
-        "sec-fetch-dest": "empty",
-        "sec-fetch-mode": "cors",
-        "sec-fetch-site": "same-origin",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
     }
 
-    # Try multiple proxy/mirror approaches
-    urls = [
-        f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}",
-        f"https://nseindia.com/api/option-chain-indices?symbol={symbol}",
-    ]
-
+    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
     session = requests.Session()
     session.headers.update(headers)
 
     for attempt in range(3):
         try:
             # First get cookies from homepage
-            home_resp = session.get(
-                "https://www.nseindia.com",
-                timeout=15,
-                verify=False
-            )
+            session.get("https://www.nseindia.com", timeout=10, verify=False)
             time.sleep(1.5)
 
-            # Get option chain page to set referer cookies
-            session.get(
-                "https://www.nseindia.com/option-chain",
-                timeout=10,
-                verify=False
-            )
-            time.sleep(1)
-
             # Fetch actual data
-            response = session.get(
-                urls[0],
-                timeout=15,
-                verify=False
-            )
+            response = session.get(url, timeout=10, verify=False)
 
             if response.status_code == 200:
                 data = response.json()
@@ -710,28 +684,12 @@ def get_option_chain(symbol="NIFTY"):
                             "PUT_IV": pe.get("impliedVolatility", 0),
                         })
                     return pd.DataFrame(rows), "live"
-
+                
         except Exception as e:
             time.sleep(2)
             continue
 
-    # FALLBACK — Simulated data (if NSE blocks)
-    strikes = list(range(21000, 26000, 100)) if symbol == "NIFTY" else list(range(44000, 54000, 200))
-    np.random.seed(42)
-    rows = []
-    for s in strikes:
-        rows.append({
-            "STRIKE": s,
-            "CALL_OI": int(np.random.randint(1000, 500000)),
-            "PUT_OI": int(np.random.randint(1000, 500000)),
-            "CALL_CHG_OI": int(np.random.randint(-50000, 50000)),
-            "PUT_CHG_OI": int(np.random.randint(-50000, 50000)),
-            "CALL_LTP": round(np.random.uniform(5, 500), 2),
-            "PUT_LTP": round(np.random.uniform(5, 500), 2),
-            "CALL_IV": round(np.random.uniform(10, 40), 2),
-            "PUT_IV": round(np.random.uniform(10, 40), 2),
-        })
-    return pd.DataFrame(rows), "demo"
+    return pd.DataFrame(), "error"
 
 # =========================================================
 # TABS
@@ -910,10 +868,10 @@ with tab3:
     with st.spinner("🔄 NSE data load అవుతోంది..."):
         option_df, data_source = get_option_chain(option_symbol)
 
-    if data_source == "demo":
-        st.warning("⚠️ NSE live data అందుబాటులో లేదు (Rate limit/block). Demo data చూపిస్తున్నాం. Market hours లో try చేయండి.")
+    if data_source == "error":
+        st.error("🚨 NSE Server నుండి లైవ్ డేటా రావడం లేదు (Blocked). దయచేసి కాసేపు ఆగి మళ్ళీ ట్రై చేయండి.")
     else:
-        st.success("✅ NSE Live Data")
+        st.success("✅ NSE Live Data Connected")
 
     if not option_df.empty:
         total_call = option_df["CALL_OI"].sum()
