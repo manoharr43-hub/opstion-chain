@@ -9,3 +9,4 @@ streamlit_autorefresh
 openpyxl
 pyotp
 NorenRestApiPy
+websocket-client
