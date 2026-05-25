@@ -1,5 +1,5 @@
 # =========================================================
-# 🚀 NSE AI PRO MAX V10.0 ULTRA - SHOONYA EDITION
+# 🚀 NSE AI PRO MAX V10.0 ULTRA - SHOONYA EDITION (DEBUG)
 # =========================================================
 
 import streamlit as st
@@ -149,7 +149,7 @@ else:
     st.sidebar.error("🔴 MARKET CLOSED")
 
 # =========================================================
-# SHOONYA API LOGIC
+# SHOONYA API LOGIC (WITH DEBUGGING)
 # =========================================================
 
 class ShoonyaApiPy(NorenApi):
@@ -161,7 +161,6 @@ def shoonya_login():
     try:
         api = ShoonyaApiPy()
         
-        # .strip() prevents errors caused by extra spaces in Streamlit Secrets
         user = st.secrets["shoonya"]["user_id"].strip()
         pwd = st.secrets["shoonya"]["password"].strip()
         vc = st.secrets["shoonya"]["vendor_code"].strip()
@@ -176,9 +175,14 @@ def shoonya_login():
         if login_res and login_res.get('stat') == 'Ok':
             return api
         else:
-            st.error(f"⚠️ Shoonya Login Issue: {login_res}")
+            # లాగిన్ ఫెయిల్ అయితే, ఏ కారణం చేత ఫెయిల్ అయిందో స్క్రీన్ మీద ప్రింట్ చేస్తుంది
+            st.error(f"🛑 లాగిన్ ఫెయిల్ అయింది. Shoonya సర్వర్ మెసేజ్: {login_res}")
             return None
+            
     except Exception as e:
+        # సిస్టమ్ క్రాష్ అయితే, అసలు ఎర్రర్ ఏంటో చూపిస్తుంది
+        st.error(f"🛑 సర్వర్ ఎర్రర్: {str(e)}")
+        st.warning("💡 గమనిక: ఇది Streamlit Cloud IP ని Shoonya బ్లాక్ చేయడం వల్ల వచ్చిన ఎర్రర్ కావచ్చు.")
         return None
 
 @st.cache_data(ttl=60)
@@ -424,7 +428,7 @@ with tab3:
         option_df, data_source = fetch_shoonya_option_chain(option_symbol)
         
     if data_source == "error":
-        st.error("🚨 Shoonya API కి కనెక్ట్ కాలేకపోతోంది. Streamlit Secrets లో వివరాలు సరిగ్గా ఉన్నాయో లేదో చెక్ చేయండి, లేదా కాసేపు ఆగి ట్రై చేయండి.")
+        st.error("🚨 Shoonya API కి కనెక్ట్ కాలేకపోతోంది. దయచేసి ఎర్రర్ మెసేజ్‌ని పైన గమనించండి.")
     else:
         st.success("✅ Connected to Shoonya API")
         
