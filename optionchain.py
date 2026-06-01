@@ -1,8 +1,5 @@
-# 🚀 NSE AI PRO MAX V10 CLEAN CODE
-import streamlit as st
-import yfinance as yf
-import pandas as pd
-import numpy as np
+# 🚀 NSE AI PRO MAX V10 FINAL CLEAN CODE
+import streamlit as st, yfinance as yf, pandas as pd, numpy as np
 import requests, hashlib, json, time, pytz
 import plotly.graph_objects as go
 from datetime import datetime
@@ -41,20 +38,9 @@ class ShoonyaAPI:
         response = requests.post(f"{self.BASE_URL}/{endpoint}", data=payload, headers=self.headers)
         return response.json()
 
-    def get_scrip_token(self, exchange, symbol):
-        cache_key = f"{exchange}:{symbol}"
-        if cache_key in self.token_cache:
-            return self.token_cache[cache_key]
-        data = self._post("SearchScrip", {"uid": self.user_id, "stext": symbol, "exch": exchange})
-        if data.get("stat") == "Ok":
-            token = data["values"][0]["token"]
-            self.token_cache[cache_key] = token
-            return token
-        return None
-
     def get_quote(self, exchange, symbol):
-        token = self.get_scrip_token(exchange, symbol)
-        if not token: return None
+        token_data = self._post("SearchScrip", {"uid": self.user_id, "stext": symbol, "exch": exchange})
+        token = token_data["values"][0]["token"]
         return self._post("GetQuotes", {"uid": self.user_id, "exch": exchange, "token": token})
 
 # =========================================================
