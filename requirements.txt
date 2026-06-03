@@ -1,12 +1,4 @@
 streamlit
-yfinance
 pandas
-numpy
 requests
-plotly
-pytz
-streamlit_autorefresh
-openpyxl
-pyotp
-NorenRestApiPy
-websocket-client
+nsepython
