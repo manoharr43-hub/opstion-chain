@@ -6,23 +6,33 @@ from nsepython import nse_optionchain_scrapper
 # PAGE CONFIG
 # ==========================================
 st.set_page_config(layout="wide")
-st.title("📊 NSE Option Screener (nsepython version)")
+st.title("🧠 NSE Option Screener Debug Viewer")
 
 # ==========================================
 # USER INPUTS
 # ==========================================
 symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
-pcr_threshold = st.slider("PCR Threshold", 0.5, 2.0, 1.0)
-volume_filter = st.number_input("Min Volume", value=1000)
 
 # ==========================================
-# FETCH DATA USING NSEPYTHON
+# FETCH RAW DATA
 # ==========================================
 try:
     data = nse_optionchain_scrapper(symbol)
-    option_data = data["records"]["data"]
+    st.subheader("🔍 Raw JSON Response from NSE API")
+    st.json(data)  # Show full JSON structure
 except Exception as e:
     st.error(f"❌ Error fetching data: {e}")
+    st.stop()
+
+# ==========================================
+# SAFE ACCESS LOGIC
+# ==========================================
+if "records" in data and "data" in data["records"]:
+    option_data = data["records"]["data"]
+elif "filtered" in data and "data" in data["filtered"]:
+    option_data = data["filtered"]["data"]
+else:
+    st.warning("⚠️ Unexpected JSON format — check raw data above.")
     st.stop()
 
 # ==========================================
@@ -41,18 +51,7 @@ df = pd.DataFrame(rows, columns=["Strike", "CE_OI", "PE_OI", "Volume"])
 df["PCR"] = df["PE_OI"] / df["CE_OI"].replace(0, 1)
 
 # ==========================================
-# FILTERING
+# DISPLAY TABLE
 # ==========================================
-filtered = df[(df["PCR"] >= pcr_threshold) & (df["Volume"] >= volume_filter)]
-
-# ==========================================
-# DISPLAY RESULTS
-# ==========================================
-st.subheader(f"{symbol} Option Screener Results")
-st.dataframe(filtered, use_container_width=True)
-
-avg_pcr = df["PCR"].mean()
-if avg_pcr > 1:
-    st.success(f"Market Sentiment: Bullish (PCR={avg_pcr:.2f})")
-else:
-    st.error(f"Market Sentiment: Bearish (PCR={avg_pcr:.2f})")
+st.subheader(f"{symbol} Option Chain Data")
+st.dataframe(df, use_container_width=True)
