@@ -1,12 +1,35 @@
 import streamlit as st
-import pandas as pd
 import requests
+import time
+import pandas as pd
 
-# ==========================================
-# PAGE CONFIG
-# ==========================================
 st.set_page_config(layout="wide")
-st.title("📊 NSE Option Screener")
+st.title("📊 NSE Option Screener with Retry")
+
+def fetch_option_chain(symbol, retries=3, delay=5):
+    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.nseindia.com/"
+    }
+    session = requests.Session()
+
+    for i in range(retries):
+        try:
+            response = session.get(url, headers=headers, timeout=10)
+            if response.headers.get("Content-Type") == "application/json":
+                data = response.json()
+                return data["records"]["data"]
+            else:
+                st.warning(f"⚠️ Attempt {i+1}: NSE returned non-JSON response")
+        except Exception as e:
+            st.warning(f"⚠️ Attempt {i+1} failed: {e}")
+        time.sleep(delay)
+
+    st.error("❌ All retries failed. NSE API blocked or returned invalid data.")
+    return []
 
 # ==========================================
 # USER INPUTS
@@ -16,21 +39,10 @@ pcr_threshold = st.slider("PCR Threshold", 0.5, 2.0, 1.0)
 volume_filter = st.number_input("Min Volume", value=1000)
 
 # ==========================================
-# NSE API CALL
+# FETCH DATA
 # ==========================================
-def fetch_option_chain(symbol):
-    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    session = requests.Session()
-    response = session.get(url, headers=headers)
-    data = response.json()
-    return data["records"]["data"]
-
 option_data = fetch_option_chain(symbol)
 
-# ==========================================
-# DATA PROCESSING
-# ==========================================
 rows = []
 for item in option_data:
     strike = item["strikePrice"]
@@ -43,20 +55,11 @@ for item in option_data:
 df = pd.DataFrame(rows, columns=["Strike", "CE_OI", "PE_OI", "Volume"])
 df["PCR"] = df["PE_OI"] / df["CE_OI"].replace(0, 1)
 
-# ==========================================
-# FILTERING
-# ==========================================
 filtered = df[(df["PCR"] >= pcr_threshold) & (df["Volume"] >= volume_filter)]
 
-# ==========================================
-# DISPLAY
-# ==========================================
 st.subheader(f"{symbol} Option Screener Results")
 st.dataframe(filtered, use_container_width=True)
 
-# ==========================================
-# SENTIMENT
-# ==========================================
 avg_pcr = df["PCR"].mean()
 if avg_pcr > 1:
     st.success(f"Market Sentiment: Bullish (PCR={avg_pcr:.2f})")
