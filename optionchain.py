@@ -1,68 +1,64 @@
-# 🚀 NSE AI PRO MAX V10 FINAL CLEAN CODE
-import streamlit as st, yfinance as yf, pandas as pd, numpy as np
-import requests, hashlib, json, time, pytz
-import plotly.graph_objects as go
-from datetime import datetime
+import streamlit as st
+import pandas as pd
+import requests
 
-# =========================================================
+# ==========================================
 # PAGE CONFIG
-# =========================================================
-st.set_page_config(page_title="NSE AI PRO MAX V10", page_icon="🚀", layout="wide")
+# ==========================================
+st.set_page_config(layout="wide")
+st.title("📊 NSE Option Screener")
 
-# =========================================================
-# SHOONYA API CLASS
-# =========================================================
-class ShoonyaAPI:
-    BASE_URL = "https://api.shoonya.com/NorenWClientTP"
-    def __init__(self):
-        self.session_token = None
-        self.user_id = None
-        self.headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        self.token_cache = {}
+# ==========================================
+# USER INPUTS
+# ==========================================
+symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
+pcr_threshold = st.slider("PCR Threshold", 0.5, 2.0, 1.0)
+volume_filter = st.number_input("Min Volume", value=1000)
 
-    def login(self, user_id, password, totp, vendor_code, api_secret):
-        pwd_hash = hashlib.sha256(password.encode()).hexdigest()
-        app_key = f"{user_id}|{api_secret}"
-        app_key_hash = hashlib.sha256(app_key.encode()).hexdigest()
-        payload = f"jData={{\"uid\":\"{user_id}\",\"pwd\":\"{pwd_hash}\",\"factor2\":\"{totp}\",\"vc\":\"{vendor_code}\",\"appkey\":\"{app_key_hash}\",\"source\":\"API\"}}"
-        response = requests.post(f"{self.BASE_URL}/QuickAuth", data=payload, headers=self.headers)
-        data = response.json()
-        if data.get("stat") == "Ok":
-            self.session_token = data.get("susertoken")
-            self.user_id = user_id
-            return True
-        return False
+# ==========================================
+# NSE API CALL
+# ==========================================
+def fetch_option_chain(symbol):
+    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    session = requests.Session()
+    response = session.get(url, headers=headers)
+    data = response.json()
+    return data["records"]["data"]
 
-    def _post(self, endpoint, jdata):
-        payload = f"jData={json.dumps(jdata)}&jKey={self.session_token}"
-        response = requests.post(f"{self.BASE_URL}/{endpoint}", data=payload, headers=self.headers)
-        return response.json()
+option_data = fetch_option_chain(symbol)
 
-    def get_quote(self, exchange, symbol):
-        token_data = self._post("SearchScrip", {"uid": self.user_id, "stext": symbol, "exch": exchange})
-        token = token_data["values"][0]["token"]
-        return self._post("GetQuotes", {"uid": self.user_id, "exch": exchange, "token": token})
+# ==========================================
+# DATA PROCESSING
+# ==========================================
+rows = []
+for item in option_data:
+    strike = item["strikePrice"]
+    ce_oi = item["CE"]["openInterest"] if "CE" in item else 0
+    pe_oi = item["PE"]["openInterest"] if "PE" in item else 0
+    ce_vol = item["CE"]["totalTradedVolume"] if "CE" in item else 0
+    pe_vol = item["PE"]["totalTradedVolume"] if "PE" in item else 0
+    rows.append([strike, ce_oi, pe_oi, ce_vol + pe_vol])
 
-# =========================================================
-# INDICATORS
-# =========================================================
-def calculate_indicators(df):
-    df["EMA20"] = df["Close"].ewm(span=20).mean()
-    df["EMA50"] = df["Close"].ewm(span=50).mean()
-    delta = df["Close"].diff()
-    gain, loss = delta.clip(lower=0), -delta.clip(upper=0)
-    rs = gain.rolling(14).mean() / (loss.rolling(14).mean() + 1e-10)
-    df["RSI"] = 100 - (100 / (1 + rs))
-    ema12, ema26 = df["Close"].ewm(span=12).mean(), df["Close"].ewm(span=26).mean()
-    df["MACD"], df["MACD_SIGNAL"] = ema12 - ema26, (ema12 - ema26).ewm(span=9).mean()
-    df["VWAP"] = (df["Close"] * df["Volume"]).cumsum() / (df["Volume"].cumsum() + 1e-10)
-    return df
+df = pd.DataFrame(rows, columns=["Strike", "CE_OI", "PE_OI", "Volume"])
+df["PCR"] = df["PE_OI"] / df["CE_OI"].replace(0, 1)
 
-def generate_signal(latest):
-    score = 0
-    score += 25 if latest["EMA20"] > latest["EMA50"] else -25
-    score += 20 if 55 <= latest["RSI"] <= 70 else -15
-    score += 25 if latest["MACD"] > latest["MACD_SIGNAL"] else -25
-    score += 20 if latest["Close"] > latest["VWAP"] else -20
-    signal = "🚀 STRONG BUY" if score >= 70 else "✅ BUY" if score >= 30 else "🔻 SELL" if score <= -30 else "⚠️ SIDEWAYS"
-    return signal, score
+# ==========================================
+# FILTERING
+# ==========================================
+filtered = df[(df["PCR"] >= pcr_threshold) & (df["Volume"] >= volume_filter)]
+
+# ==========================================
+# DISPLAY
+# ==========================================
+st.subheader(f"{symbol} Option Screener Results")
+st.dataframe(filtered, use_container_width=True)
+
+# ==========================================
+# SENTIMENT
+# ==========================================
+avg_pcr = df["PCR"].mean()
+if avg_pcr > 1:
+    st.success(f"Market Sentiment: Bullish (PCR={avg_pcr:.2f})")
+else:
+    st.error(f"Market Sentiment: Bearish (PCR={avg_pcr:.2f})")
