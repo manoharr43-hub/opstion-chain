@@ -1,25 +1,45 @@
 import streamlit as st
 import requests
-import time
 import pandas as pd
+import time
+import random
 
+# ==========================================
+# PAGE CONFIG
+# ==========================================
 st.set_page_config(layout="wide")
-st.title("📊 NSE Option Screener with Retry")
+st.title("📊 NSE Option Screener PRO")
 
+# ==========================================
+# USER INPUTS
+# ==========================================
+symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
+pcr_threshold = st.slider("PCR Threshold", 0.5, 2.0, 1.0)
+volume_filter = st.number_input("Min Volume", value=1000)
+
+# ==========================================
+# NSE API FUNCTION WITH RETRY + COOKIE
+# ==========================================
 def fetch_option_chain(symbol, retries=3, delay=5):
     url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "User-Agent": random.choice([
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+            "Mozilla/5.0 (X11; Linux x86_64)"
+        ]),
         "Accept": "application/json",
         "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://www.nseindia.com/"
     }
+
     session = requests.Session()
+    session.get("https://www.nseindia.com", headers=headers)  # Cookie setup
 
     for i in range(retries):
         try:
             response = session.get(url, headers=headers, timeout=10)
-            if response.headers.get("Content-Type") == "application/json":
+            if "application/json" in response.headers.get("Content-Type", ""):
                 data = response.json()
                 return data["records"]["data"]
             else:
@@ -30,13 +50,6 @@ def fetch_option_chain(symbol, retries=3, delay=5):
 
     st.error("❌ All retries failed. NSE API blocked or returned invalid data.")
     return []
-
-# ==========================================
-# USER INPUTS
-# ==========================================
-symbol = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY"])
-pcr_threshold = st.slider("PCR Threshold", 0.5, 2.0, 1.0)
-volume_filter = st.number_input("Min Volume", value=1000)
 
 # ==========================================
 # FETCH DATA
@@ -55,8 +68,14 @@ for item in option_data:
 df = pd.DataFrame(rows, columns=["Strike", "CE_OI", "PE_OI", "Volume"])
 df["PCR"] = df["PE_OI"] / df["CE_OI"].replace(0, 1)
 
+# ==========================================
+# FILTERING
+# ==========================================
 filtered = df[(df["PCR"] >= pcr_threshold) & (df["Volume"] >= volume_filter)]
 
+# ==========================================
+# DISPLAY
+# ==========================================
 st.subheader(f"{symbol} Option Screener Results")
 st.dataframe(filtered, use_container_width=True)
 
