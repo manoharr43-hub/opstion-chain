@@ -1,13 +1,27 @@
-# NSE PRO SCANNER – Sector Wise Version
+# NSE PRO SCANNER – Final Clean E Code
 # Author: Manohar Custom Build
 
 import yfinance as yf
 import pandas as pd
 import streamlit as st
+import os
 
 # -------------------------------
 # CONFIG
 # -------------------------------
+@st.cache_data(ttl=86400)
+def load_nse500():
+    try:
+        url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
+        df = pd.read_csv(url)
+        return df['Symbol'].tolist()
+    except:
+        return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK"]  # fallback list
+
+stocks = load_nse500()
+interval = "15m"
+period = "5d"
+
 sector_stocks = {
     "Banking": ["HDFCBANK","ICICIBANK","SBIN","AXISBANK","KOTAKBANK"],
     "IT": ["TCS","INFY","WIPRO","HCLTECH","TECHM"],
@@ -17,9 +31,6 @@ sector_stocks = {
     "FMCG": ["HINDUNILVR","ITC","NESTLEIND","BRITANNIA","DABUR"]
 }
 
-interval = "15m"
-period = "5d"
-
 # -------------------------------
 # FUNCTIONS
 # -------------------------------
@@ -27,7 +38,8 @@ def load_data(stock):
     try:
         df = yf.download(f"{stock}.NS", period=period, interval=interval)
         return df
-    except:
+    except Exception as e:
+        st.error(f"Error loading {stock}: {e}")
         return pd.DataFrame()
 
 def indicators(df):
@@ -47,19 +59,44 @@ def signal_logic(df):
     else:
         return "WAIT"
 
+def save_csv(df, stock):
+    if df.empty:
+        return
+    folder = "NSE500Reports"
+    os.makedirs(folder, exist_ok=True)
+    df.to_csv(f"{folder}/{stock}_report.csv")
+
 # -------------------------------
 # STREAMLIT UI
 # -------------------------------
-st.title("📊 NSE PRO SCANNER – Sector Wise")
+st.title("📊 NSE PRO SCANNER – Final Clean Version")
 
-sector = st.selectbox("Select Sector", list(sector_stocks.keys()))
+sector = st.selectbox("Select Sector", list(sector_stocks.keys()) + ["All NSE 500"])
 
-signals = []
-for stock in sector_stocks[sector]:
-    df = load_data(stock)
-    df = indicators(df)
-    sig = signal_logic(df)
-    price = df["Close"].iloc[-1] if not df.empty else "NA"
-    signals.append([stock, price, sig])
+tab1, tab2 = st.tabs(["🔴 LIVE SCAN", "📂 BACKTEST"])
 
-st.dataframe(pd.DataFrame(signals, columns=["Stock","Price","Signal"]))
+with tab1:
+    st.subheader("📡 LIVE SIGNALS")
+    live_signals = []
+    selected_stocks = sector_stocks[sector] if sector != "All NSE 500" else stocks[:50]
+    for stock in selected_stocks:
+        df = load_data(stock)
+        df = indicators(df)
+        sig = signal_logic(df)
+        price = df["Close"].iloc[-1] if not df.empty else "NA"
+        live_signals.append([stock, price, sig])
+    st.dataframe(pd.DataFrame(live_signals, columns=["Stock","Price","Signal"]))
+
+with tab2:
+    st.subheader("📂 BACKTEST REPORTS")
+    for stock in selected_stocks:
+        df = load_data(stock)
+        df = indicators(df)
+        save_csv(df, stock)
+    st.success("✅ Backtest CSV files saved in NSE500Reports folder")
+    st.download_button(
+        label="📂 Download Backtest Excel",
+        data=pd.DataFrame(live_signals).to_csv(index=False),
+        file_name="Backtest_Report.csv",
+        mime="text/csv"
+    )
