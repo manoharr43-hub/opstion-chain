@@ -1,61 +1,72 @@
-import streamlit as st
-import pandas as pd
+# NSE PRO SCANNER – NSE 500 Stocks Version
+# Author: Manohar Custom Build
+
 import yfinance as yf
+import pandas as pd
+import streamlit as st
+import os
 
-# ==========================================
-# PAGE CONFIG
-# ==========================================
-st.set_page_config(layout="wide")
-st.title("📊 NSE Option Screener (yfinance version)")
+# -------------------------------
+# CONFIG
+# -------------------------------
+@st.cache_data(ttl=86400)
+def load_nse500():
+    try:
+        url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
+        df = pd.read_csv(url)
+        return df['Symbol'].tolist()
+    except:
+        return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK"]  # fallback list
 
-# ==========================================
-# USER INPUTS
-# ==========================================
-symbol = st.selectbox("Select Index", ["^NSEI", "^NSEBANK"])  # NIFTY & BANKNIFTY Yahoo symbols
-pcr_threshold = st.slider("PCR Threshold", 0.5, 2.0, 1.0)
-volume_filter = st.number_input("Min Volume", value=1000)
+stocks = load_nse500()
+interval = "15m"
+period = "5d"
 
-# ==========================================
-# FETCH OPTION DATA USING YFINANCE
-# ==========================================
-try:
-    ticker = yf.Ticker(symbol)
-    expiries = ticker.options
-    st.subheader("📅 Available Expiry Dates")
-    st.write(expiries)
+# -------------------------------
+# FUNCTIONS
+# -------------------------------
+def load_data(stock):
+    return yf.download(f"{stock}.NS", period=period, interval=interval)
 
-    # Fetch first expiry for demo
-    expiry = expiries[0]
-    opt_chain = ticker.option_chain(expiry)
-    calls = opt_chain.calls
-    puts = opt_chain.puts
-except Exception as e:
-    st.error(f"❌ Error fetching data: {e}")
-    st.stop()
+def indicators(df):
+    df["EMA20"] = df["Close"].ewm(span=20).mean()
+    df["EMA50"] = df["Close"].ewm(span=50).mean()
+    return df
 
-# ==========================================
-# MERGE CALLS & PUTS
-# ==========================================
-calls_df = calls[["strike", "openInterest", "volume"]].rename(columns={"openInterest": "CE_OI", "volume": "CE_Vol"})
-puts_df = puts[["strike", "openInterest", "volume"]].rename(columns={"openInterest": "PE_OI", "volume": "PE_Vol"})
+def signal_logic(df):
+    if df["EMA20"].iloc[-1] > df["EMA50"].iloc[-1]:
+        return "BUY"
+    elif df["EMA20"].iloc[-1] < df["EMA50"].iloc[-1]:
+        return "SELL"
+    else:
+        return "WAIT"
 
-merged = pd.merge(calls_df, puts_df, on="strike", how="outer").fillna(0)
-merged["Volume"] = merged["CE_Vol"] + merged["PE_Vol"]
-merged["PCR"] = merged["PE_OI"] / merged["CE_OI"].replace(0, 1)
+def save_csv(df, stock):
+    folder = "NSE500Reports"
+    os.makedirs(folder, exist_ok=True)
+    df.to_csv(f"{folder}/{stock}_report.csv")
 
-# ==========================================
-# FILTERING
-# ==========================================
-filtered = merged[(merged["PCR"] >= pcr_threshold) & (merged["Volume"] >= volume_filter)]
+# -------------------------------
+# STREAMLIT UI
+# -------------------------------
+st.title("📊 NSE PRO SCANNER – NSE 500 Stocks")
 
-# ==========================================
-# DISPLAY RESULTS
-# ==========================================
-st.subheader(f"{symbol} Option Screener Results ({expiry})")
-st.dataframe(filtered, use_container_width=True)
+tab1, tab2 = st.tabs(["🔴 LIVE SCAN", "📂 BACKTEST"])
 
-avg_pcr = merged["PCR"].mean()
-if avg_pcr > 1:
-    st.success(f"Market Sentiment: Bullish (PCR={avg_pcr:.2f})")
-else:
-    st.error(f"Market Sentiment: Bearish (PCR={avg_pcr:.2f})")
+with tab1:
+    st.subheader("📡 LIVE SIGNALS")
+    live_signals = []
+    for stock in stocks[:50]:  # limit to first 50 for speed
+        df = load_data(stock)
+        df = indicators(df)
+        sig = signal_logic(df)
+        live_signals.append([stock, df["Close"].iloc[-1], sig])
+    st.dataframe(pd.DataFrame(live_signals, columns=["Stock", "Price", "Signal"]))
+
+with tab2:
+    st.subheader("📂 BACKTEST REPORTS")
+    for stock in stocks[:50]:
+        df = load_data(stock)
+        df = indicators(df)
+        save_csv(df, stock)
+    st.success("✅ Backtest CSV files saved in NSE500Reports folder")
