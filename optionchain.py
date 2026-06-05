@@ -1,24 +1,22 @@
-# NSE PRO SCANNER – Final Clean Version
+# NSE PRO SCANNER – Sector Wise Version
 # Author: Manohar Custom Build
 
 import yfinance as yf
 import pandas as pd
 import streamlit as st
-import os
 
 # -------------------------------
 # CONFIG
 # -------------------------------
-@st.cache_data(ttl=86400)
-def load_nse500():
-    try:
-        url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
-        df = pd.read_csv(url)
-        return df['Symbol'].tolist()
-    except:
-        return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK"]  # fallback list
+sector_stocks = {
+    "Banking": ["HDFCBANK","ICICIBANK","SBIN","AXISBANK","KOTAKBANK"],
+    "IT": ["TCS","INFY","WIPRO","HCLTECH","TECHM"],
+    "Pharma": ["SUNPHARMA","CIPLA","DIVISLAB","DRREDDY","AUROPHARMA"],
+    "Energy": ["RELIANCE","ONGC","BPCL","NTPC","POWERGRID"],
+    "Auto": ["TATAMOTORS","M&M","EICHERMOT","HEROMOTOCO","BAJAJ-AUTO"],
+    "FMCG": ["HINDUNILVR","ITC","NESTLEIND","BRITANNIA","DABUR"]
+}
 
-stocks = load_nse500()
 interval = "15m"
 period = "5d"
 
@@ -29,8 +27,7 @@ def load_data(stock):
     try:
         df = yf.download(f"{stock}.NS", period=period, interval=interval)
         return df
-    except Exception as e:
-        st.error(f"Error loading {stock}: {e}")
+    except:
         return pd.DataFrame()
 
 def indicators(df):
@@ -50,38 +47,19 @@ def signal_logic(df):
     else:
         return "WAIT"
 
-def save_csv(df, stock):
-    if df.empty:
-        return
-    folder = "NSE500Reports"
-    os.makedirs(folder, exist_ok=True)
-    df.to_csv(f"{folder}/{stock}_report.csv")
-
 # -------------------------------
 # STREAMLIT UI
 # -------------------------------
-st.title("📊 NSE PRO SCANNER – Final Clean Version")
+st.title("📊 NSE PRO SCANNER – Sector Wise")
 
-tab1, tab2 = st.tabs(["🔴 LIVE SCAN", "📂 BACKTEST"])
+sector = st.selectbox("Select Sector", list(sector_stocks.keys()))
 
-with tab1:
-    st.subheader("📡 LIVE SIGNALS")
-    live_signals = []
-    for stock in stocks[:50]:  # limit to first 50 for speed
-        df = load_data(stock)
-        df = indicators(df)
-        sig = signal_logic(df)
-        if not df.empty:
-            price = df["Close"].iloc[-1]
-        else:
-            price = "NA"
-        live_signals.append([stock, price, sig])
-    st.dataframe(pd.DataFrame(live_signals, columns=["Stock", "Price", "Signal"]))
+signals = []
+for stock in sector_stocks[sector]:
+    df = load_data(stock)
+    df = indicators(df)
+    sig = signal_logic(df)
+    price = df["Close"].iloc[-1] if not df.empty else "NA"
+    signals.append([stock, price, sig])
 
-with tab2:
-    st.subheader("📂 BACKTEST REPORTS")
-    for stock in stocks[:50]:
-        df = load_data(stock)
-        df = indicators(df)
-        save_csv(df, stock)
-    st.success("✅ Backtest CSV files saved in NSE500Reports folder")
+st.dataframe(pd.DataFrame(signals, columns=["Stock","Price","Signal"]))
