@@ -1,4 +1,4 @@
-# NSE PRO SCANNER – NSE 500 Stocks Version
+# NSE PRO SCANNER – Final Clean Version
 # Author: Manohar Custom Build
 
 import yfinance as yf
@@ -26,14 +26,23 @@ period = "5d"
 # FUNCTIONS
 # -------------------------------
 def load_data(stock):
-    return yf.download(f"{stock}.NS", period=period, interval=interval)
+    try:
+        df = yf.download(f"{stock}.NS", period=period, interval=interval)
+        return df
+    except Exception as e:
+        st.error(f"Error loading {stock}: {e}")
+        return pd.DataFrame()
 
 def indicators(df):
+    if df.empty:
+        return df
     df["EMA20"] = df["Close"].ewm(span=20).mean()
     df["EMA50"] = df["Close"].ewm(span=50).mean()
     return df
 
 def signal_logic(df):
+    if df.empty or len(df) == 0:
+        return "NO DATA"
     if df["EMA20"].iloc[-1] > df["EMA50"].iloc[-1]:
         return "BUY"
     elif df["EMA20"].iloc[-1] < df["EMA50"].iloc[-1]:
@@ -42,6 +51,8 @@ def signal_logic(df):
         return "WAIT"
 
 def save_csv(df, stock):
+    if df.empty:
+        return
     folder = "NSE500Reports"
     os.makedirs(folder, exist_ok=True)
     df.to_csv(f"{folder}/{stock}_report.csv")
@@ -49,7 +60,7 @@ def save_csv(df, stock):
 # -------------------------------
 # STREAMLIT UI
 # -------------------------------
-st.title("📊 NSE PRO SCANNER – NSE 500 Stocks")
+st.title("📊 NSE PRO SCANNER – Final Clean Version")
 
 tab1, tab2 = st.tabs(["🔴 LIVE SCAN", "📂 BACKTEST"])
 
@@ -60,7 +71,11 @@ with tab1:
         df = load_data(stock)
         df = indicators(df)
         sig = signal_logic(df)
-        live_signals.append([stock, df["Close"].iloc[-1], sig])
+        if not df.empty:
+            price = df["Close"].iloc[-1]
+        else:
+            price = "NA"
+        live_signals.append([stock, price, sig])
     st.dataframe(pd.DataFrame(live_signals, columns=["Stock", "Price", "Signal"]))
 
 with tab2:
