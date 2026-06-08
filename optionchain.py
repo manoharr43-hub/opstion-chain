@@ -1,172 +1,102 @@
-import streamlit as st
-import pandas as pd
+# NSE PRO SCANNER – Final Clean E Code
+# Author: Manohar Custom Build
+
 import yfinance as yf
-import numpy as np
-import io
-from datetime import datetime
+import pandas as pd
+import streamlit as st
+import os
 
-st.set_page_config(
-page_title="NSE AI PRO MAX",
-layout="wide"
-)
+# -------------------------------
+# CONFIG
+# -------------------------------
+@st.cache_data(ttl=86400)
+def load_nse500():
+    try:
+        url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
+        df = pd.read_csv(url)
+        return df['Symbol'].tolist()
+    except:
+        return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK"]  # fallback list
 
-st.title("🚀 NSE AI PRO MAX")
+stocks = load_nse500()
+interval = "15m"
+period = "5d"
 
-NSE_STOCKS = [
-"RELIANCE",
-"TCS",
-"INFY",
-"HDFCBANK",
-"ICICIBANK",
-"SBIN",
-"AXISBANK",
-"KOTAKBANK",
-"ITC",
-"LT"
-]
+sector_stocks = {
+    "Banking": ["HDFCBANK","ICICIBANK","SBIN","AXISBANK","KOTAKBANK"],
+    "IT": ["TCS","INFY","WIPRO","HCLTECH","TECHM"],
+    "Pharma": ["SUNPHARMA","CIPLA","DIVISLAB","DRREDDY","AUROPHARMA"],
+    "Energy": ["RELIANCE","ONGC","BPCL","NTPC","POWERGRID"],
+    "Auto": ["TATAMOTORS","M&M","EICHERMOT","HEROMOTOCO","BAJAJ-AUTO"],
+    "FMCG": ["HINDUNILVR","ITC","NESTLEIND","BRITANNIA","DABUR"]
+}
 
-@st.cache_data(ttl=300)
-def load_stock(symbol):
-try:
-df = yf.download(
-f"{symbol}.NS",
-period="3mo",
-interval="1d",
-progress=False,
-auto_adjust=True
-)
+# -------------------------------
+# FUNCTIONS
+# -------------------------------
+def load_data(stock):
+    try:
+        df = yf.download(f"{stock}.NS", period=period, interval=interval)
+        return df
+    except Exception as e:
+        st.error(f"Error loading {stock}: {e}")
+        return pd.DataFrame()
 
-```
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-
+def indicators(df):
+    if df.empty:
+        return df
+    df["EMA20"] = df["Close"].ewm(span=20).mean()
+    df["EMA50"] = df["Close"].ewm(span=50).mean()
     return df
 
-except Exception:
-    return pd.DataFrame()
-```
-
-def calculate_indicators(df):
-
-```
-if len(df) < 50:
-    return df
-
-close = df["Close"]
-
-df["EMA20"] = close.ewm(span=20).mean()
-df["EMA50"] = close.ewm(span=50).mean()
-
-delta = close.diff()
-
-gain = delta.where(delta > 0, 0)
-loss = -delta.where(delta < 0, 0)
-
-avg_gain = gain.rolling(14).mean()
-avg_loss = loss.rolling(14).mean()
-
-rs = avg_gain / avg_loss
-
-df["RSI"] = 100 - (100 / (1 + rs))
-
-df["VOL_AVG"] = df["Volume"].rolling(20).mean()
-
-return df
-```
-
-def generate_signal(df):
-
-```
-try:
-
-    last = df.iloc[-1]
-
-    if (
-        last["EMA20"] > last["EMA50"]
-        and last["RSI"] > 60
-        and last["Volume"] > last["VOL_AVG"]
-    ):
+def signal_logic(df):
+    if df.empty or len(df) == 0:
+        return "NO DATA"
+    if df["EMA20"].iloc[-1] > df["EMA50"].iloc[-1]:
         return "BUY"
-
-    if (
-        last["EMA20"] < last["EMA50"]
-        and last["RSI"] < 40
-    ):
+    elif df["EMA20"].iloc[-1] < df["EMA50"].iloc[-1]:
         return "SELL"
+    else:
+        return "WAIT"
 
-    return "WAIT"
+def save_csv(df, stock):
+    if df.empty:
+        return
+    folder = "NSE500Reports"
+    os.makedirs(folder, exist_ok=True)
+    df.to_csv(f"{folder}/{stock}_report.csv")
 
-except Exception:
-    return "NO DATA"
-```
+# -------------------------------
+# STREAMLIT UI
+# -------------------------------
+st.title("📊 NSE PRO SCANNER – Final Clean Version")
 
-if st.button("SCAN MARKET"):
+sector = st.selectbox("Select Sector", list(sector_stocks.keys()) + ["All NSE 500"])
 
-```
-results = []
+tab1, tab2 = st.tabs(["🔴 LIVE SCAN", "📂 BACKTEST"])
 
-progress = st.progress(0)
+with tab1:
+    st.subheader("📡 LIVE SIGNALS")
+    live_signals = []
+    selected_stocks = sector_stocks[sector] if sector != "All NSE 500" else stocks[:50]
+    for stock in selected_stocks:
+        df = load_data(stock)
+        df = indicators(df)
+        sig = signal_logic(df)
+        price = df["Close"].iloc[-1] if not df.empty else "NA"
+        live_signals.append([stock, price, sig])
+    st.dataframe(pd.DataFrame(live_signals, columns=["Stock","Price","Signal"]))
 
-for i, stock in enumerate(NSE_STOCKS):
-
-    df = load_stock(stock)
-
-    if not df.empty:
-
-        df = calculate_indicators(df)
-
-        signal = generate_signal(df)
-
-        price = round(float(df["Close"].iloc[-1]), 2)
-
-        rsi = round(float(df["RSI"].iloc[-1]), 2)
-
-        results.append([
-            stock,
-            price,
-            rsi,
-            signal,
-            datetime.now().strftime("%H:%M:%S")
-        ])
-
-    progress.progress((i + 1) / len(NSE_STOCKS))
-
-report = pd.DataFrame(
-    results,
-    columns=[
-        "Stock",
-        "Price",
-        "RSI",
-        "Signal",
-        "Time"
-    ]
-)
-
-st.dataframe(report, use_container_width=True)
-
-buy_df = report[report["Signal"] == "BUY"]
-
-st.subheader("Top BUY Signals")
-
-st.dataframe(buy_df, use_container_width=True)
-
-output = io.BytesIO()
-
-with pd.ExcelWriter(
-    output,
-    engine="openpyxl"
-) as writer:
-
-    report.to_excel(
-        writer,
-        index=False,
-        sheet_name="Scanner"
+with tab2:
+    st.subheader("📂 BACKTEST REPORTS")
+    for stock in selected_stocks:
+        df = load_data(stock)
+        df = indicators(df)
+        save_csv(df, stock)
+    st.success("✅ Backtest CSV files saved in NSE500Reports folder")
+    st.download_button(
+        label="📂 Download Backtest Excel",
+        data=pd.DataFrame(live_signals).to_csv(index=False),
+        file_name="Backtest_Report.csv",
+        mime="text/csv"
     )
-
-st.download_button(
-    "Download Excel",
-    output.getvalue(),
-    file_name="NSE_AI_PRO_MAX.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
-```
