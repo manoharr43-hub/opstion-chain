@@ -1,8 +1,3 @@
-```python
-# =========================================================
-# 🚀 NSE PRO SCANNER V3.0
-# =========================================================
-
 import streamlit as st
 import pandas as pd
 import yfinance as yf
@@ -10,211 +5,168 @@ import numpy as np
 import io
 from datetime import datetime
 
-# =========================================================
-# PAGE CONFIG
-# =========================================================
-
 st.set_page_config(
-    page_title="NSE PRO SCANNER",
-    layout="wide"
+page_title="NSE AI PRO MAX",
+layout="wide"
 )
 
-st.title("📊 NSE PRO SCANNER V3.0")
+st.title("🚀 NSE AI PRO MAX")
 
-# =========================================================
-# NSE STOCKS
-# =========================================================
-
-sector_stocks = {
-    "Banking": ["HDFCBANK","ICICIBANK","SBIN","AXISBANK","KOTAKBANK"],
-    "IT": ["TCS","INFY","WIPRO","HCLTECH","TECHM"],
-    "Pharma": ["SUNPHARMA","CIPLA","DIVISLAB","DRREDDY","AUROPHARMA"],
-    "Energy": ["RELIANCE","ONGC","BPCL","NTPC","POWERGRID"],
-    "Auto": ["TATAMOTORS","M&M","EICHERMOT","HEROMOTOCO","BAJAJ-AUTO"],
-    "FMCG": ["ITC","HINDUNILVR","BRITANNIA","DABUR","NESTLEIND"]
-}
-
-# =========================================================
-# SETTINGS
-# =========================================================
-
-sector = st.sidebar.selectbox(
-    "Select Sector",
-    list(sector_stocks.keys())
-)
-
-stocks = sector_stocks[sector]
-
-# =========================================================
-# DATA
-# =========================================================
+NSE_STOCKS = [
+"RELIANCE",
+"TCS",
+"INFY",
+"HDFCBANK",
+"ICICIBANK",
+"SBIN",
+"AXISBANK",
+"KOTAKBANK",
+"ITC",
+"LT"
+]
 
 @st.cache_data(ttl=300)
-def load_data(symbol):
+def load_stock(symbol):
+try:
+df = yf.download(
+f"{symbol}.NS",
+period="3mo",
+interval="1d",
+progress=False,
+auto_adjust=True
+)
 
-    try:
-        df = yf.download(
-            f"{symbol}.NS",
-            period="3mo",
-            interval="15m",
-            progress=False,
-            auto_adjust=True
-        )
-
-        return df
-
-    except:
-        return pd.DataFrame()
-
-# =========================================================
-# INDICATORS
-# =========================================================
-
-def add_indicators(df):
-
-    if len(df) < 50:
-        return df
-
-    df["EMA20"] = df["Close"].ewm(span=20).mean()
-    df["EMA50"] = df["Close"].ewm(span=50).mean()
-
-    delta = df["Close"].diff()
-
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-
-    avg_gain = gain.rolling(14).mean()
-    avg_loss = loss.rolling(14).mean()
-
-    rs = avg_gain / avg_loss
-
-    df["RSI"] = 100 - (100/(1+rs))
-
-    df["VOLAVG"] = df["Volume"].rolling(20).mean()
+```
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
 
     return df
 
-# =========================================================
-# SIGNAL
-# =========================================================
+except Exception:
+    return pd.DataFrame()
+```
 
-def get_signal(df):
+def calculate_indicators(df):
 
-    try:
+```
+if len(df) < 50:
+    return df
 
-        last = df.iloc[-1]
+close = df["Close"]
 
-        buy = (
-            last["EMA20"] > last["EMA50"]
-            and last["RSI"] > 60
-            and last["Volume"] > last["VOLAVG"]
-        )
+df["EMA20"] = close.ewm(span=20).mean()
+df["EMA50"] = close.ewm(span=50).mean()
 
-        sell = (
-            last["EMA20"] < last["EMA50"]
-            and last["RSI"] < 40
-        )
+delta = close.diff()
 
-        if buy:
-            return "🟢 STRONG BUY"
+gain = delta.where(delta > 0, 0)
+loss = -delta.where(delta < 0, 0)
 
-        elif sell:
-            return "🔴 SELL"
+avg_gain = gain.rolling(14).mean()
+avg_loss = loss.rolling(14).mean()
 
-        else:
-            return "🟡 WAIT"
+rs = avg_gain / avg_loss
 
-    except:
-        return "NO DATA"
+df["RSI"] = 100 - (100 / (1 + rs))
 
-# =========================================================
-# SCAN
-# =========================================================
+df["VOL_AVG"] = df["Volume"].rolling(20).mean()
 
-if st.button("🚀 RUN SCANNER"):
+return df
+```
 
-    results = []
+def generate_signal(df):
 
-    progress = st.progress(0)
+```
+try:
 
-    for i, stock in enumerate(stocks):
+    last = df.iloc[-1]
 
-        df = load_data(stock)
+    if (
+        last["EMA20"] > last["EMA50"]
+        and last["RSI"] > 60
+        and last["Volume"] > last["VOL_AVG"]
+    ):
+        return "BUY"
 
-        if not df.empty:
+    if (
+        last["EMA20"] < last["EMA50"]
+        and last["RSI"] < 40
+    ):
+        return "SELL"
 
-            df = add_indicators(df)
+    return "WAIT"
 
-            signal = get_signal(df)
+except Exception:
+    return "NO DATA"
+```
 
-            price = round(float(df["Close"].iloc[-1]), 2)
+if st.button("SCAN MARKET"):
 
-            rsi = round(float(df["RSI"].iloc[-1]), 2)
+```
+results = []
 
-            volume = int(df["Volume"].iloc[-1])
+progress = st.progress(0)
 
-            results.append([
-                stock,
-                price,
-                rsi,
-                volume,
-                signal,
-                datetime.now().strftime("%H:%M:%S")
-            ])
+for i, stock in enumerate(NSE_STOCKS):
 
-        progress.progress((i+1)/len(stocks))
+    df = load_stock(stock)
 
-    report = pd.DataFrame(
-        results,
-        columns=[
-            "Stock",
-            "Price",
-            "RSI",
-            "Volume",
-            "Signal",
-            "Time"
-        ]
-    )
+    if not df.empty:
 
-    st.success("Scan Complete")
+        df = calculate_indicators(df)
 
-    st.dataframe(
-        report,
-        use_container_width=True
-    )
+        signal = generate_signal(df)
 
-    # BUY SIGNALS
+        price = round(float(df["Close"].iloc[-1]), 2)
 
-    buy_df = report[
-        report["Signal"]=="🟢 STRONG BUY"
+        rsi = round(float(df["RSI"].iloc[-1]), 2)
+
+        results.append([
+            stock,
+            price,
+            rsi,
+            signal,
+            datetime.now().strftime("%H:%M:%S")
+        ])
+
+    progress.progress((i + 1) / len(NSE_STOCKS))
+
+report = pd.DataFrame(
+    results,
+    columns=[
+        "Stock",
+        "Price",
+        "RSI",
+        "Signal",
+        "Time"
     ]
+)
 
-    st.subheader("🔥 Top Buy Signals")
+st.dataframe(report, use_container_width=True)
 
-    st.dataframe(
-        buy_df,
-        use_container_width=True
+buy_df = report[report["Signal"] == "BUY"]
+
+st.subheader("Top BUY Signals")
+
+st.dataframe(buy_df, use_container_width=True)
+
+output = io.BytesIO()
+
+with pd.ExcelWriter(
+    output,
+    engine="openpyxl"
+) as writer:
+
+    report.to_excel(
+        writer,
+        index=False,
+        sheet_name="Scanner"
     )
 
-    # Excel Download
-
-    output = io.BytesIO()
-
-    with pd.ExcelWriter(
-        output,
-        engine="openpyxl"
-    ) as writer:
-
-        report.to_excel(
-            writer,
-            sheet_name="Scanner",
-            index=False
-        )
-
-    st.download_button(
-        "📥 Download Excel",
-        data=output.getvalue(),
-        file_name="NSE_PRO_SCANNER.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+st.download_button(
+    "Download Excel",
+    output.getvalue(),
+    file_name="NSE_AI_PRO_MAX.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 ```
