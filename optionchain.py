@@ -621,4 +621,282 @@ def scan_stock(symbol):
         return result
 
     except:
-        return None
+        return None# ==========================================================
+# PART 3
+# MULTI THREAD SCAN + DASHBOARD + DOWNLOAD
+# ==========================================================
+
+st.markdown("---")
+
+scan_btn = st.button(
+    "🚀 RUN SCAN",
+    use_container_width=True
+)
+
+# ==========================================================
+# SCAN
+# ==========================================================
+
+if scan_btn:
+
+    results = []
+
+    if sector == "All NSE500":
+
+        selected_stocks = stocks
+
+    else:
+
+        selected_stocks = sector_stocks.get(
+            sector,
+            []
+        )
+
+    total = len(selected_stocks)
+
+    st.info(
+        f"Scanning {total} Stocks..."
+    )
+
+    progress_bar = st.progress(0)
+
+    status_text = st.empty()
+
+    completed = 0
+
+    max_workers = 10
+
+    with ThreadPoolExecutor(
+        max_workers=max_workers
+    ) as executor:
+
+        futures = {
+
+            executor.submit(
+                scan_stock,
+                symbol
+            ): symbol
+
+            for symbol in selected_stocks
+
+        }
+
+        for future in as_completed(futures):
+
+            completed += 1
+
+            symbol = futures[future]
+
+            try:
+
+                result = future.result()
+
+                if result:
+
+                    results.append(
+                        result
+                    )
+
+            except:
+
+                pass
+
+            progress_bar.progress(
+                completed / total
+            )
+
+            status_text.write(
+                f"Processed {completed}/{total}"
+            )
+
+    # ======================================================
+    # DATAFRAME
+    # ======================================================
+
+    result_df = pd.DataFrame(
+        results
+    )
+
+    if result_df.empty:
+
+        st.warning(
+            "No Results Found"
+        )
+
+        st.stop()
+
+    # ======================================================
+    # STRONG BUY FILTER
+    # ======================================================
+
+    if show_strong_only:
+
+        result_df = result_df[
+            result_df["Signal"]
+            == "STRONG BUY"
+        ]
+
+    # ======================================================
+    # SORT
+    # ======================================================
+
+    result_df = result_df.sort_values(
+        by="Score",
+        ascending=False
+    )
+
+    # ======================================================
+    # METRICS
+    # ======================================================
+
+    st.markdown("---")
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    strong_buy_count = len(
+        result_df[
+            result_df["Signal"]
+            == "STRONG BUY"
+        ]
+    )
+
+    buy_count = len(
+        result_df[
+            result_df["Signal"]
+            == "BUY"
+        ]
+    )
+
+    sell_count = len(
+        result_df[
+            result_df["Signal"]
+            == "SELL"
+        ]
+    )
+
+    avg_rsi = round(
+        result_df["RSI"].mean(),
+        2
+    )
+
+    c1.metric(
+        "🚀 Strong Buy",
+        strong_buy_count
+    )
+
+    c2.metric(
+        "📈 Buy",
+        buy_count
+    )
+
+    c3.metric(
+        "📉 Sell",
+        sell_count
+    )
+
+    c4.metric(
+        "RSI Avg",
+        avg_rsi
+    )
+
+    # ======================================================
+    # TOP 20 OPPORTUNITIES
+    # ======================================================
+
+    st.markdown("## 🏆 Top 20 Opportunities")
+
+    top20 = result_df.head(20)
+
+    st.dataframe(
+        top20,
+        use_container_width=True,
+        height=500
+    )
+
+    # ======================================================
+    # FULL RESULTS
+    # ======================================================
+
+    st.markdown("## 📊 Full Scan Results")
+
+    st.dataframe(
+        result_df,
+        use_container_width=True,
+        height=700
+    )
+
+    # ======================================================
+    # SIGNAL COUNTS
+    # ======================================================
+
+    st.markdown("## 📌 Signal Distribution")
+
+    signal_counts = (
+        result_df["Signal"]
+        .value_counts()
+        .reset_index()
+    )
+
+    signal_counts.columns = [
+        "Signal",
+        "Count"
+    ]
+
+    st.dataframe(
+        signal_counts,
+        use_container_width=True
+    )
+
+    # ======================================================
+    # STRONG BUY TABLE
+    # ======================================================
+
+    strong_buy_df = result_df[
+        result_df["Signal"]
+        == "STRONG BUY"
+    ]
+
+    if len(strong_buy_df) > 0:
+
+        st.markdown(
+            "## 🚀 Strong Buy Stocks"
+        )
+
+        st.dataframe(
+            strong_buy_df,
+            use_container_width=True
+        )
+
+    # ======================================================
+    # EXCEL DOWNLOAD
+    # ======================================================
+
+    excel_buffer = BytesIO()
+
+    with pd.ExcelWriter(
+        excel_buffer,
+        engine="openpyxl"
+    ) as writer:
+
+        result_df.to_excel(
+            writer,
+            sheet_name="Scanner",
+            index=False
+        )
+
+        top20.to_excel(
+            writer,
+            sheet_name="Top20",
+            index=False
+        )
+
+    st.download_button(
+        label="📥 Download Excel",
+        data=excel_buffer.getvalue(),
+        file_name="HYBRID_NSE_PRO_V7.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+    st.success(
+        f"✅ Scan Completed | {len(result_df)} Results"
+    )
