@@ -1,4 +1,4 @@
-# NSE PRO SCANNER – Final Clean E Code
+# HYBRID NSE PRO SCANNER – EMA + Breakout Channels
 # Author: Manohar Custom Build
 
 import yfinance as yf
@@ -16,7 +16,7 @@ def load_nse500():
         df = pd.read_csv(url)
         return df['Symbol'].tolist()
     except:
-        return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK"]  # fallback list
+        return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK"]
 
 stocks = load_nse500()
 interval = "15m"
@@ -49,7 +49,7 @@ def indicators(df):
     df["EMA50"] = df["Close"].ewm(span=50).mean()
     return df
 
-def signal_logic(df):
+def ema_signal(df):
     if df.empty or len(df) == 0:
         return "NO DATA"
     if df["EMA20"].iloc[-1] > df["EMA50"].iloc[-1]:
@@ -59,17 +59,30 @@ def signal_logic(df):
     else:
         return "WAIT"
 
+def breakout_signal(df):
+    if df.empty or len(df) < 20:
+        return "NO DATA"
+    high = df["High"].rolling(20).max().iloc[-1]
+    low = df["Low"].rolling(20).min().iloc[-1]
+    close = df["Close"].iloc[-1]
+    if close > high:
+        return "Bullish Breakout ▲"
+    elif close < low:
+        return "Bearish Breakout ▼"
+    else:
+        return "Inside Channel"
+
 def save_csv(df, stock):
     if df.empty:
         return
-    folder = "NSE500Reports"
+    folder = "HybridReports"
     os.makedirs(folder, exist_ok=True)
     df.to_csv(f"{folder}/{stock}_report.csv")
 
 # -------------------------------
 # STREAMLIT UI
 # -------------------------------
-st.title("📊 NSE PRO SCANNER – Final Clean Version")
+st.title("📊 HYBRID NSE PRO SCANNER – EMA + Breakout Channels")
 
 sector = st.selectbox("Select Sector", list(sector_stocks.keys()) + ["All NSE 500"])
 
@@ -82,10 +95,11 @@ with tab1:
     for stock in selected_stocks:
         df = load_data(stock)
         df = indicators(df)
-        sig = signal_logic(df)
+        sig_ema = ema_signal(df)
+        sig_breakout = breakout_signal(df)
         price = df["Close"].iloc[-1] if not df.empty else "NA"
-        live_signals.append([stock, price, sig])
-    st.dataframe(pd.DataFrame(live_signals, columns=["Stock","Price","Signal"]))
+        live_signals.append([stock, price, sig_ema, sig_breakout])
+    st.dataframe(pd.DataFrame(live_signals, columns=["Stock","Price","EMA Signal","Breakout Signal"]))
 
 with tab2:
     st.subheader("📂 BACKTEST REPORTS")
@@ -93,10 +107,10 @@ with tab2:
         df = load_data(stock)
         df = indicators(df)
         save_csv(df, stock)
-    st.success("✅ Backtest CSV files saved in NSE500Reports folder")
+    st.success("✅ Backtest CSV files saved in HybridReports folder")
     st.download_button(
         label="📂 Download Backtest Excel",
         data=pd.DataFrame(live_signals).to_csv(index=False),
-        file_name="Backtest_Report.csv",
+        file_name="Hybrid_Backtest_Report.csv",
         mime="text/csv"
     )
