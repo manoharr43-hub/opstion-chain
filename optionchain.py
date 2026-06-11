@@ -8,12 +8,32 @@ import pytz
 # Streamlit Page Setup
 # -------------------------------
 st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V6",
+    page_title="HYBRID NSE PRO SCANNER V5",
     layout="wide"
 )
 
-st.title("📊 HYBRID NSE PRO SCANNER V6")
-st.write("EMA + RSI + Volume + Breakout Scanner + Backtest Module + Correct IST Signal Time")
+# Custom CSS
+st.markdown("""
+    <style>
+    .stApp { background-color: #f8f9fa; }
+    .css-1r6slp0 { padding: 2rem; }
+    .stSidebar { background-color: #ffffff; }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.title("📊 HYBRID NSE PRO SCANNER V5")
+st.write("EMA + RSI + Volume + Breakout Scanner + Correct IST Signal Time")
+
+# -------------------------------
+# Sidebar Configuration
+# -------------------------------
+with st.sidebar:
+    st.header("⚙️ Configuration")
+    st.info("Scanner V5 is optimized for Nifty 500 assets.")
+    st.write("---")
+    st.write("• **EMA:** 20/50 Cross")
+    st.write("• **RSI:** 14-period")
+    st.write("• **Volume:** 20-period SMA")
 
 # -------------------------------
 # Load NSE500 Stocks
@@ -28,6 +48,29 @@ def load_nse500():
         return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT"]
 
 stocks = load_nse500()
+
+sector_stocks = {
+    "Banking": ["HDFCBANK","ICICIBANK","SBIN","AXISBANK","KOTAKBANK"],
+    "IT": ["TCS","INFY","WIPRO","HCLTECH","TECHM"],
+    "Pharma": ["SUNPHARMA","CIPLA","DIVISLAB","DRREDDY"],
+    "Energy": ["RELIANCE","ONGC","BPCL","NTPC"],
+    "Auto": ["TATAMOTORS","M&M","EICHERMOT","HEROMOTOCO"],
+    "FMCG": ["ITC","HINDUNILVR","BRITANNIA","DABUR"]
+}
+
+# -------------------------------
+# User Inputs
+# -------------------------------
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    interval = st.selectbox("Interval", ["5m","15m","30m","1h","1d"], index=1)
+
+with col2:
+    period = st.selectbox("Period", ["5d","1mo","3mo","6mo"], index=0)
+
+with col3:
+    sector = st.selectbox("Sector", list(sector_stocks.keys()) + ["All NSE500"])
 
 # -------------------------------
 # Data Fetch
@@ -76,7 +119,7 @@ def add_indicators(df):
     return df
 
 # -------------------------------
-# Scanner Logic
+# Scanner Logic (Safe IST Time)
 # -------------------------------
 def scan_stock(df):
     if len(df) < 60:
@@ -150,110 +193,53 @@ def scan_stock(df):
     }
 
 # -------------------------------
-# Backtest Breakouts
+# Run Scanner
 # -------------------------------
-def backtest_breakouts(df):
+if st.button("🚀 RUN SCAN"):
     results = []
-    ist = pytz.timezone("Asia/Kolkata")
+    if sector == "All NSE500":
+        selected_stocks = stocks[:100]  # limit for performance
+    else:
+        selected_stocks = sector_stocks[sector]
 
-    for i in range(20, len(df)):
-        close = df["Close"].iloc[i]
-        high = df["High"].rolling(20).max().shift(1).iloc[i]
-        low = df["Low"].rolling(20).min().shift(1).iloc[i]
-        vol = df["Volume"].iloc[i]
-        avg_vol = df["AVG_VOL"].iloc[i]
+    progress = st.progress(0)
 
-        breakout_type = None
-        result = "WAIT"
+    for i, symbol in enumerate(selected_stocks):
+        df = get_data(symbol, interval, period)
+        if df.empty:
+            continue
+        df = add_indicators(df)
+        signal = scan_stock(df)
+        if signal:
+            results.append([
+                symbol,
+                signal["Price"],
+                signal["EMA"],
+                signal["RSI"],
+                signal["Breakout"],
+                signal["Volume"],
+                signal["Score"],
+                signal["Signal"],
+                signal["Time"]
+            ])
+        progress.progress((i + 1) / len(selected_stocks))
 
-        if close > high:
-            breakout_type = "Bullish"
-            result = "Success" if vol > avg_vol * 1.5 else "Failure"
-        elif close < low:
-            breakout_type = "Bearish"
-            result = "Success" if vol > avg_vol * 1.5 else "Failure"
+    result_df = pd.DataFrame(
+        results,
+        columns=["Stock","Price","EMA","RSI","Breakout","Volume","Score","Signal","Time"]
+    )
 
-        if breakout_type:
-            time = df.index[i]
-            if time.tzinfo is None:
-                time = time.tz_localize("UTC")
-            signal_time = time.astimezone(ist).strftime("%d-%b %Y %I:%M %p")
+    if not result_df.empty:
+        result_df = result_df.sort_values(by="Score", ascending=False)
+        st.success(f"Scan Completed : {len(result_df)} Stocks")
+        st.dataframe(result_df, use_container_width=True)
 
-            results.append([signal_time, breakout_type, round(close,2), vol, avg_vol, result])
-
-    return pd.DataFrame(results, columns=["Time","Breakout","Price","Volume","AvgVol","Result"])
-
-# -------------------------------
-# Tabs for Scanner & Backtest
-# -------------------------------
-tab1, tab2 = st.tabs(["🔎 Scanner", "📈 Backtest"])
-
-with tab1:
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        interval = st.selectbox("Interval", ["5m","15m","30m","1h","1d"], index=1)
-    with col2:
-        period = st.selectbox("Period", ["5d","1mo","3mo","6mo"], index=0)
-    with col3:
-        sector = st.selectbox("Sector", list(sector_stocks.keys()) + ["All NSE500"])
-
-    if st.button("🚀 RUN SCAN"):
-        results = []
-        if sector == "All NSE500":
-            selected_stocks = stocks[:100]
-        else:
-            selected_stocks = sector_stocks[sector]
-
-        progress = st.progress(0)
-
-        for i, symbol in enumerate(selected_stocks):
-            df = get_data(symbol, interval, period)
-            if df.empty:
-                continue
-            df = add_indicators(df)
-            signal = scan_stock(df)
-            if signal:
-                results.append([
-                    symbol,
-                    signal["Price"],
-                    signal["EMA"],
-                    signal["RSI"],
-                    signal["Breakout"],
-                    signal["Volume"],
-                    signal["Score"],
-                    signal["Signal"],
-                    signal["Time"]
-                ])
-            progress.progress((i + 1) / len(selected_stocks))
-
-        result_df = pd.DataFrame(
-            results,
-            columns=["Stock","Price","EMA","RSI","Breakout","Volume","Score","Signal","Time"]
+        csv = result_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="📥 Download CSV",
+            data=csv,
+            file_name="HybridScannerV5.csv",
+            mime="text/csv"
         )
-
-        if not result_df.empty:
-            result_df = result_df.sort_values(by="Score", ascending=False)
-            st.success(f"Scan Completed : {len(result_df)} Stocks")
-            st.dataframe(result_df, use_container_width=True)
-
-            csv = result_df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label="📥 Download CSV",
-                data=csv,
-                file_name="HybridScannerV6_Scan.csv",
-                mime="text/csv"
-            )
-        else:
-            st.warning("No signals found.")
-
-with tab2:
-    symbol = st.selectbox("Select Stock for Backtest", stocks)
-    interval_bt = st.selectbox("Interval (Backtest)", ["15m","30m","1h","1d"], index=1)
-    period_bt = st.selectbox("Period (Backtest)", ["1mo","3mo","6mo"], index=0)
-
-    if st.button("📊 Run Backtest"):
-        df = get_data(symbol, interval_bt, period_bt)
-        if not df.empty:
-            df = add_indicators(df)
-            bt = backtest_breakouts(df)
-            if not bt
+    else:
+        st.warning("No signals found.")  back test add
