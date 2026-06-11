@@ -242,4 +242,4 @@ if st.button("🚀 RUN SCAN"):
             mime="text/csv"
         )
     else:
-        st.warning("No signals found.")  back test add
+        st.warning("No signals found.")
