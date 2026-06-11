@@ -111,7 +111,8 @@ def scan_stock(df):
         df.index = df.index.tz_localize("UTC")
 
     df["IST_Time"] = df.index.tz_convert(ist)
-    df = df.between_time("09:15","15:30", include_start=True, include_end=True)
+    # FIX: removed include_start/include_end
+    df = df.between_time("09:15","15:30")
 
     signals = []
     for i in range(len(df)):
