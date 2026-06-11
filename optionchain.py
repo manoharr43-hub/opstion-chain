@@ -1,213 +1,624 @@
+# ==========================================================
+# 🚀 HYBRID NSE PRO SCANNER V7
+# PART 1
+# ==========================================================
+
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
 import pytz
+import time
 
-# -------------------------------
-# Streamlit Page Setup
-# -------------------------------
+from io import BytesIO
+from datetime import datetime
+from concurrent.futures import (
+    ThreadPoolExecutor,
+    as_completed
+)
+
+# ==========================================================
+# PAGE CONFIG
+# ==========================================================
+
 st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V6",
+    page_title="HYBRID NSE PRO SCANNER V7",
     layout="wide"
 )
 
-st.title("📊 HYBRID NSE PRO SCANNER V6")
-st.write("EMA + RSI + Volume + Breakout Scanner + Configurable Thresholds + Continuous Signal Time (IST)")
+# ==========================================================
+# TITLE
+# ==========================================================
 
-# -------------------------------
-# Load NSE500 Stocks
-# -------------------------------
+st.title("🚀 HYBRID NSE PRO SCANNER V7")
+
+st.caption(
+    "EMA + RSI + Volume + Breakout + Institutional Scoring"
+)
+
+# ==========================================================
+# NSE500 LOADER
+# ==========================================================
+
 @st.cache_data(ttl=86400)
 def load_nse500():
+
     try:
-        url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
+
+        url = (
+            "https://archives.nseindia.com/content/"
+            "indices/ind_nifty500list.csv"
+        )
+
         df = pd.read_csv(url)
-        return sorted(df["Symbol"].dropna().unique().tolist())
+
+        stocks = (
+            df["Symbol"]
+            .dropna()
+            .unique()
+            .tolist()
+        )
+
+        stocks = sorted(stocks)
+
+        return stocks
+
     except:
-        return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT"]
+
+        return [
+            "RELIANCE",
+            "TCS",
+            "INFY",
+            "HDFCBANK",
+            "ICICIBANK",
+            "SBIN",
+            "ITC",
+            "LT"
+        ]
+
 
 stocks = load_nse500()
 
+# ==========================================================
+# SECTOR WATCHLISTS
+# ==========================================================
+
 sector_stocks = {
-    "Banking": ["HDFCBANK","ICICIBANK","SBIN","AXISBANK","KOTAKBANK"],
-    "IT": ["TCS","INFY","WIPRO","HCLTECH","TECHM"],
-    "Pharma": ["SUNPHARMA","CIPLA","DIVISLAB","DRREDDY"],
-    "Energy": ["RELIANCE","ONGC","BPCL","NTPC"],
-    "Auto": ["TATAMOTORS","M&M","EICHERMOT","HEROMOTOCO"],
-    "FMCG": ["ITC","HINDUNILVR","BRITANNIA","DABUR"]
+
+    "Banking": [
+        "HDFCBANK",
+        "ICICIBANK",
+        "SBIN",
+        "AXISBANK",
+        "KOTAKBANK"
+    ],
+
+    "IT": [
+        "TCS",
+        "INFY",
+        "WIPRO",
+        "HCLTECH",
+        "TECHM"
+    ],
+
+    "Pharma": [
+        "SUNPHARMA",
+        "CIPLA",
+        "DIVISLAB",
+        "DRREDDY"
+    ],
+
+    "Energy": [
+        "RELIANCE",
+        "ONGC",
+        "BPCL",
+        "NTPC"
+    ],
+
+    "Auto": [
+        "TATAMOTORS",
+        "M&M",
+        "EICHERMOT",
+        "HEROMOTOCO"
+    ],
+
+    "FMCG": [
+        "ITC",
+        "HINDUNILVR",
+        "BRITANNIA",
+        "DABUR"
+    ]
 }
 
-# -------------------------------
-# User Inputs
-# -------------------------------
-col1, col2, col3 = st.columns(3)
+# ==========================================================
+# MARKET STATUS
+# ==========================================================
 
-with col1:
-    interval = st.selectbox("Interval", ["5m","15m","30m","1h","1d"], index=1)
+ist = pytz.timezone("Asia/Kolkata")
 
-with col2:
-    period = st.selectbox("Period", ["5d","1mo","3mo","6mo"], index=0)
+now = datetime.now(ist)
 
-with col3:
-    sector = st.selectbox("Sector", list(sector_stocks.keys()) + ["All NSE500"])
+market_open = (
+    now.weekday() < 5
+    and
+    now.strftime("%H:%M") >= "09:15"
+    and
+    now.strftime("%H:%M") <= "15:30"
+)
 
-# Threshold Inputs
+if market_open:
+
+    st.success(
+        f"🟢 MARKET OPEN | {now.strftime('%d-%b-%Y %I:%M:%S %p')}"
+    )
+
+else:
+
+    st.error(
+        f"🔴 MARKET CLOSED | {now.strftime('%d-%b-%Y %I:%M:%S %p')}"
+    )
+
+# ==========================================================
+# SIDEBAR SETTINGS
+# ==========================================================
+
 st.sidebar.header("⚙️ Scanner Settings")
-rsi_upper = st.sidebar.slider("RSI Upper Threshold", 50, 80, 70)
-rsi_lower = st.sidebar.slider("RSI Lower Threshold", 20, 50, 30)
-vol_multiplier = st.sidebar.slider("Volume Spike Multiplier", 1.0, 3.0, 1.5)
-breakout_window = st.sidebar.slider("Breakout Window (days)", 10, 50, 20)
 
-# -------------------------------
-# Data Fetch
-# -------------------------------
+interval = st.sidebar.selectbox(
+    "Interval",
+    [
+        "5m",
+        "15m",
+        "30m",
+        "60m",
+        "1d"
+    ],
+    index=1
+)
+
+period = st.sidebar.selectbox(
+    "Period",
+    [
+        "5d",
+        "1mo",
+        "3mo",
+        "6mo"
+    ],
+    index=1
+)
+
+sector = st.sidebar.selectbox(
+    "Sector",
+    list(sector_stocks.keys())
+    + ["All NSE500"]
+)
+
+rsi_upper = st.sidebar.slider(
+    "RSI Upper",
+    50,
+    90,
+    70
+)
+
+rsi_lower = st.sidebar.slider(
+    "RSI Lower",
+    10,
+    50,
+    30
+)
+
+vol_multiplier = st.sidebar.slider(
+    "Volume Spike Multiplier",
+    1.0,
+    5.0,
+    1.5
+)
+
+breakout_window = st.sidebar.slider(
+    "Breakout Window",
+    10,
+    50,
+    20
+)
+
+show_strong_only = st.sidebar.checkbox(
+    "Show Strong Buy Only"
+)
+
+auto_refresh = st.sidebar.checkbox(
+    "Auto Refresh"
+)
+
+# ==========================================================
+# AUTO REFRESH
+# ==========================================================
+
+if auto_refresh:
+
+    st.warning(
+        "Auto Refresh Enabled"
+    )
+
+    time.sleep(60)
+
+    st.rerun()# ==========================================================
+# PART 2
+# DATA FETCH + INDICATORS + SCORE ENGINE
+# ==========================================================
+
+# ==========================================================
+# DATA FETCH
+# ==========================================================
+
 @st.cache_data(ttl=300)
 def get_data(symbol, interval, period):
+
     try:
+
         df = yf.download(
             f"{symbol}.NS",
             interval=interval,
             period=period,
             auto_adjust=True,
-            progress=False
+            progress=False,
+            threads=False
         )
+
+        if df is None:
+            return pd.DataFrame()
+
+        if len(df) == 0:
+            return pd.DataFrame()
+
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
+
         return df
+
     except:
         return pd.DataFrame()
 
-# -------------------------------
-# RSI Calculation
-# -------------------------------
+
+# ==========================================================
+# RSI CALCULATION
+# ==========================================================
+
 def calculate_rsi(df, period=14):
+
     delta = df["Close"].diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
 
-    avg_gain = gain.rolling(period).mean()
-    avg_loss = loss.rolling(period).mean()
-
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
-
-# -------------------------------
-# Add Indicators
-# -------------------------------
-def add_indicators(df):
-    if len(df) < 60:
-        return df
-    df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
-    df["EMA50"] = df["Close"].ewm(span=50, adjust=False).mean()
-    df["RSI"] = calculate_rsi(df)
-    df["AVG_VOL"] = df["Volume"].rolling(20).mean()
-    return df
-
-# -------------------------------
-# Continuous Scanner Logic
-# -------------------------------
-def scan_stock(df):
-    if len(df) < 60:
-        return None
-
-    ist = pytz.timezone("Asia/Kolkata")
-    df = df.copy()
-    if df.index.tzinfo is None:
-        df.index = df.index.tz_localize("UTC")
-
-    df["IST_Time"] = df.index.tz_convert(ist)
-    df = df.between_time("09:15","15:30")
-
-    signals = []
-    for i in range(len(df)):
-        close = float(df["Close"].iloc[i])
-        rsi = float(df["RSI"].iloc[i])
-        ema_signal = "BUY" if df["EMA20"].iloc[i] > df["EMA50"].iloc[i] else "SELL"
-        breakout_signal = "NO"
-        volume_signal = "NO"
-        score = 0
-
-        # EMA
-        score += 1 if ema_signal == "BUY" else -1
-
-        # RSI
-        if rsi > rsi_upper: score += 1
-        elif rsi < rsi_lower: score -= 1
-
-        # Breakout
-        if i >= breakout_window:
-            breakout_high = df["High"].rolling(breakout_window).max().shift(1).iloc[i]
-            breakout_low = df["Low"].rolling(breakout_window).min().shift(1).iloc[i]
-            if close > breakout_high:
-                breakout_signal = "BULLISH"; score += 1
-            elif close < breakout_low:
-                breakout_signal = "BEARISH"; score -= 1
-
-        # Volume
-        avg_vol = float(df["AVG_VOL"].iloc[i])
-        current_vol = float(df["Volume"].iloc[i])
-        if avg_vol > 0 and current_vol > avg_vol * vol_multiplier:
-            volume_signal = "SPIKE"; score += 1
-
-        # Final Signal
-        if score >= 3: final_signal = "STRONG BUY"
-        elif score == 2: final_signal = "BUY"
-        elif score <= -2: final_signal = "SELL"
-        else: final_signal = "WAIT"
-
-        signals.append([
-            df["IST_Time"].iloc[i].strftime("%d-%b %Y %I:%M %p"),
-            close, ema_signal, round(rsi,2),
-            breakout_signal, volume_signal, score, final_signal
-        ])
-
-    return signals
-
-# -------------------------------
-# Run Scanner
-# -------------------------------
-if st.button("🚀 RUN SCAN"):
-    results = []
-
-    if sector == "All NSE500":
-        selected_stocks = stocks[:50]  # limit for performance
-    else:
-        selected_stocks = sector_stocks[sector]
-
-    progress = st.progress(0)
-
-    for i, symbol in enumerate(selected_stocks):
-        df = get_data(symbol, interval, period)
-        if df.empty:
-            continue
-
-        df = add_indicators(df)
-        signals = scan_stock(df)
-
-        if signals:
-            for s in signals:
-                results.append([symbol] + s)
-
-        progress.progress((i + 1) / len(selected_stocks))
-
-    result_df = pd.DataFrame(
-        results,
-        columns=["Stock","Time","Price","EMA","RSI","Breakout","Volume","Score","Signal"]
+    gain = delta.where(
+        delta > 0,
+        0
     )
 
-    if not result_df.empty:
-        result_df = result_df.sort_values(by=["Stock","Time"])
-        st.success(f"Scan Completed : {len(result_df)} Signals")
-        st.dataframe(result_df, use_container_width=True)
+    loss = -delta.where(
+        delta < 0,
+        0
+    )
 
-        csv = result_df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="📥 Download CSV",
-            data=csv,
-            file_name="HybridScannerV6.csv",
-            mime="text/csv"
+    avg_gain = gain.rolling(
+        period
+    ).mean()
+
+    avg_loss = loss.rolling(
+        period
+    ).mean()
+
+    rs = avg_gain / avg_loss
+
+    rsi = 100 - (
+        100 / (1 + rs)
+    )
+
+    return rsi
+
+
+# ==========================================================
+# INDICATORS
+# ==========================================================
+
+def add_indicators(df):
+
+    if len(df) < 60:
+        return pd.DataFrame()
+
+    df = df.copy()
+
+    df["EMA20"] = (
+        df["Close"]
+        .ewm(span=20, adjust=False)
+        .mean()
+    )
+
+    df["EMA50"] = (
+        df["Close"]
+        .ewm(span=50, adjust=False)
+        .mean()
+    )
+
+    df["RSI"] = calculate_rsi(df)
+
+    df["AVG_VOL"] = (
+        df["Volume"]
+        .rolling(20)
+        .mean()
+    )
+
+    return df
+
+
+# ==========================================================
+# BREAKOUT DETECTION
+# ==========================================================
+
+def breakout_signal(df):
+
+    try:
+
+        latest_close = float(
+            df["Close"].iloc[-1]
         )
-    else:
-        st.warning("No signals found.")
+
+        breakout_high = (
+            df["High"]
+            .rolling(breakout_window)
+            .max()
+            .shift(1)
+            .iloc[-1]
+        )
+
+        breakout_low = (
+            df["Low"]
+            .rolling(breakout_window)
+            .min()
+            .shift(1)
+            .iloc[-1]
+        )
+
+        if pd.isna(breakout_high):
+            return "NO"
+
+        if latest_close > breakout_high:
+            return "BULLISH"
+
+        if latest_close < breakout_low:
+            return "BEARISH"
+
+        return "NO"
+
+    except:
+        return "NO"
+
+
+# ==========================================================
+# VOLUME SPIKE
+# ==========================================================
+
+def volume_signal(df):
+
+    try:
+
+        avg_vol = float(
+            df["AVG_VOL"].iloc[-1]
+        )
+
+        current_vol = float(
+            df["Volume"].iloc[-1]
+        )
+
+        if avg_vol <= 0:
+            return "NO"
+
+        if current_vol > (
+            avg_vol * vol_multiplier
+        ):
+            return "SPIKE"
+
+        return "NO"
+
+    except:
+        return "NO"
+
+
+# ==========================================================
+# EMA SIGNAL
+# ==========================================================
+
+def ema_signal(df):
+
+    try:
+
+        ema20 = float(
+            df["EMA20"].iloc[-1]
+        )
+
+        ema50 = float(
+            df["EMA50"].iloc[-1]
+        )
+
+        if ema20 > ema50:
+            return "BUY"
+
+        return "SELL"
+
+    except:
+        return "WAIT"
+
+
+# ==========================================================
+# RSI SIGNAL
+# ==========================================================
+
+def rsi_signal(df):
+
+    try:
+
+        rsi = float(
+            df["RSI"].iloc[-1]
+        )
+
+        if rsi > rsi_upper:
+            return "OVERBOUGHT"
+
+        if rsi < rsi_lower:
+            return "OVERSOLD"
+
+        return "NEUTRAL"
+
+    except:
+        return "NEUTRAL"
+
+
+# ==========================================================
+# INSTITUTIONAL SCORE ENGINE
+# ==========================================================
+
+def calculate_score(df):
+
+    score = 0
+
+    try:
+
+        # EMA
+
+        ema = ema_signal(df)
+
+        if ema == "BUY":
+            score += 1
+        else:
+            score -= 1
+
+        # RSI
+
+        rsi = float(
+            df["RSI"].iloc[-1]
+        )
+
+        if rsi > rsi_upper:
+            score += 1
+
+        elif rsi < rsi_lower:
+            score -= 1
+
+        # BREAKOUT
+
+        bo = breakout_signal(df)
+
+        if bo == "BULLISH":
+            score += 1
+
+        elif bo == "BEARISH":
+            score -= 1
+
+        # VOLUME
+
+        vol = volume_signal(df)
+
+        if vol == "SPIKE":
+            score += 1
+
+        return score
+
+    except:
+        return 0
+
+
+# ==========================================================
+# FINAL SIGNAL
+# ==========================================================
+
+def final_signal(score):
+
+    if score >= 4:
+        return "STRONG BUY"
+
+    if score == 3:
+        return "BUY"
+
+    if score == 2:
+        return "WATCH"
+
+    if score == 1:
+        return "WAIT"
+
+    if score == 0:
+        return "NEUTRAL"
+
+    if score == -1:
+        return "WEAK SELL"
+
+    if score == -2:
+        return "SELL"
+
+    return "STRONG SELL"
+
+
+# ==========================================================
+# SINGLE STOCK SCAN
+# ==========================================================
+
+def scan_stock(symbol):
+
+    try:
+
+        df = get_data(
+            symbol,
+            interval,
+            period
+        )
+
+        if df.empty:
+            return None
+
+        df = add_indicators(df)
+
+        if df.empty:
+            return None
+
+        score = calculate_score(df)
+
+        signal = final_signal(score)
+
+        latest = df.iloc[-1]
+
+        result = {
+
+            "Stock":
+                symbol,
+
+            "Price":
+                round(
+                    float(latest["Close"]),
+                    2
+                ),
+
+            "EMA":
+                ema_signal(df),
+
+            "RSI":
+                round(
+                    float(
+                        latest["RSI"]
+                    ),
+                    2
+                ),
+
+            "Breakout":
+                breakout_signal(df),
+
+            "Volume":
+                volume_signal(df),
+
+            "Score":
+                score,
+
+            "Signal":
+                signal
+
+        }
+
+        return result
+
+    except:
+        return None
