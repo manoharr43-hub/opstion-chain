@@ -8,11 +8,11 @@ import pytz
 # Streamlit Page Setup
 # -------------------------------
 st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V3",
+    page_title="HYBRID NSE PRO SCANNER V4",
     layout="wide"
 )
 
-st.title("📊 HYBRID NSE PRO SCANNER V3")
+st.title("📊 HYBRID NSE PRO SCANNER V4")
 st.write("EMA + RSI + Volume + Breakout Scanner + Correct Signal Time")
 
 # -------------------------------
@@ -103,7 +103,7 @@ def add_indicators(df):
     return df
 
 # -------------------------------
-# Scanner Logic (with IST Time)
+# Scanner Logic (Safe IST Time)
 # -------------------------------
 def scan_stock(df):
     if len(df) < 60:
@@ -112,9 +112,14 @@ def scan_stock(df):
     score = 0
     close = float(df["Close"].iloc[-1])
 
-    # Convert UTC index to IST
+    # Safe timezone conversion
     ist = pytz.timezone("Asia/Kolkata")
-    signal_time = df.index[-1].tz_localize("UTC").astimezone(ist).strftime("%d-%b %Y %I:%M %p")
+    last_index = df.index[-1]
+
+    if last_index.tzinfo is None:
+        last_index = last_index.tz_localize("UTC")
+
+    signal_time = last_index.astimezone(ist).strftime("%d-%b %Y %I:%M %p")
 
     ema_signal = "NEUTRAL"
     breakout_signal = "NO"
@@ -224,7 +229,7 @@ if st.button("🚀 RUN SCAN"):
         st.download_button(
             label="📥 Download CSV",
             data=csv,
-            file_name="HybridScannerV3.csv",
+            file_name="HybridScannerV4.csv",
             mime="text/csv"
         )
     else:
