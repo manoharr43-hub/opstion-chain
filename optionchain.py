@@ -44,7 +44,7 @@ def load_nse500():
         url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
         df = pd.read_csv(url)
         return sorted(df["Symbol"].dropna().unique().tolist())
-    except:
+    except Exception as e: # OPTIMIZATION: Better exception handling
         return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT"]
 
 stocks = load_nse500()
@@ -88,7 +88,7 @@ def get_data(symbol, interval, period):
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
         return df
-    except:
+    except Exception as e: # OPTIMIZATION: Better exception handling
         return pd.DataFrame()
 
 # -------------------------------
@@ -96,11 +96,12 @@ def get_data(symbol, interval, period):
 # -------------------------------
 def calculate_rsi(df, period=14):
     delta = df["Close"].diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
 
-    avg_gain = gain.rolling(period).mean()
-    avg_loss = loss.rolling(period).mean()
+    # OPTIMIZATION: Wilder's Smoothing uses EMA instead of SMA
+    avg_gain = gain.ewm(com=period - 1, adjust=False).mean()
+    avg_loss = loss.ewm(com=period - 1, adjust=False).mean()
 
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
@@ -128,11 +129,14 @@ def scan_stock(df):
     score = 0
     close = float(df["Close"].iloc[-1])
 
-    # Safe timezone conversion
+    # OPTIMIZATION: Safe timezone conversion
     ist = pytz.timezone("Asia/Kolkata")
     last_index = df.index[-1]
+    
+    # Check if naive, localize if true
     if last_index.tzinfo is None:
         last_index = last_index.tz_localize("UTC")
+        
     signal_time = last_index.astimezone(ist).strftime("%d-%b %Y %I:%M %p")
 
     ema_signal = "NEUTRAL"
