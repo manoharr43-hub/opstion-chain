@@ -3,6 +3,8 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import pytz
+import requests
+import io
 
 # -------------------------------
 # Streamlit Page Setup
@@ -42,10 +44,13 @@ with st.sidebar:
 def load_nse500():
     try:
         url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
-        df = pd.read_csv(url)
+        # OPTIMIZATION: Added User-Agent to bypass NSE blocking python requests
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        response = requests.get(url, headers=headers, timeout=10)
+        df = pd.read_csv(io.StringIO(response.text))
         return sorted(df["Symbol"].dropna().unique().tolist())
     except Exception as e:
-        return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT"]
+        return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT","AXISBANK","KOTAKBANK"]
 
 stocks = load_nse500()
 
@@ -165,7 +170,7 @@ def scan_stock(df):
         score -= 1
         breakout_signal = "BEARISH"
 
-    # Volume Spike & Direction Logic (NEW FEATURE)
+    # Volume Spike & Direction Logic
     avg_vol = float(df["AVG_VOL"].iloc[-1])
     current_vol = float(df["Volume"].iloc[-1])
     is_green = df["Close"].iloc[-1] > df["Open"].iloc[-1]
@@ -173,17 +178,17 @@ def scan_stock(df):
     if avg_vol > 0 and current_vol > avg_vol * 1.5:
         volume_signal = "SPIKE"
         if is_green:
-            score += 1 # Buying Volume
+            score += 1 
         else:
-            score -= 1 # Selling Volume
+            score -= 1 
 
-    # Final Signal (Added STRONG SELL / BIG SELL)
+    # Final Signal
     if score >= 3:
         final_signal = "STRONG BUY"
     elif score == 2:
         final_signal = "BUY"
     elif score <= -3:
-        final_signal = "STRONG SELL" # BIG SELL
+        final_signal = "STRONG SELL" 
     elif score == -2:
         final_signal = "SELL"
     else:
@@ -201,18 +206,18 @@ def scan_stock(df):
     }
 
 # -------------------------------
-# UI Layout Tabs (NEW FEATURE)
+# UI Layout Tabs
 # -------------------------------
 tab1, tab2 = st.tabs(["🚀 Live Scanner", "📈 Strategy Backtest"])
 
 # ==========================================
-# TAB 1: LIVE SCANNER (Old Code Untouched)
+# TAB 1: LIVE SCANNER
 # ==========================================
 with tab1:
     if st.button("🚀 RUN SCAN"):
         results = []
         if sector == "All NSE500":
-            selected_stocks = stocks[:100]  # limit for performance
+            selected_stocks = stocks[:100]  
         else:
             selected_stocks = sector_stocks[sector]
 
@@ -247,7 +252,6 @@ with tab1:
             result_df = result_df.sort_values(by="Score", ascending=False)
             st.success(f"Scan Completed : {len(result_df)} Stocks")
             
-            # Highlight Strong Buy and Strong Sell
             def highlight_signals(val):
                 if val == "STRONG BUY": return 'background-color: lightgreen; color: black;'
                 elif val == "STRONG SELL": return 'background-color: lightcoral; color: black;'
@@ -268,25 +272,24 @@ with tab1:
             st.warning("No signals found.")
 
 # ==========================================
-# TAB 2: BACKTESTING MODULE (NEW FEATURE)
+# TAB 2: BACKTESTING MODULE
 # ==========================================
 with tab2:
     st.subheader("Historical Strategy Backtest")
-    st.write("Test this scanner's logic on any individual stock over the selected period.")
+    st.info("⚠️ Tip: Backtest sathi varati Period '6mo' kinva '1y' nivida, mhanje data kami padnar nahi.")
     
-    test_stock = st.selectbox("Select a Stock to Backtest:", stocks, index=stocks.index("RELIANCE") if "RELIANCE" in stocks else 0)
+    test_stock = st.selectbox("Select a Stock to Backtest:", stocks, index=0)
     
     if st.button("📈 RUN BACKTEST"):
         with st.spinner("Calculating Historical Data..."):
             df_bt = get_data(test_stock, interval, period)
             
             if df_bt.empty or len(df_bt) < 60:
-                st.error("Not enough historical data for backtesting.")
+                st.error(f"Data khup kami ahe ({len(df_bt)} candles). Backtest sathi kiman 60 candles pahijet. Krupaya varati Period badlun '6mo' kinva '1y' kara.")
             else:
                 df_bt = add_indicators(df_bt)
                 df_bt.dropna(inplace=True)
                 
-                # Vectorized Backtest Logic 
                 ema_score = np.where(df_bt['EMA20'] > df_bt['EMA50'], 1, -1)
                 rsi_score = np.where(df_bt['RSI'] > 60, 1, np.where(df_bt['RSI'] < 40, -1, 0))
                 
@@ -302,15 +305,12 @@ with tab2:
                 
                 total_score = ema_score + rsi_score + brk_score + vol_score
                 
-                # Generate Positions: Hold Long (1) if score >= 2, Hold Short (-1) if score <= -2
                 positions = np.where(total_score >= 2, 1, np.where(total_score <= -2, -1, np.nan))
                 df_bt['Position'] = pd.Series(positions, index=df_bt.index).ffill().fillna(0)
                 
-                # Calculate Returns
                 df_bt['Market_Return'] = df_bt['Close'].pct_change()
                 df_bt['Strategy_Return'] = df_bt['Position'].shift(1) * df_bt['Market_Return']
                 
-                # Plotting Data
                 plot_data = pd.DataFrame({
                     "Buy & Hold Return": (1 + df_bt['Market_Return']).cumprod() * 100,
                     "Strategy Return": (1 + df_bt['Strategy_Return']).cumprod() * 100
@@ -318,7 +318,6 @@ with tab2:
                 
                 st.line_chart(plot_data)
                 
-                # Metrics
                 final_market = plot_data["Buy & Hold Return"].iloc[-1] - 100
                 final_strategy = plot_data["Strategy Return"].iloc[-1] - 100
                 
@@ -327,6 +326,6 @@ with tab2:
                 m2.metric("Buy & Hold Return", f"{final_market:.2f}%")
                 
                 if final_strategy > final_market:
-                    m3.success("✅ Strategy beat the market!")
+                    m3.success("✅ Strategy ne market peksha jast return dila!")
                 else:
-                    m3.error("❌ Strategy underperformed.")
+                    m3.error("❌ Strategy market peksha kami raheli.")
