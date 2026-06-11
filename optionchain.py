@@ -7,7 +7,6 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import pytz
-import time
 from io import BytesIO
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -70,11 +69,6 @@ rsi_lower = st.sidebar.slider("RSI Lower",10,50,30)
 vol_multiplier = st.sidebar.slider("Volume Spike Multiplier",1.0,5.0,1.5)
 breakout_window = st.sidebar.slider("Breakout Window",10,50,20)
 show_strong_only = st.sidebar.checkbox("Show Strong Buy Only")
-auto_refresh = st.sidebar.checkbox("Auto Refresh")
-
-if auto_refresh:
-    st.warning("Auto Refresh Enabled")
-    st_autorefresh = st.experimental_rerun()
 
 # ==========================================================
 # DATA FETCH
@@ -163,21 +157,21 @@ def rsi_signal(df):
 def calculate_score(df):
     score=0
     try:
-        if ema_signal(df)=="BUY": score+=2   # ✅ Weighted scoring
-        else: score-=1
+        if ema_signal(df)=="BUY": score+=2
+        else: score-=2
         rsi=float(df["RSI"].iloc[-1])
         if rsi>rsi_upper: score+=1
         elif rsi<rsi_lower: score-=1
         bo=breakout_with_volume(df)
-        if "CONFIRMED" in bo: score+=2
+        if "BULLISH CONFIRMED" in bo: score+=2
+        elif "BEARISH CONFIRMED" in bo: score-=2
         elif "Weak" in bo: score+=1
-        elif "BEARISH" in bo: score-=1
         return score
     except:
         return 0
 
 # ==========================================================
-# FINAL SIGNAL
+# FINAL SIGNAL (STRONG SELL Added)
 # ==========================================================
 def final_signal(score):
     if score>=5: return "STRONG BUY"
@@ -186,8 +180,9 @@ def final_signal(score):
     if score==1: return "WAIT"
     if score==0: return "NEUTRAL"
     if score==-1: return "WEAK SELL"
-    if score<=-2: return "SELL"
-    return "STRONG SELL"
+    if score<=-2 and score>-4: return "SELL"
+    if score<=-4: return "STRONG SELL"   # ✅ Added Strong Sell
+    return "NEUTRAL"
 
 # ==========================================================
 # SINGLE STOCK SCAN
@@ -211,3 +206,4 @@ def scan_stock(symbol):
             "Signal":signal
         }
     except:
+        return None
