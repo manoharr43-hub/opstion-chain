@@ -22,7 +22,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 st.title("📊 HYBRID NSE PRO SCANNER V5")
-st.write("EMA + RSI + Volume + Breakout Scanner + Correct IST Signal Time")
+st.write("EMA + RSI + Volume + Breakout + Strong Sell & Backtesting")
 
 # -------------------------------
 # Sidebar Configuration
@@ -44,7 +44,7 @@ def load_nse500():
         url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
         df = pd.read_csv(url)
         return sorted(df["Symbol"].dropna().unique().tolist())
-    except Exception as e: # OPTIMIZATION: Better exception handling
+    except Exception as e:
         return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT"]
 
 stocks = load_nse500()
@@ -67,7 +67,7 @@ with col1:
     interval = st.selectbox("Interval", ["5m","15m","30m","1h","1d"], index=1)
 
 with col2:
-    period = st.selectbox("Period", ["5d","1mo","3mo","6mo"], index=0)
+    period = st.selectbox("Period", ["5d","1mo","3mo","6mo", "1y"], index=1)
 
 with col3:
     sector = st.selectbox("Sector", list(sector_stocks.keys()) + ["All NSE500"])
@@ -88,7 +88,7 @@ def get_data(symbol, interval, period):
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
         return df
-    except Exception as e: # OPTIMIZATION: Better exception handling
+    except Exception as e:
         return pd.DataFrame()
 
 # -------------------------------
@@ -99,7 +99,6 @@ def calculate_rsi(df, period=14):
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
 
-    # OPTIMIZATION: Wilder's Smoothing uses EMA instead of SMA
     avg_gain = gain.ewm(com=period - 1, adjust=False).mean()
     avg_loss = loss.ewm(com=period - 1, adjust=False).mean()
 
@@ -120,7 +119,7 @@ def add_indicators(df):
     return df
 
 # -------------------------------
-# Scanner Logic (Safe IST Time)
+# Scanner Logic (Safe IST Time & STRONG SELL)
 # -------------------------------
 def scan_stock(df):
     if len(df) < 60:
@@ -129,11 +128,9 @@ def scan_stock(df):
     score = 0
     close = float(df["Close"].iloc[-1])
 
-    # OPTIMIZATION: Safe timezone conversion
     ist = pytz.timezone("Asia/Kolkata")
     last_index = df.index[-1]
     
-    # Check if naive, localize if true
     if last_index.tzinfo is None:
         last_index = last_index.tz_localize("UTC")
         
@@ -168,19 +165,26 @@ def scan_stock(df):
         score -= 1
         breakout_signal = "BEARISH"
 
-    # Volume Spike
+    # Volume Spike & Direction Logic (NEW FEATURE)
     avg_vol = float(df["AVG_VOL"].iloc[-1])
     current_vol = float(df["Volume"].iloc[-1])
-    if avg_vol > 0 and current_vol > avg_vol * 1.5:
-        score += 1
-        volume_signal = "SPIKE"
+    is_green = df["Close"].iloc[-1] > df["Open"].iloc[-1]
 
-    # Final Signal
+    if avg_vol > 0 and current_vol > avg_vol * 1.5:
+        volume_signal = "SPIKE"
+        if is_green:
+            score += 1 # Buying Volume
+        else:
+            score -= 1 # Selling Volume
+
+    # Final Signal (Added STRONG SELL / BIG SELL)
     if score >= 3:
         final_signal = "STRONG BUY"
     elif score == 2:
         final_signal = "BUY"
-    elif score <= -2:
+    elif score <= -3:
+        final_signal = "STRONG SELL" # BIG SELL
+    elif score == -2:
         final_signal = "SELL"
     else:
         final_signal = "WAIT"
@@ -197,53 +201,132 @@ def scan_stock(df):
     }
 
 # -------------------------------
-# Run Scanner
+# UI Layout Tabs (NEW FEATURE)
 # -------------------------------
-if st.button("🚀 RUN SCAN"):
-    results = []
-    if sector == "All NSE500":
-        selected_stocks = stocks[:100]  # limit for performance
-    else:
-        selected_stocks = sector_stocks[sector]
+tab1, tab2 = st.tabs(["🚀 Live Scanner", "📈 Strategy Backtest"])
 
-    progress = st.progress(0)
+# ==========================================
+# TAB 1: LIVE SCANNER (Old Code Untouched)
+# ==========================================
+with tab1:
+    if st.button("🚀 RUN SCAN"):
+        results = []
+        if sector == "All NSE500":
+            selected_stocks = stocks[:100]  # limit for performance
+        else:
+            selected_stocks = sector_stocks[sector]
 
-    for i, symbol in enumerate(selected_stocks):
-        df = get_data(symbol, interval, period)
-        if df.empty:
-            continue
-        df = add_indicators(df)
-        signal = scan_stock(df)
-        if signal:
-            results.append([
-                symbol,
-                signal["Price"],
-                signal["EMA"],
-                signal["RSI"],
-                signal["Breakout"],
-                signal["Volume"],
-                signal["Score"],
-                signal["Signal"],
-                signal["Time"]
-            ])
-        progress.progress((i + 1) / len(selected_stocks))
+        progress = st.progress(0)
 
-    result_df = pd.DataFrame(
-        results,
-        columns=["Stock","Price","EMA","RSI","Breakout","Volume","Score","Signal","Time"]
-    )
+        for i, symbol in enumerate(selected_stocks):
+            df = get_data(symbol, interval, period)
+            if df.empty:
+                continue
+            df = add_indicators(df)
+            signal = scan_stock(df)
+            if signal:
+                results.append([
+                    symbol,
+                    signal["Price"],
+                    signal["EMA"],
+                    signal["RSI"],
+                    signal["Breakout"],
+                    signal["Volume"],
+                    signal["Score"],
+                    signal["Signal"],
+                    signal["Time"]
+                ])
+            progress.progress((i + 1) / len(selected_stocks))
 
-    if not result_df.empty:
-        result_df = result_df.sort_values(by="Score", ascending=False)
-        st.success(f"Scan Completed : {len(result_df)} Stocks")
-        st.dataframe(result_df, use_container_width=True)
-
-        csv = result_df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="📥 Download CSV",
-            data=csv,
-            file_name="HybridScannerV5.csv",
-            mime="text/csv"
+        result_df = pd.DataFrame(
+            results,
+            columns=["Stock","Price","EMA","RSI","Breakout","Volume","Score","Signal","Time"]
         )
-    else:
-        st.warning("No signals found.")
+
+        if not result_df.empty:
+            result_df = result_df.sort_values(by="Score", ascending=False)
+            st.success(f"Scan Completed : {len(result_df)} Stocks")
+            
+            # Highlight Strong Buy and Strong Sell
+            def highlight_signals(val):
+                if val == "STRONG BUY": return 'background-color: lightgreen; color: black;'
+                elif val == "STRONG SELL": return 'background-color: lightcoral; color: black;'
+                elif val == "BUY": return 'color: green;'
+                elif val == "SELL": return 'color: red;'
+                return ''
+                
+            st.dataframe(result_df.style.applymap(highlight_signals, subset=['Signal']), use_container_width=True)
+
+            csv = result_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="📥 Download CSV",
+                data=csv,
+                file_name="HybridScannerV5.csv",
+                mime="text/csv"
+            )
+        else:
+            st.warning("No signals found.")
+
+# ==========================================
+# TAB 2: BACKTESTING MODULE (NEW FEATURE)
+# ==========================================
+with tab2:
+    st.subheader("Historical Strategy Backtest")
+    st.write("Test this scanner's logic on any individual stock over the selected period.")
+    
+    test_stock = st.selectbox("Select a Stock to Backtest:", stocks, index=stocks.index("RELIANCE") if "RELIANCE" in stocks else 0)
+    
+    if st.button("📈 RUN BACKTEST"):
+        with st.spinner("Calculating Historical Data..."):
+            df_bt = get_data(test_stock, interval, period)
+            
+            if df_bt.empty or len(df_bt) < 60:
+                st.error("Not enough historical data for backtesting.")
+            else:
+                df_bt = add_indicators(df_bt)
+                df_bt.dropna(inplace=True)
+                
+                # Vectorized Backtest Logic 
+                ema_score = np.where(df_bt['EMA20'] > df_bt['EMA50'], 1, -1)
+                rsi_score = np.where(df_bt['RSI'] > 60, 1, np.where(df_bt['RSI'] < 40, -1, 0))
+                
+                breakout_high = df_bt['High'].rolling(20).max().shift(1)
+                breakout_low = df_bt['Low'].rolling(20).min().shift(1)
+                brk_score = np.where(df_bt['Close'] > breakout_high, 1, np.where(df_bt['Close'] < breakout_low, -1, 0))
+                
+                vol_condition = df_bt['Volume'] > (df_bt['AVG_VOL'] * 1.5)
+                green_candle = df_bt['Close'] > df_bt['Open']
+                red_candle = df_bt['Close'] < df_bt['Open']
+                
+                vol_score = np.where(vol_condition & green_candle, 1, np.where(vol_condition & red_candle, -1, 0))
+                
+                total_score = ema_score + rsi_score + brk_score + vol_score
+                
+                # Generate Positions: Hold Long (1) if score >= 2, Hold Short (-1) if score <= -2
+                positions = np.where(total_score >= 2, 1, np.where(total_score <= -2, -1, np.nan))
+                df_bt['Position'] = pd.Series(positions, index=df_bt.index).ffill().fillna(0)
+                
+                # Calculate Returns
+                df_bt['Market_Return'] = df_bt['Close'].pct_change()
+                df_bt['Strategy_Return'] = df_bt['Position'].shift(1) * df_bt['Market_Return']
+                
+                # Plotting Data
+                plot_data = pd.DataFrame({
+                    "Buy & Hold Return": (1 + df_bt['Market_Return']).cumprod() * 100,
+                    "Strategy Return": (1 + df_bt['Strategy_Return']).cumprod() * 100
+                })
+                
+                st.line_chart(plot_data)
+                
+                # Metrics
+                final_market = plot_data["Buy & Hold Return"].iloc[-1] - 100
+                final_strategy = plot_data["Strategy Return"].iloc[-1] - 100
+                
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Strategy Net Return", f"{final_strategy:.2f}%")
+                m2.metric("Buy & Hold Return", f"{final_market:.2f}%")
+                
+                if final_strategy > final_market:
+                    m3.success("✅ Strategy beat the market!")
+                else:
+                    m3.error("❌ Strategy underperformed.")
