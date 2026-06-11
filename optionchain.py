@@ -2,17 +2,18 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import pytz
 
 # -------------------------------
 # Streamlit Page Setup
 # -------------------------------
 st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V2",
+    page_title="HYBRID NSE PRO SCANNER V3",
     layout="wide"
 )
 
-st.title("📊 HYBRID NSE PRO SCANNER V2")
-st.write("EMA + RSI + Volume + Breakout Scanner + Signal Time")
+st.title("📊 HYBRID NSE PRO SCANNER V3")
+st.write("EMA + RSI + Volume + Breakout Scanner + Correct Signal Time")
 
 # -------------------------------
 # Load NSE500 Stocks
@@ -102,7 +103,7 @@ def add_indicators(df):
     return df
 
 # -------------------------------
-# Scanner Logic (with Time)
+# Scanner Logic (with IST Time)
 # -------------------------------
 def scan_stock(df):
     if len(df) < 60:
@@ -110,7 +111,10 @@ def scan_stock(df):
 
     score = 0
     close = float(df["Close"].iloc[-1])
-    signal_time = df.index[-1].strftime("%Y-%m-%d %H:%M")  # NEW
+
+    # Convert UTC index to IST
+    ist = pytz.timezone("Asia/Kolkata")
+    signal_time = df.index[-1].tz_localize("UTC").astimezone(ist).strftime("%d-%b %Y %I:%M %p")
 
     ema_signal = "NEUTRAL"
     breakout_signal = "NO"
@@ -167,7 +171,7 @@ def scan_stock(df):
         "Volume": volume_signal,
         "Score": score,
         "Signal": final_signal,
-        "Time": signal_time   # NEW COLUMN
+        "Time": signal_time   # Correct IST Time
     }
 
 # -------------------------------
@@ -220,7 +224,7 @@ if st.button("🚀 RUN SCAN"):
         st.download_button(
             label="📥 Download CSV",
             data=csv,
-            file_name="HybridScannerV2.csv",
+            file_name="HybridScannerV3.csv",
             mime="text/csv"
         )
     else:
