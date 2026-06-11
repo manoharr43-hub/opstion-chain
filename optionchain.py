@@ -8,12 +8,32 @@ import pytz
 # Streamlit Page Setup
 # -------------------------------
 st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V4",
+    page_title="HYBRID NSE PRO SCANNER V5",
     layout="wide"
 )
 
-st.title("📊 HYBRID NSE PRO SCANNER V4")
-st.write("EMA + RSI + Volume + Breakout Scanner + Correct Signal Time")
+# Custom CSS
+st.markdown("""
+    <style>
+    .stApp { background-color: #f8f9fa; }
+    .css-1r6slp0 { padding: 2rem; }
+    .stSidebar { background-color: #ffffff; }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.title("📊 HYBRID NSE PRO SCANNER V5")
+st.write("EMA + RSI + Volume + Breakout Scanner + Correct IST Signal Time")
+
+# -------------------------------
+# Sidebar Configuration
+# -------------------------------
+with st.sidebar:
+    st.header("⚙️ Configuration")
+    st.info("Scanner V5 is optimized for Nifty 500 assets.")
+    st.write("---")
+    st.write("• **EMA:** 20/50 Cross")
+    st.write("• **RSI:** 14-period")
+    st.write("• **Volume:** 20-period SMA")
 
 # -------------------------------
 # Load NSE500 Stocks
@@ -25,10 +45,7 @@ def load_nse500():
         df = pd.read_csv(url)
         return sorted(df["Symbol"].dropna().unique().tolist())
     except:
-        return [
-            "RELIANCE","TCS","INFY","HDFCBANK",
-            "ICICIBANK","SBIN","ITC","LT"
-        ]
+        return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT"]
 
 stocks = load_nse500()
 
@@ -95,7 +112,6 @@ def calculate_rsi(df, period=14):
 def add_indicators(df):
     if len(df) < 60:
         return df
-
     df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
     df["EMA50"] = df["Close"].ewm(span=50, adjust=False).mean()
     df["RSI"] = calculate_rsi(df)
@@ -115,10 +131,8 @@ def scan_stock(df):
     # Safe timezone conversion
     ist = pytz.timezone("Asia/Kolkata")
     last_index = df.index[-1]
-
     if last_index.tzinfo is None:
         last_index = last_index.tz_localize("UTC")
-
     signal_time = last_index.astimezone(ist).strftime("%d-%b %Y %I:%M %p")
 
     ema_signal = "NEUTRAL"
@@ -143,7 +157,6 @@ def scan_stock(df):
     # Breakout Signal
     breakout_high = df["High"].rolling(20).max().shift(1).iloc[-1]
     breakout_low = df["Low"].rolling(20).min().shift(1).iloc[-1]
-
     if close > breakout_high:
         score += 1
         breakout_signal = "BULLISH"
@@ -176,7 +189,7 @@ def scan_stock(df):
         "Volume": volume_signal,
         "Score": score,
         "Signal": final_signal,
-        "Time": signal_time   # Correct IST Time
+        "Time": signal_time
     }
 
 # -------------------------------
@@ -184,7 +197,6 @@ def scan_stock(df):
 # -------------------------------
 if st.button("🚀 RUN SCAN"):
     results = []
-
     if sector == "All NSE500":
         selected_stocks = stocks[:100]  # limit for performance
     else:
@@ -196,10 +208,8 @@ if st.button("🚀 RUN SCAN"):
         df = get_data(symbol, interval, period)
         if df.empty:
             continue
-
         df = add_indicators(df)
         signal = scan_stock(df)
-
         if signal:
             results.append([
                 symbol,
@@ -212,7 +222,6 @@ if st.button("🚀 RUN SCAN"):
                 signal["Signal"],
                 signal["Time"]
             ])
-
         progress.progress((i + 1) / len(selected_stocks))
 
     result_df = pd.DataFrame(
@@ -229,7 +238,7 @@ if st.button("🚀 RUN SCAN"):
         st.download_button(
             label="📥 Download CSV",
             data=csv,
-            file_name="HybridScannerV4.csv",
+            file_name="HybridScannerV5.csv",
             mime="text/csv"
         )
     else:
