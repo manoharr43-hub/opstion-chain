@@ -64,7 +64,7 @@ def breakout_signal(df):
         return "NO DATA"
     high = df["High"].rolling(20).max().iloc[-1]
     low = df["Low"].rolling(20).min().iloc[-1]
-    close = df["Close"].iloc[-1]
+    close = df["Close"].iloc[-1]   # ✅ single float value
     if close > high:
         return "Bullish Breakout ▲"
     elif close < low:
@@ -82,7 +82,7 @@ def save_csv(df, stock):
 # -------------------------------
 # STREAMLIT UI
 # -------------------------------
-st.title("📊 HYBRID NSE PRO SCANNER – EMA + Breakout Channels")
+st.title("📊 HYBRID NSE PRO SCANNER – Final Clean E Code")
 
 sector = st.selectbox("Select Sector", list(sector_stocks.keys()) + ["All NSE 500"])
 
