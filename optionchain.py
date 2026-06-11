@@ -8,12 +8,12 @@ import pytz
 # Streamlit Page Setup
 # -------------------------------
 st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V5",
+    page_title="HYBRID NSE PRO SCANNER V6",
     layout="wide"
 )
 
-st.title("📊 HYBRID NSE PRO SCANNER V5")
-st.write("EMA + RSI + Volume + Breakout Scanner + Continuous Signal Time (IST)")
+st.title("📊 HYBRID NSE PRO SCANNER V6")
+st.write("EMA + RSI + Volume + Breakout Scanner + Configurable Thresholds + Continuous Signal Time (IST)")
 
 # -------------------------------
 # Load NSE500 Stocks
@@ -51,6 +51,13 @@ with col2:
 
 with col3:
     sector = st.selectbox("Sector", list(sector_stocks.keys()) + ["All NSE500"])
+
+# Threshold Inputs
+st.sidebar.header("⚙️ Scanner Settings")
+rsi_upper = st.sidebar.slider("RSI Upper Threshold", 50, 80, 70)
+rsi_lower = st.sidebar.slider("RSI Lower Threshold", 20, 50, 30)
+vol_multiplier = st.sidebar.slider("Volume Spike Multiplier", 1.0, 3.0, 1.5)
+breakout_window = st.sidebar.slider("Breakout Window (days)", 10, 50, 20)
 
 # -------------------------------
 # Data Fetch
@@ -111,7 +118,6 @@ def scan_stock(df):
         df.index = df.index.tz_localize("UTC")
 
     df["IST_Time"] = df.index.tz_convert(ist)
-    # FIX: removed include_start/include_end
     df = df.between_time("09:15","15:30")
 
     signals = []
@@ -127,13 +133,13 @@ def scan_stock(df):
         score += 1 if ema_signal == "BUY" else -1
 
         # RSI
-        if rsi > 60: score += 1
-        elif rsi < 40: score -= 1
+        if rsi > rsi_upper: score += 1
+        elif rsi < rsi_lower: score -= 1
 
         # Breakout
-        if i >= 20:
-            breakout_high = df["High"].rolling(20).max().shift(1).iloc[i]
-            breakout_low = df["Low"].rolling(20).min().shift(1).iloc[i]
+        if i >= breakout_window:
+            breakout_high = df["High"].rolling(breakout_window).max().shift(1).iloc[i]
+            breakout_low = df["Low"].rolling(breakout_window).min().shift(1).iloc[i]
             if close > breakout_high:
                 breakout_signal = "BULLISH"; score += 1
             elif close < breakout_low:
@@ -142,7 +148,7 @@ def scan_stock(df):
         # Volume
         avg_vol = float(df["AVG_VOL"].iloc[i])
         current_vol = float(df["Volume"].iloc[i])
-        if avg_vol > 0 and current_vol > avg_vol * 1.5:
+        if avg_vol > 0 and current_vol > avg_vol * vol_multiplier:
             volume_signal = "SPIKE"; score += 1
 
         # Final Signal
@@ -200,7 +206,7 @@ if st.button("🚀 RUN SCAN"):
         st.download_button(
             label="📥 Download CSV",
             data=csv,
-            file_name="HybridScannerV5.csv",
+            file_name="HybridScannerV6.csv",
             mime="text/csv"
         )
     else:
