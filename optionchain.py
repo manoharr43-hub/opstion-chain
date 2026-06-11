@@ -82,7 +82,7 @@ def save_csv(df, stock):
 # -------------------------------
 # STREAMLIT UI
 # -------------------------------
-st.title("📊 HYBRID NSE PRO SCANNER – Final Clean E Code")
+st.title("📊 HYBRID NSE PRO SCANNER – EMA + Breakout Channels")
 
 sector = st.selectbox("Select Sector", list(sector_stocks.keys()) + ["All NSE 500"])
 
