@@ -12,7 +12,7 @@ st.set_page_config(
 )
 
 st.title("📊 HYBRID NSE PRO SCANNER V2")
-st.write("EMA + RSI + Volume + Breakout Scanner")
+st.write("EMA + RSI + Volume + Breakout Scanner + Signal Time")
 
 # -------------------------------
 # Load NSE500 Stocks
@@ -102,7 +102,7 @@ def add_indicators(df):
     return df
 
 # -------------------------------
-# Scanner Logic
+# Scanner Logic (with Time)
 # -------------------------------
 def scan_stock(df):
     if len(df) < 60:
@@ -110,6 +110,7 @@ def scan_stock(df):
 
     score = 0
     close = float(df["Close"].iloc[-1])
+    signal_time = df.index[-1].strftime("%Y-%m-%d %H:%M")  # NEW
 
     ema_signal = "NEUTRAL"
     breakout_signal = "NO"
@@ -165,7 +166,8 @@ def scan_stock(df):
         "Breakout": breakout_signal,
         "Volume": volume_signal,
         "Score": score,
-        "Signal": final_signal
+        "Signal": final_signal,
+        "Time": signal_time   # NEW COLUMN
     }
 
 # -------------------------------
@@ -198,14 +200,15 @@ if st.button("🚀 RUN SCAN"):
                 signal["Breakout"],
                 signal["Volume"],
                 signal["Score"],
-                signal["Signal"]
+                signal["Signal"],
+                signal["Time"]
             ])
 
         progress.progress((i + 1) / len(selected_stocks))
 
     result_df = pd.DataFrame(
         results,
-        columns=["Stock","Price","EMA","RSI","Breakout","Volume","Score","Signal"]
+        columns=["Stock","Price","EMA","RSI","Breakout","Volume","Score","Signal","Time"]
     )
 
     if not result_df.empty:
