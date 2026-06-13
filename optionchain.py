@@ -2,17 +2,15 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import pytz
 import io
 import time
-import plotly.graph_objects as go
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # -------------------------------
 # Streamlit Page Setup
 # -------------------------------
 st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V9.1",
+    page_title="HYBRID NSE PRO SCANNER V9.2",
     layout="wide"
 )
 
@@ -24,8 +22,8 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 HYBRID NSE PRO SCANNER V9.1 (100% CLOUD STABLE)")
-st.write("yfinance Powered | AI Trend + Relative Strength + Multi-Timeframe + Backtesting + Live Alerts")
+st.title("📊 HYBRID NSE PRO SCANNER V9.2 (CLOUD STABLE & EXCEL)")
+st.write("yfinance Powered | AI Trend + Relative Strength + Multi-Timeframe + Vectorized Backtest + Colored Excel Export")
 
 # -------------------------------
 # Sidebar Configuration
@@ -239,6 +237,17 @@ def process_stock_thread(symbol, interval, period, h52w, l52w, nifty_return, dai
     ]
 
 # -------------------------------
+# Color Logic
+# -------------------------------
+def color_code(val):
+    if isinstance(val, str):
+        if any(x in val for x in ["STRONG BUY", "BULLISH", "UP", "ABOVE", "SPIKE", "Outperform", "🟢"]): 
+            return 'color: green; font-weight: bold;'
+        if any(x in val for x in ["STRONG SELL", "BEARISH", "DOWN", "BELOW", "Underperform", "🔻", "🚨"]): 
+            return 'color: red; font-weight: bold;'
+    return ''
+
+# -------------------------------
 # App Tabs Setup
 # -------------------------------
 tab1, tab2, tab3 = st.tabs(["🚀 Live AI Scanner", "📈 Vectorized Backtest", "🔔 Active Strategy Rules"])
@@ -296,18 +305,20 @@ with tab1:
             )
             df_res = df_res.sort_values(by="Score", ascending=False)
             
-            def color_code(val):
-                if isinstance(val, str):
-                    if any(x in val for x in ["STRONG BUY", "BULLISH", "UP", "ABOVE", "SPIKE", "Outperform", "🟢"]): 
-                        return 'color: green; font-weight: bold;'
-                    if any(x in val for x in ["STRONG SELL", "BEARISH", "DOWN", "BELOW", "Underperform", "🔻", "🚨"]): 
-                        return 'color: red; font-weight: bold;'
-                return ''
-                
-            st.dataframe(df_res.style.map(color_code, subset=['Signal', '⚡ Active Alerts', 'MTF Trend', 'AI Trend', 'RS vs NIFTY', 'Breakout', 'MACD', 'Supertrend', 'VWAP', 'Volume']), use_container_width=True)
+            styled_df = df_res.style.map(color_code, subset=['Signal', '⚡ Active Alerts', 'MTF Trend', 'AI Trend', 'RS vs NIFTY', 'Breakout', 'MACD', 'Supertrend', 'VWAP', 'Volume'])
+            st.dataframe(styled_df, use_container_width=True)
             
-            csv = df_res.to_csv(index=False).encode("utf-8")
-            st.download_button("📥 Download Cloud Stable Report (CSV)", data=csv, file_name="Cloud_Stable_Scanner_V9_1.csv", mime="text/csv")
+            # Colored Excel Download Logic
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                styled_df.to_excel(writer, index=False, sheet_name='Live_Scanner')
+            
+            st.download_button(
+                label="📥 Download Colored Excel Report (.xlsx)", 
+                data=buffer.getvalue(), 
+                file_name="Hybrid_Scanner_Colored_Report.xlsx", 
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
         
         if auto_refresh:
             st.warning("⏳ Auto-Refresh running. Scanning again in 3 minutes...")
@@ -347,7 +358,7 @@ with tab2:
                 trade_friction = np.where(df_bt['Position'].diff() != 0, 0.001, 0)
                 df_bt['Strategy_Return'] = (df_bt['Position'].shift(1) * df_bt['Market_Return']) - trade_friction
                 
-                # 🟢 FIXED: Removed .nonzero() and used the correct pandas boolean sum
+                # Fixed line for Streamlit Cloud Pandas Compatibility
                 total_trades = int((df_bt['Position'].diff().fillna(0) != 0).sum())
                 
                 win_rate = (len(df_bt[df_bt['Strategy_Return'] > 0]) / max(1, len(df_bt[df_bt['Strategy_Return'] != 0]))) * 100
