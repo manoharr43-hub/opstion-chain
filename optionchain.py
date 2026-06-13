@@ -263,7 +263,6 @@ with tab1:
                 if res: results.append(res)
                 progress.progress((i + 1) / len(selected_stocks))
 
-        # కొత్తగా "52W Status" మరియు "RSI" యాడ్ చేసాము
         result_df = pd.DataFrame(
             results, 
             columns=["Stock", "Price", "52W Status", "RSI", "MACD", "Supertrend", "VWAP", "Score", "Signal", "Time"]
@@ -323,5 +322,49 @@ with tab2:
                 
                 total_score = st_score + macd_score + vwap_score + ema_score
                 
+                # ఇక్కడ బ్రాకెట్ క్లోజ్ చేయబడింది (Fixed line)
                 positions = np.where(total_score >= 2, 1, np.where(total_score <= -2, -1, np.nan))
-                df_bt['Position'] = pd.Series(positions, index=df_
+                df_bt['Position'] = pd.Series(positions, index=df_bt.index).ffill().fillna(0)
+                
+                df_bt['Market_Return'] = df_bt['Close'].pct_change()
+                trade_friction = np.where(df_bt['Position'].diff() != 0, 0.001, 0)
+                df_bt['Strategy_Return'] = (df_bt['Position'].shift(1) * df_bt['Market_Return']) - trade_friction
+                
+                trade_signals = df_bt['Position'].diff().fillna(0)
+                total_trades = len(trade_signals[trade_signals != 0])
+                
+                winning_days = len(df_bt[df_bt['Strategy_Return'] > 0])
+                losing_days = len(df_bt[df_bt['Strategy_Return'] < 0])
+                win_rate = (winning_days / (winning_days + losing_days) * 100) if (winning_days + losing_days) > 0 else 0
+                
+                cum_market = (1 + df_bt['Market_Return']).cumprod()
+                cum_strategy = (1 + df_bt['Strategy_Return']).cumprod()
+                
+                peak = cum_strategy.cummax()
+                drawdown = (cum_strategy - peak) / peak
+                max_drawdown = drawdown.min() * 100
+                
+                final_market = (cum_market.iloc[-1] - 1) * 100
+                final_strategy = (cum_strategy.iloc[-1] - 1) * 100
+                
+                st.markdown("### 📊 Strategy Performance Overview")
+                m1, m2, m3, m4, m5 = st.columns(5)
+                
+                m1.metric("Strategy Return", f"{final_strategy:.2f}%")
+                m2.metric("Market Return", f"{final_market:.2f}%")
+                m3.metric("Win Rate", f"{win_rate:.1f}%")
+                m4.metric("Total Trades", f"{total_trades}")
+                m5.metric("Max Drawdown", f"{max_drawdown:.2f}%")
+                
+                plot_data = pd.DataFrame({
+                    "Buy & Hold": cum_market * 100,
+                    "Strategy (MACD+VWAP+ST)": cum_strategy * 100
+                })
+                st.line_chart(plot_data)
+                
+                st.subheader("🗓️ Date-wise Entry & Exit Log")
+                display_df = df_bt[['Close', 'Supertrend', 'MACD_Line', 'VWAP', 'Position', 'Strategy_Return']].copy()
+                display_df.reset_index(inplace=True)
+                display_df.columns = ['Date', 'Close', 'Supertrend', 'MACD', 'VWAP', 'Position', 'Net Return']
+                display_df['Net Return'] = (display_df['Net Return'] * 100).round(2).astype(str) + '%'
+                st.dataframe(display_df, use_container_width=True)
