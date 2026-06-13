@@ -179,7 +179,7 @@ def scan_stock(df):
     if rsi > 60: score += 1
     elif rsi < 40: score -= 1
 
-    # 3. Breakout (ఇక్కడ మళ్లీ యాడ్ చేసాము)
+    # 3. Breakout
     breakout_high = df["High"].rolling(20).max().shift(1).iloc[-1]
     breakout_low = df["Low"].rolling(20).min().shift(1).iloc[-1]
     breakout_signal = "NO"
@@ -277,7 +277,6 @@ with tab1:
                 if res: results.append(res)
                 progress.progress((i + 1) / len(selected_stocks))
 
-        # "Breakout" కాలమ్ ఇక్కడ యాడ్ చేసాము
         result_df = pd.DataFrame(
             results, 
             columns=["Stock", "Price", "52W Status", "RSI", "Breakout", "MACD", "Supertrend", "VWAP", "Score", "Signal", "Time"]
@@ -335,7 +334,6 @@ with tab2:
                 vwap_score = np.where(df_bt['Close'] > df_bt['VWAP'], 1, -1)
                 ema_score = np.where(df_bt['EMA20'] > df_bt['EMA50'], 1, -1)
                 
-                # బ్యాక్‌టెస్ట్‌లో కూడా బ్రేక్అవుట్ లాజిక్ కలిపాము
                 breakout_high = df_bt['High'].rolling(20).max().shift(1)
                 breakout_low = df_bt['Low'].rolling(20).min().shift(1)
                 brk_score = np.where(df_bt['Close'] > breakout_high, 1, np.where(df_bt['Close'] < breakout_low, -1, 0))
@@ -361,4 +359,30 @@ with tab2:
                 
                 peak = cum_strategy.cummax()
                 drawdown = (cum_strategy - peak) / peak
-                max_drawdown = drawdown.min() *
+                # ఇక్కడ ఎర్రర్ రాకుండా పూర్తిగా సరిచేయబడింది (* 100)
+                max_drawdown = drawdown.min() * 100
+                
+                final_market = (cum_market.iloc[-1] - 1) * 100
+                final_strategy = (cum_strategy.iloc[-1] - 1) * 100
+                
+                st.markdown("### 📊 Strategy Performance Overview")
+                m1, m2, m3, m4, m5 = st.columns(5)
+                
+                m1.metric("Strategy Return", f"{final_strategy:.2f}%")
+                m2.metric("Market Return", f"{final_market:.2f}%")
+                m3.metric("Win Rate", f"{win_rate:.1f}%")
+                m4.metric("Total Trades", f"{total_trades}")
+                m5.metric("Max Drawdown", f"{max_drawdown:.2f}%")
+                
+                plot_data = pd.DataFrame({
+                    "Buy & Hold": cum_market * 100,
+                    "Strategy (Breakout+MACD+VWAP+ST)": cum_strategy * 100
+                })
+                st.line_chart(plot_data)
+                
+                st.subheader("🗓️ Date-wise Entry & Exit Log")
+                display_df = df_bt[['Close', 'Supertrend', 'MACD_Line', 'VWAP', 'Position', 'Strategy_Return']].copy()
+                display_df.reset_index(inplace=True)
+                display_df.columns = ['Date', 'Close', 'Supertrend', 'MACD', 'VWAP', 'Position', 'Net Return']
+                display_df['Net Return'] = (display_df['Net Return'] * 100).round(2).astype(str) + '%'
+                st.dataframe(display_df, use_container_width=True)
