@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Streamlit Page Setup
 # -------------------------------
 st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V5.3",
+    page_title="HYBRID NSE PRO SCANNER V5.4",
     layout="wide"
 )
 
@@ -24,15 +24,15 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 HYBRID NSE PRO SCANNER V5.3 (Full NSE500)")
-st.write("EMA + RSI + Volume + Breakout + 52W High/Low & Backtesting")
+st.title("📊 HYBRID NSE PRO SCANNER V5.4")
+st.write("EMA + RSI + Volume + Breakout + 52W High/Low & Date-wise Backtesting")
 
 # -------------------------------
 # Sidebar Configuration
 # -------------------------------
 with st.sidebar:
     st.header("⚙️ Configuration")
-    st.info("Scanner V5.3 is optimized to scan all Nifty 500 assets rapidly.")
+    st.info("Scanner V5.4 includes date-wise backtest data.")
     st.write("---")
     st.write("• **EMA:** 20/50 Cross")
     st.write("• **RSI:** 14-period")
@@ -253,7 +253,7 @@ with tab1:
     if st.button("🚀 RUN SCAN"):
         results = []
         if sector == "All NSE500":
-            selected_stocks = stocks  # మార్పు: ఇక్కడ [:100] లిమిట్‌ను పూర్తిగా తీసేశాము
+            selected_stocks = stocks
         else:
             selected_stocks = sector_stocks[sector]
 
@@ -261,7 +261,6 @@ with tab1:
         status_text = st.empty()
         status_text.text(f"⚡ మొత్తం {len(selected_stocks)} స్టాక్స్ స్కాన్ అవుతున్నాయి... దయచేసి కొన్ని సెకన్లు ఆగండి...")
 
-        # మార్పు: 500 స్టాక్స్ వేగంగా అవ్వడానికి max_workers ను 10 నుండి 15 కి పెంచాము
         with ThreadPoolExecutor(max_workers=15) as executor:
             future_to_stock = {
                 executor.submit(process_stock_thread, symbol, interval, period): symbol 
@@ -305,7 +304,7 @@ with tab1:
             st.warning("No signals found.")
 
 # ==========================================
-# TAB 2: BACKTESTING MODULE
+# TAB 2: BACKTESTING MODULE (DATE-WISE)
 # ==========================================
 with tab2:
     st.subheader("Historical Strategy Backtest")
@@ -343,6 +342,21 @@ with tab2:
                 
                 df_bt['Market_Return'] = df_bt['Close'].pct_change()
                 df_bt['Strategy_Return'] = df_bt['Position'].shift(1) * df_bt['Market_Return']
+                
+                # డేట్ వైస్ లాజిక్: ప్రతి క్యాండిల్ డేటాను, పొజిషన్ మరియు రిటర్న్స్‌ని టేబుల్‌లో చూపిస్తున్నాము
+                st.subheader("🗓️ Date-wise Backtest Details")
+                
+                # టేబుల్ కోసం ఒక శుభ్రమైన డేటాఫ్రేమ్‌ని తయారు చేస్తున్నాము
+                display_df = df_bt[['Close', 'EMA20', 'EMA50', 'RSI', 'Position', 'Strategy_Return']].copy()
+                display_df.reset_index(inplace=True)
+                
+                # కాలమ్ పేర్లను తెలుగు/అర్థవంతంగా మార్చుకోవచ్చు
+                display_df.columns = ['Date', 'Close Price', 'EMA 20', 'EMA 50', 'RSI', 'Position Taken', 'Strategy Return']
+                
+                # రిటర్న్స్ ని శాతం రూపంలో చూపించడానికి
+                display_df['Strategy Return'] = (display_df['Strategy Return'] * 100).round(2).astype(str) + '%'
+                
+                st.dataframe(display_df, use_container_width=True)
                 
                 plot_data = pd.DataFrame({
                     "Buy & Hold Return": (1 + df_bt['Market_Return']).cumprod() * 100,
