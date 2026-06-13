@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Streamlit Page Setup
 # -------------------------------
 st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V6.3",
+    page_title="HYBRID NSE PRO SCANNER V6.4",
     layout="wide"
 )
 
@@ -24,7 +24,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 HYBRID NSE PRO SCANNER V6.3")
+st.title("📊 HYBRID NSE PRO SCANNER V6.4")
 st.write("EMA + RSI + Breakout + MACD + VWAP + Supertrend + 52W Range | Excel & Time")
 
 # -------------------------------
@@ -32,7 +32,7 @@ st.write("EMA + RSI + Breakout + MACD + VWAP + Supertrend + 52W Range | Excel & 
 # -------------------------------
 with st.sidebar:
     st.header("⚙️ Configuration")
-    st.info("Scanner V6.3 includes all indicators, Breakout logic & Excel Export.")
+    st.info("Scanner V6.4 includes all indicators, Breakout logic & Excel Export.")
     st.write("---")
     st.write("• **EMA:** 20/50 Cross")
     st.write("• **RSI:** 14-period")
@@ -126,7 +126,8 @@ def calculate_supertrend(df, period=10, multiplier=3):
     df['ST_Direction'] = direction
     return df
 
-def add_indicators(df):
+# ✅ BUG FIX: పాస్ చేయబడిన interval పారామీటర్ ఇక్కడ యాడ్ చేశాము
+def add_indicators(df, interval):
     if len(df) < 60: return df
     
     # EMA & RSI
@@ -226,7 +227,9 @@ def scan_stock(df):
 def process_stock_thread(symbol, interval, period):
     df = get_data(symbol, interval, period)
     if df.empty: return None
-    df = add_indicators(df)
+    
+    # ✅ BUG FIX: ఇక్కడ interval ని ఫంక్షన్‌కి పాస్ చేస్తున్నాము
+    df = add_indicators(df, interval)
     signal = scan_stock(df)
     
     if signal:
@@ -296,7 +299,7 @@ with tab1:
             
             with col1:
                 csv = result_df.to_csv(index=False).encode("utf-8")
-                st.download_button("📥 Download CSV", data=csv, file_name="HybridScanner_V6_3.csv", mime="text/csv")
+                st.download_button("📥 Download CSV", data=csv, file_name="HybridScanner_V6_4.csv", mime="text/csv")
             
             with col2:
                 buffer = io.BytesIO()
@@ -306,7 +309,7 @@ with tab1:
                 st.download_button(
                     label="📊 Download Excel (.xlsx)",
                     data=buffer,
-                    file_name="HybridScanner_V6_3.xlsx",
+                    file_name="HybridScanner_V6_4.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
         else:
@@ -326,7 +329,8 @@ with tab2:
             if df_bt.empty or len(df_bt) < 60:
                 st.error("Insufficient data. Please increase the period.")
             else:
-                df_bt = add_indicators(df_bt)
+                # ✅ BUG FIX: ఇక్కడ కూడా interval ని ఫంక్షన్‌కి పాస్ చేస్తున్నాము
+                df_bt = add_indicators(df_bt, interval)
                 df_bt.dropna(inplace=True)
                 
                 st_score = np.where(df_bt['ST_Direction'] == 1, 1, -1)
@@ -359,7 +363,6 @@ with tab2:
                 
                 peak = cum_strategy.cummax()
                 drawdown = (cum_strategy - peak) / peak
-                # ఇక్కడ ఎర్రర్ రాకుండా పూర్తిగా సరిచేయబడింది (* 100)
                 max_drawdown = drawdown.min() * 100
                 
                 final_market = (cum_market.iloc[-1] - 1) * 100
