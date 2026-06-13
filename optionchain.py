@@ -194,9 +194,10 @@ def process_stock_thread(symbol, interval, period, h52w, l52w):
     if brk_sig == "BULLISH": score += 1
     elif brk_sig == "BEARISH": score -= 1
 
+    # 🟢 FIXED: Typo corrected from 'score_signal' to 'signal'
     if score >= 4: signal = "STRONG BUY"
     elif score >= 2: signal = "BUY"
-    elif score <= -4: score_signal = "STRONG SELL" 
+    elif score <= -4: signal = "STRONG SELL" 
     elif score <= -2: signal = "SELL"
     else: signal = "WAIT"
 
@@ -329,9 +330,3 @@ with tab3:
             
             pcr = data['filtered']['PE']['totVol'] / data['filtered']['CE']['totVol']
             st.metric("Live NIFTY PCR", round(pcr, 4))
-            
-            if pcr > 1.2: st.success("Sentiment: BULLISH")
-            elif pcr < 0.8: st.error("Sentiment: BEARISH")
-            else: st.warning("Sentiment: NEUTRAL")
-        except:
-            st.error("NSE server busy. Please try again in a few moments.")
