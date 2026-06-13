@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Streamlit Page Setup
 # -------------------------------
 st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V6.0",
+    page_title="HYBRID NSE PRO SCANNER V6.2",
     layout="wide"
 )
 
@@ -24,17 +24,18 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 HYBRID NSE PRO SCANNER V6.0")
-st.write("EMA + RSI + MACD + VWAP + Supertrend & Advanced Backtesting")
+st.title("📊 HYBRID NSE PRO SCANNER V6.2")
+st.write("EMA + RSI + MACD + VWAP + Supertrend + 52W Range | Excel & Time")
 
 # -------------------------------
 # Sidebar Configuration
 # -------------------------------
 with st.sidebar:
     st.header("⚙️ Configuration")
-    st.info("Scanner V6.0 includes Advanced Indicators & Metrics.")
+    st.info("Scanner V6.2 is the Ultimate Version with all indicators & 52W range.")
     st.write("---")
     st.write("• **EMA:** 20/50 Cross")
+    st.write("• **RSI:** 14-period")
     st.write("• **MACD:** 12, 26, 9")
     st.write("• **Supertrend:** 10, 3")
     st.write("• **VWAP:** Intraday Anchored")
@@ -139,7 +140,7 @@ def add_indicators(df):
     df["Signal_Line"] = df["MACD_Line"].ewm(span=9, adjust=False).mean()
     df["MACD_Hist"] = df["MACD_Line"] - df["Signal_Line"]
     
-    # VWAP (Anchored daily if intraday)
+    # VWAP 
     tp = (df['High'] + df['Low'] + df['Close']) / 3
     if 'd' not in interval and 'wk' not in interval and 'mo' not in interval:
         df['Date'] = df.index.date
@@ -161,6 +162,12 @@ def scan_stock(df):
 
     score = 0
     close = float(df["Close"].iloc[-1])
+    
+    ist = pytz.timezone("Asia/Kolkata")
+    last_index = df.index[-1]
+    if last_index.tzinfo is None:
+        last_index = last_index.tz_localize("UTC")
+    signal_time = last_index.astimezone(ist).strftime("%d-%b %Y %I:%M %p")
     
     # 1. EMA
     if df["EMA20"].iloc[-1] > df["EMA50"].iloc[-1]: score += 1
@@ -187,12 +194,10 @@ def scan_stock(df):
     if vwap_sig == "ABOVE": score += 1
     else: score -= 1
 
-    # Volume Spike
     if float(df["Volume"].iloc[-1]) > float(df["AVG_VOL"].iloc[-1]) * 1.5:
         if close > df["Open"].iloc[-1]: score += 1 
         else: score -= 1 
 
-    # Final Signal
     if score >= 4: signal = "STRONG BUY"
     elif score >= 2: signal = "BUY"
     elif score <= -4: signal = "STRONG SELL" 
@@ -200,8 +205,8 @@ def scan_stock(df):
     else: signal = "WAIT"
 
     return {
-        "Price": round(close, 2), "Score": score, "Signal": signal,
-        "MACD": macd, "Supertrend": st_dir, "VWAP": vwap_sig
+        "Price": round(close, 2), "RSI": round(rsi, 2), "Score": score, "Signal": signal,
+        "MACD": macd, "Supertrend": st_dir, "VWAP": vwap_sig, "Time": signal_time
     }
 
 def process_stock_thread(symbol, interval, period):
@@ -211,7 +216,28 @@ def process_stock_thread(symbol, interval, period):
     signal = scan_stock(df)
     
     if signal:
-        return [symbol, signal["Price"], signal["MACD"], signal["Supertrend"], signal["VWAP"], signal["Score"], signal["Signal"]]
+        current_price = signal["Price"]
+        
+        # 52 Week Logic
+        try:
+            ticker = yf.Ticker(f"{symbol}.NS")
+            high_52w = ticker.fast_info.year_high
+            low_52w = ticker.fast_info.year_low
+            
+            if current_price >= high_52w * 0.97:
+                status_52w = "🟢 Near 52W High"
+            elif current_price <= low_52w * 1.03:
+                status_52w = "🔴 Near 52W Low"
+            else:
+                status_52w = "⚪ Mid Range"
+        except:
+            status_52w = "N/A"
+            
+        return [
+            symbol, signal["Price"], status_52w, signal["RSI"], 
+            signal["MACD"], signal["Supertrend"], signal["VWAP"], 
+            signal["Score"], signal["Signal"], signal["Time"]
+        ]
     return None
 
 # -------------------------------
@@ -237,7 +263,11 @@ with tab1:
                 if res: results.append(res)
                 progress.progress((i + 1) / len(selected_stocks))
 
-        result_df = pd.DataFrame(results, columns=["Stock", "Price", "MACD", "Supertrend", "VWAP", "Score", "Signal"])
+        # కొత్తగా "52W Status" మరియు "RSI" యాడ్ చేసాము
+        result_df = pd.DataFrame(
+            results, 
+            columns=["Stock", "Price", "52W Status", "RSI", "MACD", "Supertrend", "VWAP", "Score", "Signal", "Time"]
+        )
 
         if not result_df.empty:
             result_df = result_df.sort_values(by="Score", ascending=False)
@@ -248,6 +278,24 @@ with tab1:
                 return ''
                 
             st.dataframe(result_df.style.map(color_code, subset=['Signal', 'MACD', 'Supertrend', 'VWAP']), use_container_width=True)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                csv = result_df.to_csv(index=False).encode("utf-8")
+                st.download_button("📥 Download CSV", data=csv, file_name="HybridScanner_V6_2.csv", mime="text/csv")
+            
+            with col2:
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                    result_df.to_excel(writer, index=False, sheet_name='Scanner Results')
+                
+                st.download_button(
+                    label="📊 Download Excel (.xlsx)",
+                    data=buffer,
+                    file_name="HybridScanner_V6_2.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
         else:
             st.warning("No signals found.")
 
@@ -268,7 +316,6 @@ with tab2:
                 df_bt = add_indicators(df_bt)
                 df_bt.dropna(inplace=True)
                 
-                # Composite Strategy Logic
                 st_score = np.where(df_bt['ST_Direction'] == 1, 1, -1)
                 macd_score = np.where(df_bt['MACD_Line'] > df_bt['Signal_Line'], 1, -1)
                 vwap_score = np.where(df_bt['Close'] > df_bt['VWAP'], 1, -1)
@@ -276,53 +323,5 @@ with tab2:
                 
                 total_score = st_score + macd_score + vwap_score + ema_score
                 
-                # Enter Position if score >= 2 (Buy) or <= -2 (Sell)
                 positions = np.where(total_score >= 2, 1, np.where(total_score <= -2, -1, np.nan))
-                df_bt['Position'] = pd.Series(positions, index=df_bt.index).ffill().fillna(0)
-                
-                df_bt['Market_Return'] = df_bt['Close'].pct_change()
-                # Subtract 0.1% friction/slippage per trade execution
-                trade_friction = np.where(df_bt['Position'].diff() != 0, 0.001, 0)
-                df_bt['Strategy_Return'] = (df_bt['Position'].shift(1) * df_bt['Market_Return']) - trade_friction
-                
-                # --- Advanced Metrics Calculation ---
-                trade_signals = df_bt['Position'].diff().fillna(0)
-                total_trades = len(trade_signals[trade_signals != 0])
-                
-                winning_days = len(df_bt[df_bt['Strategy_Return'] > 0])
-                losing_days = len(df_bt[df_bt['Strategy_Return'] < 0])
-                win_rate = (winning_days / (winning_days + losing_days) * 100) if (winning_days + losing_days) > 0 else 0
-                
-                cum_market = (1 + df_bt['Market_Return']).cumprod()
-                cum_strategy = (1 + df_bt['Strategy_Return']).cumprod()
-                
-                peak = cum_strategy.cummax()
-                drawdown = (cum_strategy - peak) / peak
-                max_drawdown = drawdown.min() * 100
-                
-                final_market = (cum_market.iloc[-1] - 1) * 100
-                final_strategy = (cum_strategy.iloc[-1] - 1) * 100
-                
-                # --- Display Metrics UI ---
-                st.markdown("### 📊 Strategy Performance Overview")
-                m1, m2, m3, m4, m5 = st.columns(5)
-                
-                m1.metric("Strategy Return", f"{final_strategy:.2f}%")
-                m2.metric("Market Return", f"{final_market:.2f}%")
-                m3.metric("Win Rate", f"{win_rate:.1f}%")
-                m4.metric("Total Trades", f"{total_trades}")
-                m5.metric("Max Drawdown", f"{max_drawdown:.2f}%")
-                
-                plot_data = pd.DataFrame({
-                    "Buy & Hold": cum_market * 100,
-                    "Strategy (MACD+VWAP+ST)": cum_strategy * 100
-                })
-                st.line_chart(plot_data)
-                
-                # Detailed Date-wise Log
-                st.subheader("🗓️ Date-wise Entry & Exit Log")
-                display_df = df_bt[['Close', 'Supertrend', 'MACD_Line', 'VWAP', 'Position', 'Strategy_Return']].copy()
-                display_df.reset_index(inplace=True)
-                display_df.columns = ['Date', 'Close', 'Supertrend', 'MACD', 'VWAP', 'Position', 'Net Return']
-                display_df['Net Return'] = (display_df['Net Return'] * 100).round(2).astype(str) + '%'
-                st.dataframe(display_df, use_container_width=True)
+                df_bt['Position'] = pd.Series(positions, index=df_
