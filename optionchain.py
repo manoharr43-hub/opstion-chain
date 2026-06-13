@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Streamlit Page Setup
 # -------------------------------
 st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V6.2",
+    page_title="HYBRID NSE PRO SCANNER V6.3",
     layout="wide"
 )
 
@@ -24,18 +24,19 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 HYBRID NSE PRO SCANNER V6.2")
-st.write("EMA + RSI + MACD + VWAP + Supertrend + 52W Range | Excel & Time")
+st.title("📊 HYBRID NSE PRO SCANNER V6.3")
+st.write("EMA + RSI + Breakout + MACD + VWAP + Supertrend + 52W Range | Excel & Time")
 
 # -------------------------------
 # Sidebar Configuration
 # -------------------------------
 with st.sidebar:
     st.header("⚙️ Configuration")
-    st.info("Scanner V6.2 is the Ultimate Version with all indicators & 52W range.")
+    st.info("Scanner V6.3 includes all indicators, Breakout logic & Excel Export.")
     st.write("---")
     st.write("• **EMA:** 20/50 Cross")
     st.write("• **RSI:** 14-period")
+    st.write("• **Breakout:** 20-period High/Low")
     st.write("• **MACD:** 12, 26, 9")
     st.write("• **Supertrend:** 10, 3")
     st.write("• **VWAP:** Intraday Anchored")
@@ -178,22 +179,34 @@ def scan_stock(df):
     if rsi > 60: score += 1
     elif rsi < 40: score -= 1
 
-    # 3. MACD
+    # 3. Breakout (ఇక్కడ మళ్లీ యాడ్ చేసాము)
+    breakout_high = df["High"].rolling(20).max().shift(1).iloc[-1]
+    breakout_low = df["Low"].rolling(20).min().shift(1).iloc[-1]
+    breakout_signal = "NO"
+    if close > breakout_high:
+        score += 1
+        breakout_signal = "BULLISH"
+    elif close < breakout_low:
+        score -= 1
+        breakout_signal = "BEARISH"
+
+    # 4. MACD
     macd = "BULLISH" if df["MACD_Line"].iloc[-1] > df["Signal_Line"].iloc[-1] else "BEARISH"
     if macd == "BULLISH": score += 1
     else: score -= 1
         
-    # 4. Supertrend
+    # 5. Supertrend
     st_dir = "UP" if df["ST_Direction"].iloc[-1] == 1 else "DOWN"
     if st_dir == "UP": score += 1
     else: score -= 1
         
-    # 5. VWAP Cross
+    # 6. VWAP Cross
     vwap_val = float(df["VWAP"].iloc[-1])
     vwap_sig = "ABOVE" if close > vwap_val else "BELOW"
     if vwap_sig == "ABOVE": score += 1
     else: score -= 1
 
+    # 7. Volume
     if float(df["Volume"].iloc[-1]) > float(df["AVG_VOL"].iloc[-1]) * 1.5:
         if close > df["Open"].iloc[-1]: score += 1 
         else: score -= 1 
@@ -205,8 +218,9 @@ def scan_stock(df):
     else: signal = "WAIT"
 
     return {
-        "Price": round(close, 2), "RSI": round(rsi, 2), "Score": score, "Signal": signal,
-        "MACD": macd, "Supertrend": st_dir, "VWAP": vwap_sig, "Time": signal_time
+        "Price": round(close, 2), "RSI": round(rsi, 2), "Breakout": breakout_signal,
+        "Score": score, "Signal": signal, "MACD": macd, 
+        "Supertrend": st_dir, "VWAP": vwap_sig, "Time": signal_time
     }
 
 def process_stock_thread(symbol, interval, period):
@@ -234,7 +248,7 @@ def process_stock_thread(symbol, interval, period):
             status_52w = "N/A"
             
         return [
-            symbol, signal["Price"], status_52w, signal["RSI"], 
+            symbol, signal["Price"], status_52w, signal["RSI"], signal["Breakout"],
             signal["MACD"], signal["Supertrend"], signal["VWAP"], 
             signal["Score"], signal["Signal"], signal["Time"]
         ]
@@ -263,9 +277,10 @@ with tab1:
                 if res: results.append(res)
                 progress.progress((i + 1) / len(selected_stocks))
 
+        # "Breakout" కాలమ్ ఇక్కడ యాడ్ చేసాము
         result_df = pd.DataFrame(
             results, 
-            columns=["Stock", "Price", "52W Status", "RSI", "MACD", "Supertrend", "VWAP", "Score", "Signal", "Time"]
+            columns=["Stock", "Price", "52W Status", "RSI", "Breakout", "MACD", "Supertrend", "VWAP", "Score", "Signal", "Time"]
         )
 
         if not result_df.empty:
@@ -276,13 +291,13 @@ with tab1:
                 if val in ["STRONG SELL", "BEARISH", "DOWN", "BELOW"]: return 'color: red; font-weight: bold;'
                 return ''
                 
-            st.dataframe(result_df.style.map(color_code, subset=['Signal', 'MACD', 'Supertrend', 'VWAP']), use_container_width=True)
+            st.dataframe(result_df.style.map(color_code, subset=['Signal', 'Breakout', 'MACD', 'Supertrend', 'VWAP']), use_container_width=True)
             
             col1, col2 = st.columns(2)
             
             with col1:
                 csv = result_df.to_csv(index=False).encode("utf-8")
-                st.download_button("📥 Download CSV", data=csv, file_name="HybridScanner_V6_2.csv", mime="text/csv")
+                st.download_button("📥 Download CSV", data=csv, file_name="HybridScanner_V6_3.csv", mime="text/csv")
             
             with col2:
                 buffer = io.BytesIO()
@@ -292,7 +307,7 @@ with tab1:
                 st.download_button(
                     label="📊 Download Excel (.xlsx)",
                     data=buffer,
-                    file_name="HybridScanner_V6_2.xlsx",
+                    file_name="HybridScanner_V6_3.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
         else:
@@ -320,9 +335,13 @@ with tab2:
                 vwap_score = np.where(df_bt['Close'] > df_bt['VWAP'], 1, -1)
                 ema_score = np.where(df_bt['EMA20'] > df_bt['EMA50'], 1, -1)
                 
-                total_score = st_score + macd_score + vwap_score + ema_score
+                # బ్యాక్‌టెస్ట్‌లో కూడా బ్రేక్అవుట్ లాజిక్ కలిపాము
+                breakout_high = df_bt['High'].rolling(20).max().shift(1)
+                breakout_low = df_bt['Low'].rolling(20).min().shift(1)
+                brk_score = np.where(df_bt['Close'] > breakout_high, 1, np.where(df_bt['Close'] < breakout_low, -1, 0))
                 
-                # ఇక్కడ బ్రాకెట్ క్లోజ్ చేయబడింది (Fixed line)
+                total_score = st_score + macd_score + vwap_score + ema_score + brk_score
+                
                 positions = np.where(total_score >= 2, 1, np.where(total_score <= -2, -1, np.nan))
                 df_bt['Position'] = pd.Series(positions, index=df_bt.index).ffill().fillna(0)
                 
@@ -342,29 +361,4 @@ with tab2:
                 
                 peak = cum_strategy.cummax()
                 drawdown = (cum_strategy - peak) / peak
-                max_drawdown = drawdown.min() * 100
-                
-                final_market = (cum_market.iloc[-1] - 1) * 100
-                final_strategy = (cum_strategy.iloc[-1] - 1) * 100
-                
-                st.markdown("### 📊 Strategy Performance Overview")
-                m1, m2, m3, m4, m5 = st.columns(5)
-                
-                m1.metric("Strategy Return", f"{final_strategy:.2f}%")
-                m2.metric("Market Return", f"{final_market:.2f}%")
-                m3.metric("Win Rate", f"{win_rate:.1f}%")
-                m4.metric("Total Trades", f"{total_trades}")
-                m5.metric("Max Drawdown", f"{max_drawdown:.2f}%")
-                
-                plot_data = pd.DataFrame({
-                    "Buy & Hold": cum_market * 100,
-                    "Strategy (MACD+VWAP+ST)": cum_strategy * 100
-                })
-                st.line_chart(plot_data)
-                
-                st.subheader("🗓️ Date-wise Entry & Exit Log")
-                display_df = df_bt[['Close', 'Supertrend', 'MACD_Line', 'VWAP', 'Position', 'Strategy_Return']].copy()
-                display_df.reset_index(inplace=True)
-                display_df.columns = ['Date', 'Close', 'Supertrend', 'MACD', 'VWAP', 'Position', 'Net Return']
-                display_df['Net Return'] = (display_df['Net Return'] * 100).round(2).astype(str) + '%'
-                st.dataframe(display_df, use_container_width=True)
+                max_drawdown = drawdown.min() *
