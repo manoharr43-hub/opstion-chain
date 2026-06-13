@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Streamlit Page Setup
 # -------------------------------
 st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V6.4",
+    page_title="HYBRID NSE PRO SCANNER V6.5",
     layout="wide"
 )
 
@@ -24,15 +24,15 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 HYBRID NSE PRO SCANNER V6.4")
-st.write("EMA + RSI + Breakout + MACD + VWAP + Supertrend + 52W Range | Excel & Time")
+st.title("📊 HYBRID NSE PRO SCANNER V6.5")
+st.write("EMA + RSI + Breakout + MACD + VWAP + Supertrend + Support/Resistance | Excel & Time")
 
 # -------------------------------
 # Sidebar Configuration
 # -------------------------------
 with st.sidebar:
     st.header("⚙️ Configuration")
-    st.info("Scanner V6.4 includes all indicators, Breakout logic & Excel Export.")
+    st.info("Scanner V6.5 includes all indicators, Support/Resistance & Ultra-Fast Scanning.")
     st.write("---")
     st.write("• **EMA:** 20/50 Cross")
     st.write("• **RSI:** 14-period")
@@ -40,6 +40,7 @@ with st.sidebar:
     st.write("• **MACD:** 12, 26, 9")
     st.write("• **Supertrend:** 10, 3")
     st.write("• **VWAP:** Intraday Anchored")
+    st.write("• **Supp/Res:** Pivot Points (S1/R1)")
 
 # -------------------------------
 # Load NSE500 Stocks
@@ -126,7 +127,6 @@ def calculate_supertrend(df, period=10, multiplier=3):
     df['ST_Direction'] = direction
     return df
 
-# ✅ BUG FIX: పాస్ చేయబడిన interval పారామీటర్ ఇక్కడ యాడ్ చేశాము
 def add_indicators(df, interval):
     if len(df) < 60: return df
     
@@ -152,6 +152,11 @@ def add_indicators(df, interval):
 
     # Supertrend
     df = calculate_supertrend(df)
+    
+    # 🟢 NEW: Support and Resistance (Pivot Points S1 & R1)
+    df['Pivot'] = (df['High'].shift(1) + df['Low'].shift(1) + df['Close'].shift(1)) / 3
+    df['Resistance_1'] = (2 * df['Pivot']) - df['Low'].shift(1)
+    df['Support_1'] = (2 * df['Pivot']) - df['High'].shift(1)
     
     df["AVG_VOL"] = df["Volume"].rolling(20).mean()
     return df
@@ -218,42 +223,45 @@ def scan_stock(df):
     elif score <= -2: signal = "SELL"
     else: signal = "WAIT"
 
+    # 🟢 NEW: Get Support & Resistance Values
+    support = float(df["Support_1"].iloc[-1])
+    resistance = float(df["Resistance_1"].iloc[-1])
+
     return {
         "Price": round(close, 2), "RSI": round(rsi, 2), "Breakout": breakout_signal,
         "Score": score, "Signal": signal, "MACD": macd, 
-        "Supertrend": st_dir, "VWAP": vwap_sig, "Time": signal_time
+        "Supertrend": st_dir, "VWAP": vwap_sig, "Support": round(support, 2), 
+        "Resistance": round(resistance, 2), "Time": signal_time
     }
 
 def process_stock_thread(symbol, interval, period):
     df = get_data(symbol, interval, period)
     if df.empty: return None
     
-    # ✅ BUG FIX: ఇక్కడ interval ని ఫంక్షన్‌కి పాస్ చేస్తున్నాము
     df = add_indicators(df, interval)
     signal = scan_stock(df)
     
     if signal:
         current_price = signal["Price"]
         
-        # 52 Week Logic
+        # 🚀 SPEED FIX: yf.Ticker వాడకుండా, డౌన్‌లోడ్ అయిన df నుండే High/Low తీసుకుంటున్నాం.
         try:
-            ticker = yf.Ticker(f"{symbol}.NS")
-            high_52w = ticker.fast_info.year_high
-            low_52w = ticker.fast_info.year_low
+            period_high = df["High"].max()
+            period_low = df["Low"].min()
             
-            if current_price >= high_52w * 0.97:
-                status_52w = "🟢 Near 52W High"
-            elif current_price <= low_52w * 1.03:
-                status_52w = "🔴 Near 52W Low"
+            if current_price >= period_high * 0.97:
+                status_range = "🟢 Near High"
+            elif current_price <= period_low * 1.03:
+                status_range = "🔴 Near Low"
             else:
-                status_52w = "⚪ Mid Range"
+                status_range = "⚪ Mid Range"
         except:
-            status_52w = "N/A"
+            status_range = "N/A"
             
         return [
-            symbol, signal["Price"], status_52w, signal["RSI"], signal["Breakout"],
-            signal["MACD"], signal["Supertrend"], signal["VWAP"], 
-            signal["Score"], signal["Signal"], signal["Time"]
+            symbol, signal["Price"], status_range, signal["Support"], signal["Resistance"], 
+            signal["RSI"], signal["Breakout"], signal["MACD"], signal["Supertrend"], 
+            signal["VWAP"], signal["Score"], signal["Signal"], signal["Time"]
         ]
     return None
 
@@ -271,7 +279,7 @@ with tab1:
         selected_stocks = stocks if sector == "All NSE500" else sector_stocks[sector]
 
         progress = st.progress(0)
-        st.write("⚡ Scanning in progress...")
+        st.write("⚡ Scanning in progress (Ultra-Fast Mode)...")
 
         with ThreadPoolExecutor(max_workers=15) as executor:
             future_to_stock = {executor.submit(process_stock_thread, sym, interval, period): sym for sym in selected_stocks}
@@ -282,7 +290,8 @@ with tab1:
 
         result_df = pd.DataFrame(
             results, 
-            columns=["Stock", "Price", "52W Status", "RSI", "Breakout", "MACD", "Supertrend", "VWAP", "Score", "Signal", "Time"]
+            # 🟢 NEW: Added Support & Resistance columns
+            columns=["Stock", "Price", "Range Status", "Support", "Resistance", "RSI", "Breakout", "MACD", "Supertrend", "VWAP", "Score", "Signal", "Time"]
         )
 
         if not result_df.empty:
@@ -299,7 +308,7 @@ with tab1:
             
             with col1:
                 csv = result_df.to_csv(index=False).encode("utf-8")
-                st.download_button("📥 Download CSV", data=csv, file_name="HybridScanner_V6_4.csv", mime="text/csv")
+                st.download_button("📥 Download CSV", data=csv, file_name="HybridScanner_V6_5.csv", mime="text/csv")
             
             with col2:
                 buffer = io.BytesIO()
@@ -309,7 +318,7 @@ with tab1:
                 st.download_button(
                     label="📊 Download Excel (.xlsx)",
                     data=buffer,
-                    file_name="HybridScanner_V6_4.xlsx",
+                    file_name="HybridScanner_V6_5.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
         else:
@@ -324,68 +333,4 @@ with tab2:
     
     if st.button("📈 RUN ADVANCED BACKTEST"):
         with st.spinner("Calculating Multi-Indicator Backtest & Metrics..."):
-            df_bt = get_data(test_stock, interval, period)
-            
-            if df_bt.empty or len(df_bt) < 60:
-                st.error("Insufficient data. Please increase the period.")
-            else:
-                # ✅ BUG FIX: ఇక్కడ కూడా interval ని ఫంక్షన్‌కి పాస్ చేస్తున్నాము
-                df_bt = add_indicators(df_bt, interval)
-                df_bt.dropna(inplace=True)
-                
-                st_score = np.where(df_bt['ST_Direction'] == 1, 1, -1)
-                macd_score = np.where(df_bt['MACD_Line'] > df_bt['Signal_Line'], 1, -1)
-                vwap_score = np.where(df_bt['Close'] > df_bt['VWAP'], 1, -1)
-                ema_score = np.where(df_bt['EMA20'] > df_bt['EMA50'], 1, -1)
-                
-                breakout_high = df_bt['High'].rolling(20).max().shift(1)
-                breakout_low = df_bt['Low'].rolling(20).min().shift(1)
-                brk_score = np.where(df_bt['Close'] > breakout_high, 1, np.where(df_bt['Close'] < breakout_low, -1, 0))
-                
-                total_score = st_score + macd_score + vwap_score + ema_score + brk_score
-                
-                positions = np.where(total_score >= 2, 1, np.where(total_score <= -2, -1, np.nan))
-                df_bt['Position'] = pd.Series(positions, index=df_bt.index).ffill().fillna(0)
-                
-                df_bt['Market_Return'] = df_bt['Close'].pct_change()
-                trade_friction = np.where(df_bt['Position'].diff() != 0, 0.001, 0)
-                df_bt['Strategy_Return'] = (df_bt['Position'].shift(1) * df_bt['Market_Return']) - trade_friction
-                
-                trade_signals = df_bt['Position'].diff().fillna(0)
-                total_trades = len(trade_signals[trade_signals != 0])
-                
-                winning_days = len(df_bt[df_bt['Strategy_Return'] > 0])
-                losing_days = len(df_bt[df_bt['Strategy_Return'] < 0])
-                win_rate = (winning_days / (winning_days + losing_days) * 100) if (winning_days + losing_days) > 0 else 0
-                
-                cum_market = (1 + df_bt['Market_Return']).cumprod()
-                cum_strategy = (1 + df_bt['Strategy_Return']).cumprod()
-                
-                peak = cum_strategy.cummax()
-                drawdown = (cum_strategy - peak) / peak
-                max_drawdown = drawdown.min() * 100
-                
-                final_market = (cum_market.iloc[-1] - 1) * 100
-                final_strategy = (cum_strategy.iloc[-1] - 1) * 100
-                
-                st.markdown("### 📊 Strategy Performance Overview")
-                m1, m2, m3, m4, m5 = st.columns(5)
-                
-                m1.metric("Strategy Return", f"{final_strategy:.2f}%")
-                m2.metric("Market Return", f"{final_market:.2f}%")
-                m3.metric("Win Rate", f"{win_rate:.1f}%")
-                m4.metric("Total Trades", f"{total_trades}")
-                m5.metric("Max Drawdown", f"{max_drawdown:.2f}%")
-                
-                plot_data = pd.DataFrame({
-                    "Buy & Hold": cum_market * 100,
-                    "Strategy (Breakout+MACD+VWAP+ST)": cum_strategy * 100
-                })
-                st.line_chart(plot_data)
-                
-                st.subheader("🗓️ Date-wise Entry & Exit Log")
-                display_df = df_bt[['Close', 'Supertrend', 'MACD_Line', 'VWAP', 'Position', 'Strategy_Return']].copy()
-                display_df.reset_index(inplace=True)
-                display_df.columns = ['Date', 'Close', 'Supertrend', 'MACD', 'VWAP', 'Position', 'Net Return']
-                display_df['Net Return'] = (display_df['Net Return'] * 100).round(2).astype(str) + '%'
-                st.dataframe(display_df, use_container_width=True)
+            df_bt = get_data(test_stock,
