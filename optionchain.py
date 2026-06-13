@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Streamlit Page Setup
 # -------------------------------
 st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V9.0",
+    page_title="HYBRID NSE PRO SCANNER V9.1",
     layout="wide"
 )
 
@@ -24,7 +24,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 HYBRID NSE PRO SCANNER V9.0 (100% CLOUD STABLE)")
+st.title("📊 HYBRID NSE PRO SCANNER V9.1 (100% CLOUD STABLE)")
 st.write("yfinance Powered | AI Trend + Relative Strength + Multi-Timeframe + Backtesting + Live Alerts")
 
 # -------------------------------
@@ -163,15 +163,12 @@ def process_stock_thread(symbol, interval, period, h52w, l52w, nifty_return, dai
     close = float(df["Close"].iloc[-1])
     score = 0
     
-    # 1. Relative Strength Calculation
     stock_return = ((close - df['Close'].iloc[0]) / df['Close'].iloc[0]) * 100
     rs_score = round(stock_return - nifty_return, 2) if nifty_return is not None else 0
     rs_status = "💪 Outperform" if rs_score > 0 else "📉 Underperform"
 
-    # 2. AI Trend Engine
     ai_trend, ai_conf = predict_trend_ai(df["Close"])
     
-    # 3. Multi-Timeframe Alignment Check (Using Daily Data Series)
     mtf_status = "Not Aligned"
     if daily_close_series is not None and len(daily_close_series) >= 50:
         d_ema20 = daily_close_series.ewm(span=20, adjust=False).mean().iloc[-1]
@@ -181,7 +178,6 @@ def process_stock_thread(symbol, interval, period, h52w, l52w, nifty_return, dai
         if daily_bullish == current_bullish:
             mtf_status = "ALIGNED 🟢" if current_bullish else "ALIGNED 🔻"
 
-    # 4. Strategy Alerts Logic
     alerts = []
     vol_spike = "Normal"
     if float(df["Volume"].iloc[-1]) > float(df["AVG_VOL"].iloc[-1]) * 3:
@@ -207,7 +203,6 @@ def process_stock_thread(symbol, interval, period, h52w, l52w, nifty_return, dai
     
     alert_str = ", ".join(alerts) if alerts else "No Alerts"
 
-    # Scoring Matrix
     macd_val = "BULLISH" if df["MACD_Line"].iloc[-1] > df["Signal_Line"].iloc[-1] else "BEARISH"
     st_dir = "UP" if df["ST_Direction"].iloc[-1] == 1 else "DOWN"
     vwap_sig = "ABOVE" if close > float(df["VWAP"].iloc[-1]) else "BELOW"
@@ -312,7 +307,7 @@ with tab1:
             st.dataframe(df_res.style.map(color_code, subset=['Signal', '⚡ Active Alerts', 'MTF Trend', 'AI Trend', 'RS vs NIFTY', 'Breakout', 'MACD', 'Supertrend', 'VWAP', 'Volume']), use_container_width=True)
             
             csv = df_res.to_csv(index=False).encode("utf-8")
-            st.download_button("📥 Download Cloud Stable Report (CSV)", data=csv, file_name="Cloud_Stable_Scanner_V9.csv", mime="text/csv")
+            st.download_button("📥 Download Cloud Stable Report (CSV)", data=csv, file_name="Cloud_Stable_Scanner_V9_1.csv", mime="text/csv")
         
         if auto_refresh:
             st.warning("⏳ Auto-Refresh running. Scanning again in 3 minutes...")
@@ -352,7 +347,9 @@ with tab2:
                 trade_friction = np.where(df_bt['Position'].diff() != 0, 0.001, 0)
                 df_bt['Strategy_Return'] = (df_bt['Position'].shift(1) * df_bt['Market_Return']) - trade_friction
                 
-                total_trades = len(df_bt['Position'].diff().fillna(0).nonzero()[0])
+                # 🟢 FIXED: Removed .nonzero() and used the correct pandas boolean sum
+                total_trades = int((df_bt['Position'].diff().fillna(0) != 0).sum())
+                
                 win_rate = (len(df_bt[df_bt['Strategy_Return'] > 0]) / max(1, len(df_bt[df_bt['Strategy_Return'] != 0]))) * 100
                 
                 cum_market = (1 + df_bt['Market_Return'].fillna(0)).cumprod()
@@ -363,14 +360,16 @@ with tab2:
                 m1.metric("Strategy Return", f"{((cum_strategy.iloc[-1] - 1) * 100):.2f}%")
                 m2.metric("Market Return", f"{((cum_market.iloc[-1] - 1) * 100):.2f}%")
                 m3.metric("Win Rate Metric", f"{win_rate:.1f}%")
-                m4.metric("Max Drawdown Profile", f"{max_drawdown:.2f}%")
+                m4.metric("Total Trades Executed", f"{total_trades}")
                 
                 st.line_chart(pd.DataFrame({"Buy & Hold": cum_market * 100, "Hybrid Strategy": cum_strategy * 100}))
+
 with tab3:
     st.subheader("🔔 Cloud Core Strategy Engine Rules")
     st.info("This engine processes mathematics without external scrapers, ensuring 100% cloud runtime stability.")
     st.markdown("""
     *   **Relative Strength Metrics:** Dynamically tracks baseline alpha separation vs NIFTY index calculations.
-    *   **Multi-Timeframe Engine:** Automatically samples the $1d$ trend matrix to confirm micro-interval triggers.
+    *   **Multi-Timeframe Engine:** Automatically samples the daily trend matrix to confirm micro-interval triggers.
     *   **AI Predictor Framework:** Employs recursive linear slope regression to evaluate current predictive probability vectors.
+    *   **Vectorized Backtesting:** Instantly simulates historical strategy performance and calculates win-rate metrics.
     """)
