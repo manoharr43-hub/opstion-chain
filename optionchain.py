@@ -5,12 +5,13 @@ import numpy as np
 import pytz
 import requests
 import io
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # -------------------------------
 # Streamlit Page Setup
 # -------------------------------
 st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V5",
+    page_title="HYBRID NSE PRO SCANNER V5.2",
     layout="wide"
 )
 
@@ -23,15 +24,15 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 HYBRID NSE PRO SCANNER V5")
-st.write("EMA + RSI + Volume + Breakout + Strong Sell & Backtesting")
+st.title("📊 HYBRID NSE PRO SCANNER V5.2")
+st.write("EMA + RSI + Volume + Breakout + 52W High/Low & Backtesting")
 
 # -------------------------------
 # Sidebar Configuration
 # -------------------------------
 with st.sidebar:
     st.header("⚙️ Configuration")
-    st.info("Scanner V5 is optimized for Nifty 500 assets.")
+    st.info("Scanner V5.2 is optimized with Multi-threading & 52W Range Tracking.")
     st.write("---")
     st.write("• **EMA:** 20/50 Cross")
     st.write("• **RSI:** 14-period")
@@ -44,7 +45,6 @@ with st.sidebar:
 def load_nse500():
     try:
         url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
-        # OPTIMIZATION: Added User-Agent to bypass NSE blocking python requests
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
         response = requests.get(url, headers=headers, timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
@@ -124,7 +124,7 @@ def add_indicators(df):
     return df
 
 # -------------------------------
-# Scanner Logic (Safe IST Time & STRONG SELL)
+# Scanner Logic
 # -------------------------------
 def scan_stock(df):
     if len(df) < 60:
@@ -145,7 +145,6 @@ def scan_stock(df):
     breakout_signal = "NO"
     volume_signal = "NO"
 
-    # EMA Signal
     if df["EMA20"].iloc[-1] > df["EMA50"].iloc[-1]:
         score += 1
         ema_signal = "BUY"
@@ -153,14 +152,12 @@ def scan_stock(df):
         score -= 1
         ema_signal = "SELL"
 
-    # RSI Signal
     rsi = float(df["RSI"].iloc[-1])
     if rsi > 60:
         score += 1
     elif rsi < 40:
         score -= 1
 
-    # Breakout Signal
     breakout_high = df["High"].rolling(20).max().shift(1).iloc[-1]
     breakout_low = df["Low"].rolling(20).min().shift(1).iloc[-1]
     if close > breakout_high:
@@ -170,7 +167,6 @@ def scan_stock(df):
         score -= 1
         breakout_signal = "BEARISH"
 
-    # Volume Spike & Direction Logic
     avg_vol = float(df["AVG_VOL"].iloc[-1])
     current_vol = float(df["Volume"].iloc[-1])
     is_green = df["Close"].iloc[-1] > df["Open"].iloc[-1]
@@ -182,7 +178,6 @@ def scan_stock(df):
         else:
             score -= 1 
 
-    # Final Signal
     if score >= 3:
         final_signal = "STRONG BUY"
     elif score == 2:
@@ -206,12 +201,54 @@ def scan_stock(df):
     }
 
 # -------------------------------
+# Threading Process with 52W Logic
+# -------------------------------
+def process_stock_thread(symbol, interval, period):
+    df = get_data(symbol, interval, period)
+    if df.empty:
+        return None
+    df = add_indicators(df)
+    signal = scan_stock(df)
+    
+    if signal:
+        current_price = signal["Price"]
+        
+        # 52 వీక్ హై / లో లాజిక్ (Fast Info)
+        try:
+            ticker = yf.Ticker(f"{symbol}.NS")
+            high_52w = ticker.fast_info.year_high
+            low_52w = ticker.fast_info.year_low
+            
+            if current_price >= high_52w * 0.97:
+                status_52w = "🟢 Near 52W High"
+            elif current_price <= low_52w * 1.03:
+                status_52w = "🔴 Near 52W Low"
+            else:
+                status_52w = "⚪ Mid Range"
+        except:
+            status_52w = "N/A"
+
+        return [
+            symbol,
+            signal["Price"],
+            status_52w,          # కొత్తగా యాడ్ చేసిన కాలం డేటా
+            signal["EMA"],
+            signal["RSI"],
+            signal["Breakout"],
+            signal["Volume"],
+            signal["Score"],
+            signal["Signal"],
+            signal["Time"]
+        ]
+    return None
+
+# -------------------------------
 # UI Layout Tabs
 # -------------------------------
 tab1, tab2 = st.tabs(["🚀 Live Scanner", "📈 Strategy Backtest"])
 
 # ==========================================
-# TAB 1: LIVE SCANNER
+# TAB 1: LIVE SCANNER 
 # ==========================================
 with tab1:
     if st.button("🚀 RUN SCAN"):
@@ -222,30 +259,27 @@ with tab1:
             selected_stocks = sector_stocks[sector]
 
         progress = st.progress(0)
+        status_text = st.empty()
+        status_text.text("⚡ స్కాన్ అవుతోంది... దయచేసి ఆగండి...")
 
-        for i, symbol in enumerate(selected_stocks):
-            df = get_data(symbol, interval, period)
-            if df.empty:
-                continue
-            df = add_indicators(df)
-            signal = scan_stock(df)
-            if signal:
-                results.append([
-                    symbol,
-                    signal["Price"],
-                    signal["EMA"],
-                    signal["RSI"],
-                    signal["Breakout"],
-                    signal["Volume"],
-                    signal["Score"],
-                    signal["Signal"],
-                    signal["Time"]
-                ])
-            progress.progress((i + 1) / len(selected_stocks))
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_stock = {
+                executor.submit(process_stock_thread, symbol, interval, period): symbol 
+                for symbol in selected_stocks
+            }
+            
+            for i, future in enumerate(as_completed(future_to_stock)):
+                res = future.result()
+                if res:
+                    results.append(res)
+                progress.progress((i + 1) / len(selected_stocks))
 
+        status_text.empty() 
+
+        # కొత్త కాలం "52W Status" ను ఇక్కడ యాడ్ చేసాము
         result_df = pd.DataFrame(
             results,
-            columns=["Stock","Price","EMA","RSI","Breakout","Volume","Score","Signal","Time"]
+            columns=["Stock", "Price", "52W Status", "EMA", "RSI", "Breakout", "Volume", "Score", "Signal", "Time"]
         )
 
         if not result_df.empty:
@@ -259,13 +293,13 @@ with tab1:
                 elif val == "SELL": return 'color: red;'
                 return ''
                 
-            st.dataframe(result_df.style.applymap(highlight_signals, subset=['Signal']), use_container_width=True)
+            st.dataframe(result_df.style.map(highlight_signals, subset=['Signal']), use_container_width=True)
 
             csv = result_df.to_csv(index=False).encode("utf-8")
             st.download_button(
                 label="📥 Download CSV",
                 data=csv,
-                file_name="HybridScannerV5.csv",
+                file_name="HybridScannerV5_2.csv",
                 mime="text/csv"
             )
         else:
