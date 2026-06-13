@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Streamlit Page Setup
 # -------------------------------
 st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V5.2",
+    page_title="HYBRID NSE PRO SCANNER V5.3",
     layout="wide"
 )
 
@@ -24,7 +24,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 HYBRID NSE PRO SCANNER V5.2")
+st.title("📊 HYBRID NSE PRO SCANNER V5.3 (Full NSE500)")
 st.write("EMA + RSI + Volume + Breakout + 52W High/Low & Backtesting")
 
 # -------------------------------
@@ -32,7 +32,7 @@ st.write("EMA + RSI + Volume + Breakout + 52W High/Low & Backtesting")
 # -------------------------------
 with st.sidebar:
     st.header("⚙️ Configuration")
-    st.info("Scanner V5.2 is optimized with Multi-threading & 52W Range Tracking.")
+    st.info("Scanner V5.3 is optimized to scan all Nifty 500 assets rapidly.")
     st.write("---")
     st.write("• **EMA:** 20/50 Cross")
     st.write("• **RSI:** 14-period")
@@ -213,7 +213,6 @@ def process_stock_thread(symbol, interval, period):
     if signal:
         current_price = signal["Price"]
         
-        # 52 వీక్ హై / లో లాజిక్ (Fast Info)
         try:
             ticker = yf.Ticker(f"{symbol}.NS")
             high_52w = ticker.fast_info.year_high
@@ -231,7 +230,7 @@ def process_stock_thread(symbol, interval, period):
         return [
             symbol,
             signal["Price"],
-            status_52w,          # కొత్తగా యాడ్ చేసిన కాలం డేటా
+            status_52w,          
             signal["EMA"],
             signal["RSI"],
             signal["Breakout"],
@@ -254,15 +253,16 @@ with tab1:
     if st.button("🚀 RUN SCAN"):
         results = []
         if sector == "All NSE500":
-            selected_stocks = stocks[:100]  
+            selected_stocks = stocks  # మార్పు: ఇక్కడ [:100] లిమిట్‌ను పూర్తిగా తీసేశాము
         else:
             selected_stocks = sector_stocks[sector]
 
         progress = st.progress(0)
         status_text = st.empty()
-        status_text.text("⚡ స్కాన్ అవుతోంది... దయచేసి ఆగండి...")
+        status_text.text(f"⚡ మొత్తం {len(selected_stocks)} స్టాక్స్ స్కాన్ అవుతున్నాయి... దయచేసి కొన్ని సెకన్లు ఆగండి...")
 
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        # మార్పు: 500 స్టాక్స్ వేగంగా అవ్వడానికి max_workers ను 10 నుండి 15 కి పెంచాము
+        with ThreadPoolExecutor(max_workers=15) as executor:
             future_to_stock = {
                 executor.submit(process_stock_thread, symbol, interval, period): symbol 
                 for symbol in selected_stocks
@@ -276,7 +276,6 @@ with tab1:
 
         status_text.empty() 
 
-        # కొత్త కాలం "52W Status" ను ఇక్కడ యాడ్ చేసాము
         result_df = pd.DataFrame(
             results,
             columns=["Stock", "Price", "52W Status", "EMA", "RSI", "Breakout", "Volume", "Score", "Signal", "Time"]
@@ -284,7 +283,7 @@ with tab1:
 
         if not result_df.empty:
             result_df = result_df.sort_values(by="Score", ascending=False)
-            st.success(f"Scan Completed : {len(result_df)} Stocks")
+            st.success(f"Scan Completed : {len(result_df)} Stocks Found")
             
             def highlight_signals(val):
                 if val == "STRONG BUY": return 'background-color: lightgreen; color: black;'
@@ -299,7 +298,7 @@ with tab1:
             st.download_button(
                 label="📥 Download CSV",
                 data=csv,
-                file_name="HybridScannerV5_2.csv",
+                file_name="HybridScanner_All_NSE500.csv",
                 mime="text/csv"
             )
         else:
