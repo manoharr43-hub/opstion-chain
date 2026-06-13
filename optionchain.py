@@ -153,5 +153,9 @@ def scan_stock(df):
     elif score <= -4: signal = "STRONG SELL"
     elif score <= -2: signal = "SELL"
     else: signal = "WAIT"
-    return {"Price": round(close, 2), "RSI": round(rsi, 2), "Breakout": breakout_signal,
-            "Score": score, "Signal": signal,
+    return {
+        "Price": round(close, 2),
+        "RSI": round(rsi, 2),
+        "Breakout": breakout_signal,
+        "Score": score,
+        "Signal":
