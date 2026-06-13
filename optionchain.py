@@ -5,13 +5,15 @@ import numpy as np
 import pytz
 import requests
 import io
+import time
+import plotly.graph_objects as go
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # -------------------------------
 # Streamlit Page Setup
 # -------------------------------
 st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V6.5",
+    page_title="HYBRID NSE PRO SCANNER V7.0",
     layout="wide"
 )
 
@@ -20,72 +22,47 @@ st.markdown("""
     .stApp { background-color: #f8f9fa; }
     .css-1r6slp0 { padding: 2rem; }
     .stSidebar { background-color: #ffffff; }
-    .metric-card { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 HYBRID NSE PRO SCANNER V6.5")
-st.write("EMA + RSI + Breakout + MACD + VWAP + Supertrend + Support/Resistance | Excel & Time")
+st.title("📊 HYBRID NSE PRO SCANNER V7.0 (ULTRA MAX)")
+st.write("Candlestick Patterns + Volume Spikes + Live Charts + PCR + Auto Refresh")
 
 # -------------------------------
 # Sidebar Configuration
 # -------------------------------
 with st.sidebar:
     st.header("⚙️ Configuration")
-    st.info("Scanner V6.5 includes all indicators, Support/Resistance & Ultra-Fast Scanning.")
-    st.write("---")
-    st.write("• **EMA:** 20/50 Cross")
-    st.write("• **RSI:** 14-period")
-    st.write("• **Breakout:** 20-period High/Low")
-    st.write("• **MACD:** 12, 26, 9")
-    st.write("• **Supertrend:** 10, 3")
-    st.write("• **VWAP:** Intraday Anchored")
-    st.write("• **Supp/Res:** Pivot Points (S1/R1)")
+    auto_refresh = st.checkbox("🔄 Auto Refresh (Every 3 Mins)")
+    interval = st.selectbox("Interval", ["5m","15m","30m","1h","1d"], index=1)
+    period = st.selectbox("Period", ["5d","1mo","3mo","6mo", "1y"], index=1)
+    
+    sector_stocks = {
+        "Banking": ["HDFCBANK","ICICIBANK","SBIN","AXISBANK","KOTAKBANK"],
+        "IT": ["TCS","INFY","WIPRO","HCLTECH","TECHM"],
+        "Pharma": ["SUNPHARMA","CIPLA","DIVISLAB","DRREDDY"],
+        "Energy": ["RELIANCE","ONGC","BPCL","NTPC"],
+        "Auto": ["TATAMOTORS","M&M","EICHERMOT","HEROMOTOCO"]
+    }
+    sector = st.selectbox("Sector", ["All NSE500"] + list(sector_stocks.keys()))
 
 # -------------------------------
-# Load NSE500 Stocks
+# Data Fetching Logic
 # -------------------------------
 @st.cache_data(ttl=86400)
 def load_nse500():
     try:
         url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
         headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(url, headers=headers, timeout=5)
         df = pd.read_csv(io.StringIO(response.text))
         return sorted(df["Symbol"].dropna().unique().tolist())
     except:
-        # Fallback list if internet issue occurs
-        return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT","AXISBANK","KOTAKBANK"]
+        return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT"]
 
 stocks = load_nse500()
 
-sector_stocks = {
-    "Banking": ["HDFCBANK","ICICIBANK","SBIN","AXISBANK","KOTAKBANK"],
-    "IT": ["TCS","INFY","WIPRO","HCLTECH","TECHM"],
-    "Pharma": ["SUNPHARMA","CIPLA","DIVISLAB","DRREDDY"],
-    "Energy": ["RELIANCE","ONGC","BPCL","NTPC"],
-    "Auto": ["TATAMOTORS","M&M","EICHERMOT","HEROMOTOCO"],
-    "FMCG": ["ITC","HINDUNILVR","BRITANNIA","DABUR"]
-}
-
-# -------------------------------
-# User Inputs
-# -------------------------------
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    interval = st.selectbox("Interval", ["5m","15m","30m","1h","1d"], index=1)
-
-with col2:
-    period = st.selectbox("Period", ["5d","1mo","3mo","6mo", "1y"], index=1)
-
-with col3:
-    sector = st.selectbox("Sector", list(sector_stocks.keys()) + ["All NSE500"])
-
-# -------------------------------
-# Data Fetch
-# -------------------------------
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=120)  # Cached for 2 mins
 def get_data(symbol, interval, period):
     try:
         df = yf.download(f"{symbol}.NS", interval=interval, period=period, auto_adjust=True, progress=False)
@@ -96,55 +73,46 @@ def get_data(symbol, interval, period):
         return pd.DataFrame()
 
 # -------------------------------
-# Advanced Indicators Logic
+# Candlestick Pattern Logic
 # -------------------------------
-def calculate_supertrend(df, period=10, multiplier=3):
-    high = df['High']
-    low = df['Low']
-    close = df['Close']
+def get_candlestick_pattern(df):
+    if len(df) < 2: return "None"
     
-    tr = np.maximum(high - low, np.maximum(abs(high - close.shift(1)), abs(low - close.shift(1))))
-    atr = tr.rolling(window=period).mean()
+    O1, C1, H1, L1 = df['Open'].iloc[-2], df['Close'].iloc[-2], df['High'].iloc[-2], df['Low'].iloc[-2]
+    O2, C2, H2, L2 = df['Open'].iloc[-1], df['Close'].iloc[-1], df['High'].iloc[-1], df['Low'].iloc[-1]
     
-    hl2 = (high + low) / 2
-    upperband = hl2 + (multiplier * atr)
-    lowerband = hl2 - (multiplier * atr)
+    body = abs(C2 - O2)
+    rng = H2 - L2
+    if rng == 0: rng = 0.001
     
-    supertrend = np.zeros(len(df))
-    direction = np.zeros(len(df))
+    # Doji
+    if body <= (rng * 0.1): return "Doji"
+    # Bullish Engulfing
+    if C1 < O1 and C2 > O2 and O2 < C1 and C2 > O1: return "Bullish Engulfing"
+    # Bearish Engulfing
+    if C1 > O1 and C2 < O2 and O2 > C1 and C2 < O1: return "Bearish Engulfing"
+    # Hammer
+    lower_shadow = min(O2, C2) - L2
+    upper_shadow = H2 - max(O2, C2)
+    if lower_shadow > 2 * body and upper_shadow < 0.2 * body: return "Hammer"
     
-    for i in range(1, len(df)):
-        if close.iloc[i] > upperband.iloc[i-1]: direction[i] = 1
-        elif close.iloc[i] < lowerband.iloc[i-1]: direction[i] = -1
-        else: direction[i] = direction[i-1]
-            
-        if direction[i] == 1:
-            lowerband.iloc[i] = max(lowerband.iloc[i], lowerband.iloc[i-1])
-            supertrend[i] = lowerband.iloc[i]
-        else:
-            upperband.iloc[i] = min(upperband.iloc[i], upperband.iloc[i-1])
-            supertrend[i] = upperband.iloc[i]
-            
-    df['Supertrend'] = supertrend
-    df['ST_Direction'] = direction
-    return df
+    return "Normal"
 
+# -------------------------------
+# Indicators Setup
+# -------------------------------
 def add_indicators(df, interval):
     if len(df) < 60: return df
     
-    # EMA & RSI
     df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
     df["EMA50"] = df["Close"].ewm(span=50, adjust=False).mean()
     
     delta = df["Close"].diff()
     df["RSI"] = 100 - (100 / (1 + (delta.clip(lower=0).ewm(com=13, adjust=False).mean() / -delta.clip(upper=0).ewm(com=13, adjust=False).mean())))
     
-    # MACD
     df["MACD_Line"] = df["Close"].ewm(span=12, adjust=False).mean() - df["Close"].ewm(span=26, adjust=False).mean()
     df["Signal_Line"] = df["MACD_Line"].ewm(span=9, adjust=False).mean()
-    df["MACD_Hist"] = df["MACD_Line"] - df["Signal_Line"]
     
-    # VWAP 
     tp = (df['High'] + df['Low'] + df['Close']) / 3
     if 'd' not in interval and 'wk' not in interval and 'mo' not in interval:
         df['Date'] = df.index.date
@@ -152,10 +120,6 @@ def add_indicators(df, interval):
     else:
         df['VWAP'] = (df['Volume'] * tp).rolling(20).sum() / df['Volume'].rolling(20).sum()
 
-    # Supertrend
-    df = calculate_supertrend(df)
-    
-    # Support and Resistance (Pivot Points S1 & R1)
     df['Pivot'] = (df['High'].shift(1) + df['Low'].shift(1) + df['Close'].shift(1)) / 3
     df['Resistance_1'] = (2 * df['Pivot']) - df['Low'].shift(1)
     df['Support_1'] = (2 * df['Pivot']) - df['High'].shift(1)
@@ -164,60 +128,38 @@ def add_indicators(df, interval):
     return df
 
 # -------------------------------
-# Scanner Logic 
+# Scanner Core
 # -------------------------------
-def scan_stock(df):
-    if len(df) < 60: return None
-
-    score = 0
+def process_stock_thread(symbol, interval, period):
+    df = get_data(symbol, interval, period)
+    if df.empty or len(df) < 60: return None
+    
+    df = add_indicators(df, interval)
     close = float(df["Close"].iloc[-1])
+    score = 0
     
-    ist = pytz.timezone("Asia/Kolkata")
-    last_index = df.index[-1]
-    if last_index.tzinfo is None:
-        last_index = last_index.tz_localize("UTC")
-    signal_time = last_index.astimezone(ist).strftime("%d-%b %Y %I:%M %p")
+    # Check Volume Spike (3x average volume)
+    vol_spike = "🔥 SPIKE" if float(df["Volume"].iloc[-1]) > float(df["AVG_VOL"].iloc[-1]) * 3 else "Normal"
     
-    # 1. EMA
-    if df["EMA20"].iloc[-1] > df["EMA50"].iloc[-1]: score += 1
-    else: score -= 1
-
-    # 2. RSI
-    rsi = float(df["RSI"].iloc[-1])
-    if rsi > 60: score += 1
-    elif rsi < 40: score -= 1
-
-    # 3. Breakout
+    # Candlestick Pattern
+    pattern = get_candlestick_pattern(df)
+    
+    # Breakout
     breakout_high = df["High"].rolling(20).max().shift(1).iloc[-1]
     breakout_low = df["Low"].rolling(20).min().shift(1).iloc[-1]
-    breakout_signal = "NO"
-    if close > breakout_high:
-        score += 1
-        breakout_signal = "BULLISH"
-    elif close < breakout_low:
-        score -= 1
-        breakout_signal = "BEARISH"
-
-    # 4. MACD
-    macd = "BULLISH" if df["MACD_Line"].iloc[-1] > df["Signal_Line"].iloc[-1] else "BEARISH"
-    if macd == "BULLISH": score += 1
+    brk_sig = "BULLISH" if close > breakout_high else ("BEARISH" if close < breakout_low else "NO")
+    
+    # Scoring Logic
+    if df["EMA20"].iloc[-1] > df["EMA50"].iloc[-1]: score += 1
     else: score -= 1
-        
-    # 5. Supertrend
-    st_dir = "UP" if df["ST_Direction"].iloc[-1] == 1 else "DOWN"
-    if st_dir == "UP": score += 1
+    if float(df["RSI"].iloc[-1]) > 60: score += 1
+    elif float(df["RSI"].iloc[-1]) < 40: score -= 1
+    if df["MACD_Line"].iloc[-1] > df["Signal_Line"].iloc[-1]: score += 1
     else: score -= 1
-        
-    # 6. VWAP Cross
-    vwap_val = float(df["VWAP"].iloc[-1])
-    vwap_sig = "ABOVE" if close > vwap_val else "BELOW"
-    if vwap_sig == "ABOVE": score += 1
+    if close > float(df["VWAP"].iloc[-1]): score += 1
     else: score -= 1
-
-    # 7. Volume
-    if float(df["Volume"].iloc[-1]) > float(df["AVG_VOL"].iloc[-1]) * 1.5:
-        if close > df["Open"].iloc[-1]: score += 1 
-        else: score -= 1 
+    if brk_sig == "BULLISH": score += 1
+    elif brk_sig == "BEARISH": score -= 1
 
     if score >= 4: signal = "STRONG BUY"
     elif score >= 2: signal = "BUY"
@@ -225,63 +167,24 @@ def scan_stock(df):
     elif score <= -2: signal = "SELL"
     else: signal = "WAIT"
 
-    # Get Support & Resistance Values
-    support = float(df["Support_1"].iloc[-1])
-    resistance = float(df["Resistance_1"].iloc[-1])
-
-    return {
-        "Price": round(close, 2), "RSI": round(rsi, 2), "Breakout": breakout_signal,
-        "Score": score, "Signal": signal, "MACD": macd, 
-        "Supertrend": st_dir, "VWAP": vwap_sig, "Support": round(support, 2), 
-        "Resistance": round(resistance, 2), "Time": signal_time
-    }
-
-def process_stock_thread(symbol, interval, period):
-    df = get_data(symbol, interval, period)
-    if df.empty: return None
-    
-    df = add_indicators(df, interval)
-    signal = scan_stock(df)
-    
-    if signal:
-        current_price = signal["Price"]
-        
-        # Fast High/Low Logic (Speed Fix)
-        try:
-            period_high = df["High"].max()
-            period_low = df["Low"].min()
-            
-            if current_price >= period_high * 0.97:
-                status_range = "🟢 Near High"
-            elif current_price <= period_low * 1.03:
-                status_range = "🔴 Near Low"
-            else:
-                status_range = "⚪ Mid Range"
-        except:
-            status_range = "N/A"
-            
-        return [
-            symbol, signal["Price"], status_range, signal["Support"], signal["Resistance"], 
-            signal["RSI"], signal["Breakout"], signal["MACD"], signal["Supertrend"], 
-            signal["VWAP"], signal["Score"], signal["Signal"], signal["Time"]
-        ]
-    return None
+    return [
+        symbol, round(close, 2), vol_spike, pattern, brk_sig, 
+        round(df["RSI"].iloc[-1], 2), score, signal
+    ]
 
 # -------------------------------
-# UI Layout
+# Tabs setup
 # -------------------------------
-tab1, tab2 = st.tabs(["🚀 Live Scanner", "📈 Advanced Backtest"])
+tab1, tab2, tab3 = st.tabs(["🚀 Scanner", "📊 Live Charts", "📉 Nifty PCR Data"])
 
 # ==========================================
-# TAB 1: LIVE SCANNER
+# TAB 1: SCANNER
 # ==========================================
 with tab1:
-    if st.button("🚀 RUN SCAN"):
-        results = []
+    if st.button("🚀 RUN SCAN") or auto_refresh:
         selected_stocks = stocks if sector == "All NSE500" else sector_stocks[sector]
-
         progress = st.progress(0)
-        st.write("⚡ Scanning in progress (Ultra-Fast Mode)...")
+        results = []
 
         with ThreadPoolExecutor(max_workers=15) as executor:
             future_to_stock = {executor.submit(process_stock_thread, sym, interval, period): sym for sym in selected_stocks}
@@ -290,113 +193,81 @@ with tab1:
                 if res: results.append(res)
                 progress.progress((i + 1) / len(selected_stocks))
 
-        result_df = pd.DataFrame(
-            results, 
-            columns=["Stock", "Price", "Range Status", "Support", "Resistance", "RSI", "Breakout", "MACD", "Supertrend", "VWAP", "Score", "Signal", "Time"]
-        )
-
-        if not result_df.empty:
-            result_df = result_df.sort_values(by="Score", ascending=False)
+        if results:
+            df_res = pd.DataFrame(results, columns=["Stock", "Price", "Volume", "Pattern", "Breakout", "RSI", "Score", "Signal"])
+            df_res = df_res.sort_values(by="Score", ascending=False)
             
             def color_code(val):
-                if val in ["STRONG BUY", "BULLISH", "UP", "ABOVE"]: return 'color: green; font-weight: bold;'
-                if val in ["STRONG SELL", "BEARISH", "DOWN", "BELOW"]: return 'color: red; font-weight: bold;'
+                if val in ["STRONG BUY", "BULLISH", "🔥 SPIKE", "Bullish Engulfing"]: return 'color: green; font-weight: bold;'
+                if val in ["STRONG SELL", "BEARISH", "Bearish Engulfing"]: return 'color: red; font-weight: bold;'
                 return ''
                 
-            st.dataframe(result_df.style.map(color_code, subset=['Signal', 'Breakout', 'MACD', 'Supertrend', 'VWAP']), use_container_width=True)
+            st.dataframe(df_res.style.map(color_code, subset=['Signal', 'Volume', 'Pattern', 'Breakout']), use_container_width=True)
             
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                csv = result_df.to_csv(index=False).encode("utf-8")
-                st.download_button("📥 Download CSV", data=csv, file_name="HybridScanner_V6_5.csv", mime="text/csv")
-            
-            with col2:
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                    result_df.to_excel(writer, index=False, sheet_name='Scanner Results')
-                
-                st.download_button(
-                    label="📊 Download Excel (.xlsx)",
-                    data=buffer,
-                    file_name="HybridScanner_V6_5.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-        else:
-            st.warning("No signals found.")
+            csv = df_res.to_csv(index=False).encode("utf-8")
+            st.download_button("📥 Download Data", data=csv, file_name="Scanner_V7.csv", mime="text/csv")
+        
+        if auto_refresh:
+            st.warning("⏳ Auto-Refresh is ON. Scanning again in 3 minutes...")
+            time.sleep(180)
+            st.rerun()
 
 # ==========================================
-# TAB 2: ADVANCED BACKTESTING
+# TAB 2: LIVE INTERACTIVE CHARTS
 # ==========================================
 with tab2:
-    st.subheader("Historical Advanced Strategy Backtest")
-    test_stock = st.selectbox("Select a Stock to Backtest:", stocks, index=0)
+    st.subheader("📈 Interactive Candlestick Charts")
+    chart_stock = st.selectbox("Select Stock for Chart:", stocks)
     
-    if st.button("📈 RUN ADVANCED BACKTEST"):
-        with st.spinner("Calculating Multi-Indicator Backtest & Metrics..."):
+    if chart_stock:
+        df_chart = get_data(chart_stock, interval, period)
+        if not df_chart.empty:
+            df_chart = add_indicators(df_chart, interval)
             
-            # 🟢 FIXED: Bracket is properly closed here!
-            df_bt = get_data(test_stock, interval, period)
+            fig = go.Figure()
+            # Candlestick
+            fig.add_trace(go.Candlestick(
+                x=df_chart.index, open=df_chart['Open'], high=df_chart['High'], 
+                low=df_chart['Low'], close=df_chart['Close'], name='Price'
+            ))
+            # EMA lines
+            fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['EMA20'], line=dict(color='blue', width=1), name='EMA 20'))
+            fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['EMA50'], line=dict(color='orange', width=1), name='EMA 50'))
             
-            if df_bt.empty or len(df_bt) < 60:
-                st.error("Insufficient data. Please increase the period.")
-            else:
-                df_bt = add_indicators(df_bt, interval)
-                df_bt.dropna(inplace=True)
-                
-                st_score = np.where(df_bt['ST_Direction'] == 1, 1, -1)
-                macd_score = np.where(df_bt['MACD_Line'] > df_bt['Signal_Line'], 1, -1)
-                vwap_score = np.where(df_bt['Close'] > df_bt['VWAP'], 1, -1)
-                ema_score = np.where(df_bt['EMA20'] > df_bt['EMA50'], 1, -1)
-                
-                breakout_high = df_bt['High'].rolling(20).max().shift(1)
-                breakout_low = df_bt['Low'].rolling(20).min().shift(1)
-                brk_score = np.where(df_bt['Close'] > breakout_high, 1, np.where(df_bt['Close'] < breakout_low, -1, 0))
-                
-                total_score = st_score + macd_score + vwap_score + ema_score + brk_score
-                
-                positions = np.where(total_score >= 2, 1, np.where(total_score <= -2, -1, np.nan))
-                df_bt['Position'] = pd.Series(positions, index=df_bt.index).ffill().fillna(0)
-                
-                df_bt['Market_Return'] = df_bt['Close'].pct_change()
-                trade_friction = np.where(df_bt['Position'].diff() != 0, 0.001, 0)
-                df_bt['Strategy_Return'] = (df_bt['Position'].shift(1) * df_bt['Market_Return']) - trade_friction
-                
-                trade_signals = df_bt['Position'].diff().fillna(0)
-                total_trades = len(trade_signals[trade_signals != 0])
-                
-                winning_days = len(df_bt[df_bt['Strategy_Return'] > 0])
-                losing_days = len(df_bt[df_bt['Strategy_Return'] < 0])
-                win_rate = (winning_days / (winning_days + losing_days) * 100) if (winning_days + losing_days) > 0 else 0
-                
-                cum_market = (1 + df_bt['Market_Return']).cumprod()
-                cum_strategy = (1 + df_bt['Strategy_Return']).cumprod()
-                
-                peak = cum_strategy.cummax()
-                drawdown = (cum_strategy - peak) / peak
-                max_drawdown = drawdown.min() * 100
-                
-                final_market = (cum_market.iloc[-1] - 1) * 100
-                final_strategy = (cum_strategy.iloc[-1] - 1) * 100
-                
-                st.markdown("### 📊 Strategy Performance Overview")
-                m1, m2, m3, m4, m5 = st.columns(5)
-                
-                m1.metric("Strategy Return", f"{final_strategy:.2f}%")
-                m2.metric("Market Return", f"{final_market:.2f}%")
-                m3.metric("Win Rate", f"{win_rate:.1f}%")
-                m4.metric("Total Trades", f"{total_trades}")
-                m5.metric("Max Drawdown", f"{max_drawdown:.2f}%")
-                
-                plot_data = pd.DataFrame({
-                    "Buy & Hold": cum_market * 100,
-                    "Strategy (Breakout+MACD+VWAP+ST)": cum_strategy * 100
-                })
-                st.line_chart(plot_data)
-                
-                st.subheader("🗓️ Date-wise Entry & Exit Log")
-                display_df = df_bt[['Close', 'Supertrend', 'MACD_Line', 'VWAP', 'Position', 'Strategy_Return']].copy()
-                display_df.reset_index(inplace=True)
-                display_df.columns = ['Date', 'Close', 'Supertrend', 'MACD', 'VWAP', 'Position', 'Net Return']
-                display_df['Net Return'] = (display_df['Net Return'] * 100).round(2).astype(str) + '%'
-                st.dataframe(display_df, use_container_width=True)
+            fig.update_layout(title=f"{chart_stock} - Interactive Chart", xaxis_rangeslider_visible=False, height=600, template="plotly_dark")
+            st.plotly_chart(fig, use_container_width=True)
+
+# ==========================================
+# TAB 3: OPTIONS F&O / PCR DATA
+# ==========================================
+with tab3:
+    st.subheader("📉 Nifty Put-Call Ratio (PCR)")
+    st.info("Fetches live PCR data directly from NSE. (May occasionally fail due to NSE security blocks)")
+    
+    if st.button("Fetch Nifty PCR"):
+        try:
+            url = "https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY"
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.5'
+            }
+            # Start a session to get cookies
+            session = requests.Session()
+            session.get("https://www.nseindia.com", headers=headers, timeout=5)
+            # Fetch data
+            response = session.get(url, headers=headers, timeout=5)
+            data = response.json()
+            
+            tot_ce_vol = data['filtered']['CE']['totVol']
+            tot_pe_vol = data['filtered']['PE']['totVol']
+            pcr = tot_pe_vol / tot_ce_vol if tot_ce_vol > 0 else 0
+            
+            st.metric("Live NIFTY PCR", round(pcr, 4))
+            
+            if pcr > 1.2: st.success("Market Sentiment: BULLISH (More Puts Written)")
+            elif pcr < 0.8: st.error("Market Sentiment: BEARISH (More Calls Written)")
+            else: st.warning("Market Sentiment: NEUTRAL")
+            
+        except Exception as e:
+            st.error("Failed to fetch F&O data. NSE server blocked the request. Try again later.")
