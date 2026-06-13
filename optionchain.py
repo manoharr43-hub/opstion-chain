@@ -45,6 +45,15 @@ def load_nse500():
 
 stocks = load_nse500()
 
+sector_stocks = {
+    "Banking": ["HDFCBANK","ICICIBANK","SBIN","AXISBANK","KOTAKBANK"],
+    "IT": ["TCS","INFY","WIPRO","HCLTECH","TECHM"],
+    "Pharma": ["SUNPHARMA","CIPLA","DIVISLAB","DRREDDY"],
+    "Energy": ["RELIANCE","ONGC","BPCL","NTPC"],
+    "Auto": ["TATAMOTORS","M&M","EICHERMOT","HEROMOTOCO"],
+    "FMCG": ["ITC","HINDUNILVR","BRITANNIA","DABUR"]
+}
+
 # -------------------------------
 # User Inputs
 # -------------------------------
@@ -57,7 +66,7 @@ with col2:
     period = st.selectbox("Period", ["5d","1mo","3mo","6mo", "1y"], index=1)
 
 with col3:
-    sector = st.selectbox("Sector", ["All NSE500","Banking","IT","Pharma","Energy","Auto","FMCG"])
+    sector = st.selectbox("Sector", list(sector_stocks.keys()) + ["All NSE500"])
 
 # -------------------------------
 # Data Fetch
@@ -145,17 +154,4 @@ def scan_stock(df):
     elif score <= -2: signal = "SELL"
     else: signal = "WAIT"
     return {"Price": round(close, 2), "RSI": round(rsi, 2), "Breakout": breakout_signal,
-            "Score": score, "Signal": signal, "MACD": macd, "Supertrend": st_dir,
-            "VWAP": vwap_sig, "Time": signal_time}
-
-def process_stock_thread(symbol, interval, period):
-    df = get_data(symbol, interval, period)
-    if df.empty: return None
-    df = add_indicators(df, interval)
-    signal = scan_stock(df)
-    if signal:
-        current_price = signal["Price"]
-        try:
-            ticker = yf.Ticker(f"{symbol}.NS")
-            high_52w, low_52w = ticker.fast_info.year_high, ticker.fast_info.year_low
-            if current_price >= high_52w * 0.97: status_52w = "
+            "Score": score, "Signal": signal,
