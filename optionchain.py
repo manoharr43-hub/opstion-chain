@@ -155,7 +155,4 @@ def scan_stock(df):
     else: signal = "WAIT"
     return {
         "Price": round(close, 2),
-        "RSI": round(rsi, 2),
-        "Breakout": breakout_signal,
-        "Score": score,
-        "Signal":
+        "RSI":
