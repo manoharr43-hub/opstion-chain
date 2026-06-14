@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # ==========================================
 # 1. PAGE SETUP & CONFIGURATION
 # ==========================================
-st.set_page_config(page_title="HYBRID NSE PRO SCANNER V10.1", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="HYBRID NSE PRO SCANNER V10.2", layout="wide", page_icon="🚀")
 
 st.markdown("""
     <style>
@@ -19,18 +19,18 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🚀 HYBRID NSE PRO SCANNER - V10.1 (Ultimate Master)")
-st.markdown("**Cloud Stable | AI Target & SL | MTF + VWAP + Patterns | Top 20 Dashboard**")
+st.title("🚀 HYBRID NSE PRO SCANNER - V10.2 (Ultimate Master)")
+st.markdown("**Cloud Stable | AI Target & SL | MTF + VWAP + Patterns | Custom Search**")
 
-# ఎర్రర్ రాకుండా కొత్త సెషన్ స్టేట్ క్రియేట్ చేయడం
-if 'v10_ultimate_data' not in st.session_state:
-    st.session_state.v10_ultimate_data = pd.DataFrame()
+# Session State Initialization
+if 'v10_data' not in st.session_state:
+    st.session_state.v10_data = pd.DataFrame()
 
 # ==========================================
-# 2. SIDEBAR CONFIGURATION
+# 2. SIDEBAR CONFIGURATION (Button Here)
 # ==========================================
 with st.sidebar:
-    st.header("⚙️ Configuration")
+    st.header("⚙️ Settings & Controls")
     auto_refresh = st.checkbox("🔄 Auto Refresh (Every 3 Mins)")
     interval = st.selectbox("Interval", ["5m","15m","30m","1h","1d"], index=1)
     period = st.selectbox("Period", ["5d","1mo","3mo","6mo", "1y"], index=1)
@@ -44,6 +44,10 @@ with st.sidebar:
         "FMCG": ["ITC","HINDUNILVR","BRITANNIA","DABUR"]
     }
     sector = st.selectbox("Sector", ["All NSE500"] + list(sector_stocks.keys()))
+    
+    st.markdown("---")
+    # THE RUN BUTTON IS NOW IN THE SIDEBAR
+    run_button = st.button("🚀 RUN AI MASTER SCANNER", type="primary", use_container_width=True)
 
 # ==========================================
 # 3. CORE FUNCTIONS & INDICATORS
@@ -58,7 +62,7 @@ def load_nse500():
         df = pd.read_csv(io.StringIO(response.text))
         return sorted(df["Symbol"].dropna().unique().tolist())
     except:
-        return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT","AXISBANK","KOTAKBANK"]
+        return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT","AXISBANK"]
 
 stocks = load_nse500()
 
@@ -110,8 +114,35 @@ def get_candlestick_pattern(df):
     O2, C2, H2, L2 = df['Open'].iloc[-1], df['Close'].iloc[-1], df['High'].iloc[-1], df['Low'].iloc[-1]
     body = abs(C2 - O2)
     rng = H2 - L2 if (H2 - L2) > 0 else 0.001
-    
     if body <= (rng * 0.1): return "Doji"
     if C1 < O1 and C2 > O2 and O2 < C1 and C2 > O1: return "Bullish Engulfing"
     if C1 > O1 and C2 < O2 and O2 > C1 and C2 < O1: return "Bearish Engulfing"
-    lower_shadow, upper_shadow = min(O2, C2) - L2, H
+    lower_shadow, upper_shadow = min(O2, C2) - L2, H2 - max(O2, C2)
+    if lower_shadow > 2 * body and upper_shadow < 0.2 * body: return "Hammer"
+    return "Normal"
+
+def add_indicators(df, interval):
+    if len(df) < 60: return df
+    df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
+    df["EMA50"] = df["Close"].ewm(span=50, adjust=False).mean()
+    delta = df["Close"].diff()
+    df["RSI"] = 100 - (100 / (1 + (delta.clip(lower=0).ewm(com=13, adjust=False).mean() / -delta.clip(upper=0).ewm(com=13, adjust=False).mean())))
+    df["MACD_Line"] = df["Close"].ewm(span=12, adjust=False).mean() - df["Close"].ewm(span=26, adjust=False).mean()
+    df["Signal_Line"] = df["MACD_Line"].ewm(span=9, adjust=False).mean()
+    
+    tp = (df['High'] + df['Low'] + df['Close']) / 3
+    if 'd' not in interval and 'wk' not in interval and 'mo' not in interval:
+        df['Date'] = df.index.date
+        df['VWAP'] = (df['Volume'] * tp).groupby(df['Date']).cumsum() / df['Volume'].groupby(df['Date']).cumsum()
+    else:
+        df['VWAP'] = (df['Volume'] * tp).rolling(20).sum() / df['Volume'].rolling(20).sum()
+
+    df = calculate_supertrend(df)
+    df['Pivot'] = (df['High'].shift(1) + df['Low'].shift(1) + df['Close'].shift(1)) / 3
+    df['Resistance_1'] = (2 * df['Pivot']) - df['Low'].shift(1)
+    df['Support_1'] = (2 * df['Pivot']) - df['High'].shift(1)
+    df["AVG_VOL"] = df["Volume"].rolling(20).mean()
+    
+    df['H-L'] = df['High'] - df['Low']
+    df['H-PC'] = abs(df['High'] - df['Close'].shift(1))
+    df['L-PC
