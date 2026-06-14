@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Streamlit Page Setup
 # -------------------------------
 st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V9.2",
+    page_title="HYBRID NSE PRO SCANNER V9.3",
     layout="wide"
 )
 
@@ -22,8 +22,12 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 HYBRID NSE PRO SCANNER V9.2 (CLOUD STABLE & EXCEL)")
+st.title("📊 HYBRID NSE PRO SCANNER V9.3 (MEMORY FIXED)")
 st.write("yfinance Powered | AI Trend + Relative Strength + Multi-Timeframe + Vectorized Backtest + Colored Excel Export")
+
+# --- Session State Initialization ---
+if 'scan_df' not in st.session_state:
+    st.session_state.scan_df = pd.DataFrame()
 
 # -------------------------------
 # Sidebar Configuration
@@ -256,7 +260,9 @@ tab1, tab2, tab3 = st.tabs(["🚀 Live AI Scanner", "📈 Vectorized Backtest", 
 # TAB 1: LIVE SCANNER
 # ==========================================
 with tab1:
-    if st.button("🚀 RUN SCAN") or auto_refresh:
+    run_button = st.button("🚀 RUN SCAN")
+    
+    if run_button or auto_refresh:
         selected_stocks = stocks if sector == "All NSE500" else sector_stocks[sector]
         
         nifty_df = get_data("^NSEI", interval, period)
@@ -305,25 +311,32 @@ with tab1:
             )
             df_res = df_res.sort_values(by="Score", ascending=False)
             
-            styled_df = df_res.style.map(color_code, subset=['Signal', '⚡ Active Alerts', 'MTF Trend', 'AI Trend', 'RS vs NIFTY', 'Breakout', 'MACD', 'Supertrend', 'VWAP', 'Volume'])
-            st.dataframe(styled_df, use_container_width=True)
-            
-            # Colored Excel Download Logic
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                styled_df.to_excel(writer, index=False, sheet_name='Live_Scanner')
-            
-            st.download_button(
-                label="📥 Download Colored Excel Report (.xlsx)", 
-                data=buffer.getvalue(), 
-                file_name="Hybrid_Scanner_Colored_Report.xlsx", 
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            # Save results in Memory (Session State) so it doesn't disappear
+            st.session_state.scan_df = df_res
+        else:
+            st.session_state.scan_df = pd.DataFrame()
+    
+    # ALWAYS DISPLAY THE DATA IF IT EXISTS IN MEMORY
+    if not st.session_state.scan_df.empty:
+        styled_df = st.session_state.scan_df.style.map(color_code, subset=['Signal', '⚡ Active Alerts', 'MTF Trend', 'AI Trend', 'RS vs NIFTY', 'Breakout', 'MACD', 'Supertrend', 'VWAP', 'Volume'])
+        st.dataframe(styled_df, use_container_width=True)
         
-        if auto_refresh:
-            st.warning("⏳ Auto-Refresh running. Scanning again in 3 minutes...")
-            time.sleep(180)
-            st.rerun()
+        # Excel Download Logic
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+            styled_df.to_excel(writer, index=False, sheet_name='Live_Scanner')
+        
+        st.download_button(
+            label="📥 Download Colored Excel Report (.xlsx)", 
+            data=buffer.getvalue(), 
+            file_name="Hybrid_Scanner_Colored_Report.xlsx", 
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    
+    if auto_refresh:
+        st.warning("⏳ Auto-Refresh running. Scanning again in 3 minutes...")
+        time.sleep(180)
+        st.rerun()
 
 # ==========================================
 # TAB 2: ADVANCED BACKTESTING
@@ -358,7 +371,6 @@ with tab2:
                 trade_friction = np.where(df_bt['Position'].diff() != 0, 0.001, 0)
                 df_bt['Strategy_Return'] = (df_bt['Position'].shift(1) * df_bt['Market_Return']) - trade_friction
                 
-                # Fixed line for Streamlit Cloud Pandas Compatibility
                 total_trades = int((df_bt['Position'].diff().fillna(0) != 0).sum())
                 
                 win_rate = (len(df_bt[df_bt['Strategy_Return'] > 0]) / max(1, len(df_bt[df_bt['Strategy_Return'] != 0]))) * 100
@@ -373,6 +385,7 @@ with tab2:
                 m3.metric("Win Rate Metric", f"{win_rate:.1f}%")
                 m4.metric("Total Trades Executed", f"{total_trades}")
                 
+                # Fixed line to ensure chart renders without import error
                 st.line_chart(pd.DataFrame({"Buy & Hold": cum_market * 100, "Hybrid Strategy": cum_strategy * 100}))
 
 with tab3:
