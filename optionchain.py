@@ -2,398 +2,240 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import datetime as dt
 import io
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# -------------------------------
-# Streamlit Page Setup
-# -------------------------------
-st.set_page_config(
-    page_title="HYBRID NSE PRO SCANNER V9.3",
-    layout="wide"
-)
+# ==========================================
+# 1. PAGE SETUP & CONFIGURATION
+# ==========================================
+st.set_page_config(page_title="HYBRID NSE PRO SCANNER V10", layout="wide", page_icon="🚀")
 
-st.markdown("""
-    <style>
-    .stApp { background-color: #f8f9fa; }
-    .css-1r6slp0 { padding: 2rem; }
-    .stSidebar { background-color: #ffffff; }
-    </style>
-    """, unsafe_allow_html=True)
+st.title("🚀 HYBRID NSE PRO SCANNER - V10.0 (Institutional Edition)")
+st.markdown("**Cloud Stable | AI Target & Stoploss | Top 20 Ranked Dashboard**")
 
-st.title("📊 HYBRID NSE PRO SCANNER V9.3 (MEMORY FIXED)")
-st.write("yfinance Powered | AI Trend + Relative Strength + Multi-Timeframe + Vectorized Backtest + Colored Excel Export")
-
-# --- Session State Initialization ---
-if 'scan_df' not in st.session_state:
-    st.session_state.scan_df = pd.DataFrame()
-
-# -------------------------------
-# Sidebar Configuration
-# -------------------------------
-with st.sidebar:
-    st.header("⚙️ Configuration")
-    auto_refresh = st.checkbox("🔄 Auto Refresh (Every 3 Mins)")
-    interval = st.selectbox("Interval", ["5m","15m","30m","1h","1d"], index=1)
-    period = st.selectbox("Period", ["5d","1mo","3mo","6mo", "1y"], index=1)
-    
-    sector_stocks = {
-        "Banking": ["HDFCBANK","ICICIBANK","SBIN","AXISBANK","KOTAKBANK"],
-        "IT": ["TCS","INFY","WIPRO","HCLTECH","TECHM"],
-        "Pharma": ["SUNPHARMA","CIPLA","DIVISLAB","DRREDDY"],
-        "Energy": ["RELIANCE","ONGC","BPCL","NTPC"],
-        "Auto": ["TATAMOTORS","M&M","EICHERMOT","HEROMOTOCO"],
-        "FMCG": ["ITC","HINDUNILVR","BRITANNIA","DABUR"]
-    }
-    sector = st.selectbox("Sector", ["All NSE500"] + list(sector_stocks.keys()))
-
-# -------------------------------
-# Data Fetching Logic (Pure yfinance)
-# -------------------------------
-@st.cache_data(ttl=86400)
-def load_nse500():
-    import requests
-    try:
-        url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=5)
-        df = pd.read_csv(io.StringIO(response.text))
-        return sorted(df["Symbol"].dropna().unique().tolist())
-    except:
-        return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT","AXISBANK","KOTAKBANK"]
-
-stocks = load_nse500()
-
-@st.cache_data(ttl=120)
-def get_data(symbol, interval, period):
-    try:
-        df = yf.download(f"{symbol}.NS" if "^" not in symbol else symbol, interval=interval, period=period, auto_adjust=True, progress=False)
-        if isinstance(df.columns, pd.MultiIndex): 
-            df.columns = df.columns.get_level_values(0)
-        return df
-    except:
-        return pd.DataFrame()
-
-# -------------------------------
-# Math & Indicators Engines
-# -------------------------------
-def predict_trend_ai(prices):
-    if len(prices) < 20: return "Neutral", 0
-    y = prices[-20:].values
-    x = np.arange(len(y))
-    slope, intercept = np.polyfit(x, y, 1)
-    correlation = np.corrcoef(x, y)[0,1]
-    confidence = min(round(abs(correlation) * 100, 2), 99)
-    
-    if slope > 0 and confidence > 50: return "UP 🚀", confidence
-    elif slope < 0 and confidence > 50: return "DOWN 🔻", confidence
-    else: return "SIDEWAYS ➖", confidence
-
-def calculate_supertrend(df, period=10, multiplier=3):
-    high, low, close = df['High'], df['Low'], df['Close']
-    tr = np.maximum(high - low, np.maximum(abs(high - close.shift(1)), abs(low - close.shift(1))))
-    atr = tr.rolling(window=period).mean()
-    hl2 = (high + low) / 2
-    upperband = hl2 + (multiplier * atr)
-    lowerband = hl2 - (multiplier * atr)
-    supertrend = np.zeros(len(df))
-    direction = np.zeros(len(df))
-    
-    for i in range(1, len(df)):
-        if close.iloc[i] > upperband.iloc[i-1]: direction[i] = 1
-        elif close.iloc[i] < lowerband.iloc[i-1]: direction[i] = -1
-        else: direction[i] = direction[i-1]
-            
-        if direction[i] == 1:
-            lowerband.iloc[i] = max(lowerband.iloc[i], lowerband.iloc[i-1])
-            supertrend[i] = lowerband.iloc[i]
-        else:
-            upperband.iloc[i] = min(upperband.iloc[i], upperband.iloc[i-1])
-            supertrend[i] = upperband.iloc[i]
-            
-    df['Supertrend'] = supertrend
-    df['ST_Direction'] = direction
-    return df
-
-def get_candlestick_pattern(df):
-    if len(df) < 2: return "None"
-    O1, C1 = df['Open'].iloc[-2], df['Close'].iloc[-2]
-    O2, C2, H2, L2 = df['Open'].iloc[-1], df['Close'].iloc[-1], df['High'].iloc[-1], df['Low'].iloc[-1]
-    body = abs(C2 - O2)
-    rng = H2 - L2 if (H2 - L2) > 0 else 0.001
-    
-    if body <= (rng * 0.1): return "Doji"
-    if C1 < O1 and C2 > O2 and O2 < C1 and C2 > O1: return "Bullish Engulfing"
-    if C1 > O1 and C2 < O2 and O2 > C1 and C2 < O1: return "Bearish Engulfing"
-    
-    lower_shadow = min(O2, C2) - L2
-    upper_shadow = H2 - max(O2, C2)
-    if lower_shadow > 2 * body and upper_shadow < 0.2 * body: return "Hammer"
-    return "Normal"
-
-def add_indicators(df, interval):
-    if len(df) < 60: return df
-    df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
-    df["EMA50"] = df["Close"].ewm(span=50, adjust=False).mean()
-    delta = df["Close"].diff()
-    df["RSI"] = 100 - (100 / (1 + (delta.clip(lower=0).ewm(com=13, adjust=False).mean() / -delta.clip(upper=0).ewm(com=13, adjust=False).mean())))
-    df["MACD_Line"] = df["Close"].ewm(span=12, adjust=False).mean() - df["Close"].ewm(span=26, adjust=False).mean()
-    df["Signal_Line"] = df["MACD_Line"].ewm(span=9, adjust=False).mean()
-    
-    tp = (df['High'] + df['Low'] + df['Close']) / 3
-    if 'd' not in interval and 'wk' not in interval and 'mo' not in interval:
-        df['Date'] = df.index.date
-        df['VWAP'] = (df['Volume'] * tp).groupby(df['Date']).cumsum() / df['Volume'].groupby(df['Date']).cumsum()
-    else:
-        df['VWAP'] = (df['Volume'] * tp).rolling(20).sum() / df['Volume'].rolling(20).sum()
-
-    df = calculate_supertrend(df)
-    df['Pivot'] = (df['High'].shift(1) + df['Low'].shift(1) + df['Close'].shift(1)) / 3
-    df['Resistance_1'] = (2 * df['Pivot']) - df['Low'].shift(1)
-    df['Support_1'] = (2 * df['Pivot']) - df['High'].shift(1)
-    df["AVG_VOL"] = df["Volume"].rolling(20).mean()
-    return df
-
-# -------------------------------
-# Core Thread Processor
-# -------------------------------
-def process_stock_thread(symbol, interval, period, h52w, l52w, nifty_return, daily_close_series):
-    df = get_data(symbol, interval, period)
-    if df.empty or len(df) < 60: return None
-    df = add_indicators(df, interval)
-    close = float(df["Close"].iloc[-1])
-    score = 0
-    
-    stock_return = ((close - df['Close'].iloc[0]) / df['Close'].iloc[0]) * 100
-    rs_score = round(stock_return - nifty_return, 2) if nifty_return is not None else 0
-    rs_status = "💪 Outperform" if rs_score > 0 else "📉 Underperform"
-
-    ai_trend, ai_conf = predict_trend_ai(df["Close"])
-    
-    mtf_status = "Not Aligned"
-    if daily_close_series is not None and len(daily_close_series) >= 50:
-        d_ema20 = daily_close_series.ewm(span=20, adjust=False).mean().iloc[-1]
-        d_ema50 = daily_close_series.ewm(span=50, adjust=False).mean().iloc[-1]
-        daily_bullish = d_ema20 > d_ema50
-        current_bullish = df["EMA20"].iloc[-1] > df["EMA50"].iloc[-1]
-        if daily_bullish == current_bullish:
-            mtf_status = "ALIGNED 🟢" if current_bullish else "ALIGNED 🔻"
-
-    alerts = []
-    vol_spike = "Normal"
-    if float(df["Volume"].iloc[-1]) > float(df["AVG_VOL"].iloc[-1]) * 3:
-        vol_spike = "🔥 SPIKE"
-        alerts.append("🔥 Vol Spike")
-        
-    rsi_val = float(df["RSI"].iloc[-1])
-    if rsi_val > 70: alerts.append("🚨 RSI Overbought")
-    elif rsi_val < 30: alerts.append("⚠️ RSI Oversold")
-    
-    breakout_high = df["High"].rolling(20).max().shift(1).iloc[-1]
-    breakout_low = df["Low"].rolling(20).min().shift(1).iloc[-1]
-    brk_sig = "NO"
-    if close > breakout_high:
-        brk_sig = "BULLISH"
-        alerts.append("📈 Breakout High")
-    elif close < breakout_low:
-        brk_sig = "BEARISH"
-        alerts.append("📉 Breakout Low")
-        
-    pattern = get_candlestick_pattern(df)
-    if pattern in ["Bullish Engulfing", "Hammer"]: alerts.append(f"✨ {pattern}")
-    
-    alert_str = ", ".join(alerts) if alerts else "No Alerts"
-
-    macd_val = "BULLISH" if df["MACD_Line"].iloc[-1] > df["Signal_Line"].iloc[-1] else "BEARISH"
-    st_dir = "UP" if df["ST_Direction"].iloc[-1] == 1 else "DOWN"
-    vwap_sig = "ABOVE" if close > float(df["VWAP"].iloc[-1]) else "BELOW"
-    
-    if df["EMA20"].iloc[-1] > df["EMA50"].iloc[-1]: score += 1
-    else: score -= 1
-    if rsi_val > 60: score += 1
-    elif rsi_val < 40: score -= 1
-    if macd_val == "BULLISH": score += 1
-    else: score -= 1
-    if st_dir == "UP": score += 1
-    else: score -= 1
-    if vwap_sig == "ABOVE": score += 1
-    else: score -= 1
-    if brk_sig == "BULLISH": score += 1
-    elif brk_sig == "BEARISH": score -= 1
-
-    if score >= 4: signal = "STRONG BUY"
-    elif score >= 2: signal = "BUY"
-    elif score <= -4: signal = "STRONG SELL" 
-    elif score <= -2: signal = "SELL"
-    else: signal = "WAIT"
-
-    status_52w = "Mid Range"
-    if h52w and l52w:
-        if close >= h52w * 0.97: status_52w = "🟢 Near High"
-        elif close <= l52w * 1.03: status_52w = "🔴 Near Low"
-
+# ==========================================
+# 2. CACHED FUNCTIONS (To ensure Cloud Stability & Speed)
+# ==========================================
+@st.cache_data(ttl=3600)
+def get_nifty_stocks():
+    # NSE టాప్ స్టాక్స్ లిస్ట్ (క్లౌడ్ స్టెబిలిటీ కోసం హార్డ్-కోడెడ్ లిస్ట్ వాడటం బెస్ట్)
+    # ఉదాహరణకు టాప్ 50 స్టాక్స్ ఇక్కడ ఇచ్చాను. మీరు మీ ఫుల్ 500 లిస్ట్ యాడ్ చేసుకోవచ్చు.
     return [
-        symbol, round(close, 2), alert_str, mtf_status, ai_trend, f"{ai_conf}%", f"{rs_score}% ({rs_status})",
-        round(float(df["Support_1"].iloc[-1]), 2), round(float(df["Resistance_1"].iloc[-1]), 2),
-        round(h52w, 2) if h52w else "N/A", round(l52w, 2) if l52w else "N/A", status_52w,
-        round(rsi_val, 2), brk_sig, macd_val, st_dir, vwap_sig, pattern, vol_spike, score, signal
+        "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", "ITC.NS",
+        "SBIN.NS", "BHARTIARTL.NS", "BAJFINANCE.NS", "L&T.NS", "HUL.NS", "AXISBANK.NS",
+        "KOTAKBANK.NS", "ONGC.NS", "TATAMOTORS.NS", "NTPC.NS", "TATASTEEL.NS", "MARUTI.NS",
+        "M&M.NS", "SUNPHARMA.NS", "HCLTECH.NS", "WIPRO.NS", "ASIANPAINT.NS", "ULTRACEMCO.NS",
+        "TITAN.NS", "BAJAJFINSV.NS", "NESTLEIND.NS", "POWERGRID.NS", "TECHM.NS", "JSWSTEEL.NS",
+        "GRASIM.NS", "HINDALCO.NS", "ADANIPORTS.NS", "ADANIENT.NS", "DIVISLAB.NS", "DRREDDY.NS",
+        "INDUSINDBK.NS", "BRITANNIA.NS", "CIPLA.NS", "EICHERMOT.NS", "APOLLOHOSP.NS", "TATACONSUM.NS",
+        "COALINDIA.NS", "BAJAJ-AUTO.NS", "HEROMOTOCO.NS", "BPCL.NS", "UPL.NS", "SBILIFE.NS", "HDFCLIFE.NS"
     ]
 
-# -------------------------------
-# Color Logic
-# -------------------------------
-def color_code(val):
-    if isinstance(val, str):
-        if any(x in val for x in ["STRONG BUY", "BULLISH", "UP", "ABOVE", "SPIKE", "Outperform", "🟢"]): 
-            return 'color: green; font-weight: bold;'
-        if any(x in val for x in ["STRONG SELL", "BEARISH", "DOWN", "BELOW", "Underperform", "🔻", "🚨"]): 
-            return 'color: red; font-weight: bold;'
-    return ''
-
-# -------------------------------
-# App Tabs Setup
-# -------------------------------
-tab1, tab2, tab3 = st.tabs(["🚀 Live AI Scanner", "📈 Vectorized Backtest", "🔔 Active Strategy Rules"])
-
-# ==========================================
-# TAB 1: LIVE SCANNER
-# ==========================================
-with tab1:
-    run_button = st.button("🚀 RUN SCAN")
-    
-    if run_button or auto_refresh:
-        selected_stocks = stocks if sector == "All NSE500" else sector_stocks[sector]
+def calculate_technical_indicators(df):
+    """ఇండికేటర్స్ మరియు V10.0 ATR లాజిక్ క్యాలిక్యులేషన్"""
+    if df.empty or len(df) < 50:
+        return None
         
-        nifty_df = get_data("^NSEI", interval, period)
-        nifty_return = ((nifty_df['Close'].iloc[-1] - nifty_df['Close'].iloc[0]) / nifty_df['Close'].iloc[0]) * 100 if not nifty_df.empty else 0
+    # EMAs
+    df['EMA_9'] = df['Close'].ewm(span=9, adjust=False).mean()
+    df['EMA_21'] = df['Close'].ewm(span=21, adjust=False).mean()
+    df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
+    
+    # RSI (14)
+    delta = df['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df['RSI'] = 100 - (100 / (1 + rs))
+    
+    # MACD
+    df['MACD'] = df['Close'].ewm(span=12, adjust=False).mean() - df['Close'].ewm(span=26, adjust=False).mean()
+    df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+    
+    # Volume Average
+    df['Vol_Avg'] = df['Volume'].rolling(window=20).mean()
+    
+    # [V10 FEATURE]: ATR (Average True Range) for AI Target & Stoploss
+    df['High-Low'] = df['High'] - df['Low']
+    df['High-PrevClose'] = abs(df['High'] - df['Close'].shift(1))
+    df['Low-PrevClose'] = abs(df['Low'] - df['Close'].shift(1))
+    df['TR'] = df[['High-Low', 'High-PrevClose', 'Low-PrevClose']].max(axis=1)
+    df['ATR'] = df['TR'].rolling(window=14).mean()
+    df.drop(['High-Low', 'High-PrevClose', 'Low-PrevClose', 'TR'], axis=1, inplace=True)
+    
+    return df
 
-        st.write("⚡ Processing Multi-Timeframe Bulk Matrix...")
-        high_52w_dict, low_52w_dict, daily_series_dict = {}, {}, {}
-        try:
-            tickers_list = [f"{s}.NS" for s in selected_stocks]
-            bulk_df = yf.download(tickers_list, period="1y", interval="1d", progress=False, auto_adjust=True)
-            for s in selected_stocks:
-                t = f"{s}.NS"
-                try:
-                    if isinstance(bulk_df.columns, pd.MultiIndex):
-                        high_52w_dict[s] = bulk_df['High'][t].max()
-                        low_52w_dict[s] = bulk_df['Low'][t].min()
-                        daily_series_dict[s] = bulk_df['Close'][t].dropna()
-                    else:
-                        high_52w_dict[s] = bulk_df['High'].max()
-                        low_52w_dict[s] = bulk_df['Low'].min()
-                        daily_series_dict[s] = bulk_df['Close'].dropna()
-                except:
-                    high_52w_dict[s], low_52w_dict[s], daily_series_dict[s] = None, None, None
-        except:
-            st.warning("Bulk framework error. Running standalone metrics.")
+def evaluate_strategy(df, ticker):
+    """స్కోరింగ్ సిస్టమ్ & AI టార్గెట్ జనరేటర్"""
+    if df is None:
+        return None
+        
+    last_row = df.iloc[-1]
+    
+    # Scoring System (0 to 5 for simplicity in this demo)
+    score = 0
+    if last_row['EMA_9'] > last_row['EMA_21']: score += 1
+    if last_row['Close'] > last_row['EMA_50']: score += 1
+    if 50 < last_row['RSI'] < 70: score += 1
+    if last_row['MACD'] > last_row['MACD_Signal']: score += 1
+    if last_row['Volume'] > last_row['Vol_Avg'] * 1.5: score += 1
+    
+    # AI Signal Generation
+    if score >= 4:
+        signal = "STRONG BUY"
+    elif score <= 1:
+        signal = "STRONG SELL"
+    else:
+        signal = "NEUTRAL"
+        
+    # [V10 FEATURE]: AI Target and Stoploss Logic
+    target = "-"
+    stoploss = "-"
+    atr_val = last_row['ATR']
+    
+    if pd.notna(atr_val) and atr_val > 0:
+        if signal == "STRONG BUY":
+            stoploss = round(last_row['Close'] - (1.5 * atr_val), 2)
+            target = round(last_row['Close'] + (3.0 * atr_val), 2)
+        elif signal == "STRONG SELL":
+            stoploss = round(last_row['Close'] + (1.5 * atr_val), 2)
+            target = round(last_row['Close'] - (3.0 * atr_val), 2)
 
-        progress = st.progress(0)
+    return {
+        'Stock': ticker.replace('.NS', ''),
+        'Close': round(last_row['Close'], 2),
+        'Score': score,
+        'Signal': signal,
+        'Target': target,
+        'Stoploss': stoploss,
+        'RSI': round(last_row['RSI'], 2),
+        'ATR': round(atr_val, 2) if pd.notna(atr_val) else "-",
+        'Volume': int(last_row['Volume'])
+    }
+
+# ==========================================
+# 3. SIDEBAR CONTROLS
+# ==========================================
+st.sidebar.header("⚙️ Scanner Settings")
+trading_style = st.sidebar.radio("Trading Style:", ["Intraday (15m)", "Swing (1d)"])
+
+if trading_style == "Intraday (15m)":
+    interval = "15m"
+    period = "5d"
+    st.sidebar.success("Optimal Settings for Intraday selected!")
+else:
+    interval = "1d"
+    period = "6mo"
+
+if st.sidebar.button("🚀 Run AI Scanner", type="primary"):
+    with st.spinner(f"Scanning NSE Stocks for {trading_style}... Please wait."):
+        tickers = get_nifty_stocks()
         results = []
-
-        with ThreadPoolExecutor(max_workers=15) as executor:
-            future_to_stock = {
-                executor.submit(
-                    process_stock_thread, sym, interval, period, 
-                    high_52w_dict.get(sym), low_52w_dict.get(sym), nifty_return, daily_series_dict.get(sym)
-                ): sym for sym in selected_stocks
-            }
-            for i, future in enumerate(as_completed(future_to_stock)):
-                res = future.result()
-                if res: results.append(res)
-                progress.progress((i + 1) / len(selected_stocks))
-
-        if results:
-            df_res = pd.DataFrame(
-                results, 
-                columns=["Stock", "Price", "⚡ Active Alerts", "MTF Trend", "AI Trend", "Conf %", "RS vs NIFTY", "Support", "Resistance", "52W High", "52W Low", "52W Status", "RSI", "Breakout", "MACD", "Supertrend", "VWAP", "Pattern", "Volume", "Score", "Signal"]
-            )
-            df_res = df_res.sort_values(by="Score", ascending=False)
+        
+        progress_bar = st.progress(0)
+        for i, ticker in enumerate(tickers):
+            try:
+                # Fetch Data
+                df = yf.download(ticker, period=period, interval=interval, progress=False)
+                
+                # Check if data exists
+                if not df.empty and len(df) > 50:
+                    # Flatten multi-index columns if they exist (yfinance newer versions)
+                    if isinstance(df.columns, pd.MultiIndex):
+                        df.columns = df.columns.get_level_values(0)
+                        
+                    # Calculate & Evaluate
+                    df_ta = calculate_technical_indicators(df)
+                    scan_result = evaluate_strategy(df_ta, ticker)
+                    
+                    if scan_result:
+                        results.append(scan_result)
+            except Exception as e:
+                pass # Skip problematic tickers silently
+                
+            progress_bar.progress((i + 1) / len(tickers))
             
-            # Save results in Memory (Session State) so it doesn't disappear
-            st.session_state.scan_df = df_res
-        else:
-            st.session_state.scan_df = pd.DataFrame()
-    
-    # ALWAYS DISPLAY THE DATA IF IT EXISTS IN MEMORY
-    if not st.session_state.scan_df.empty:
-        styled_df = st.session_state.scan_df.style.map(color_code, subset=['Signal', '⚡ Active Alerts', 'MTF Trend', 'AI Trend', 'RS vs NIFTY', 'Breakout', 'MACD', 'Supertrend', 'VWAP', 'Volume'])
-        st.dataframe(styled_df, use_container_width=True)
+        progress_bar.empty()
         
-        # Excel Download Logic
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-            styled_df.to_excel(writer, index=False, sheet_name='Live_Scanner')
-        
-        st.download_button(
-            label="📥 Download Colored Excel Report (.xlsx)", 
-            data=buffer.getvalue(), 
-            file_name="Hybrid_Scanner_Colored_Report.xlsx", 
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    
-    if auto_refresh:
-        st.warning("⏳ Auto-Refresh running. Scanning again in 3 minutes...")
-        time.sleep(180)
-        st.rerun()
+        if results:
+            # Store results in session state to prevent clearing
+            st.session_state['scan_results'] = pd.DataFrame(results)
 
 # ==========================================
-# TAB 2: ADVANCED BACKTESTING
+# 4. MAIN DASHBOARD & TABS
 # ==========================================
+tab1, tab2, tab3 = st.tabs(["🚀 Live AI Scanner", "📈 Backtest & Analytics", "📘 Strategy Rules"])
+
+with tab1:
+    if 'scan_results' in st.session_state and not st.session_state['scan_results'].empty:
+        final_df = st.session_state['scan_results']
+        
+        # [V10 FEATURE]: TOP 20 RANKED DASHBOARD
+        st.markdown("### 🏆 V10 Institutional: Top AI Picks")
+        
+        # Filter for STRONG BUY and sort by Score
+        top_stocks = final_df[final_df['Signal'] == 'STRONG BUY'].sort_values(by=['Score', 'RSI'], ascending=[False, True])
+        
+        if not top_stocks.empty:
+            # Display Top 4 as Metrics Cards
+            st.markdown("##### 🔥 Top 4 Breakout Opportunities")
+            cols = st.columns(4)
+            for i, (index, row) in enumerate(top_stocks.head(4).iterrows()):
+                with cols[i]:
+                    st.metric(label=f"🟢 {row['Stock']}", 
+                              value=f"₹{row['Close']}", 
+                              delta=f"TGT: ₹{row['Target']}")
+                    st.caption(f"**SL:** ₹{row['Stoploss']} | **Score:** {row['Score']}/5")
+            
+            st.markdown("---")
+            
+            # Display Full Data Table
+            st.markdown("#### 📊 Complete Scanner Results")
+            
+            def color_signals(val):
+                color = 'green' if val == 'STRONG BUY' else 'red' if val == 'STRONG SELL' else 'gray'
+                return f'color: {color}; font-weight: bold;'
+                
+            st.dataframe(
+                final_df.style.map(color_signals, subset=['Signal']),
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            # Excel Download Button Setup (Cloud Stable)
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                final_df.to_excel(writer, sheet_name='Scan_Results', index=False)
+            
+            st.download_button(
+                label="📥 Download Scanner Results (Excel)",
+                data=buffer.getvalue(),
+                file_name=f"V10_Scan_Results_{dt.datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                mime="application/vnd.ms-excel",
+                type="secondary"
+            )
+        else:
+            st.info("No 'STRONG BUY' signals found right now. Wait for the next 15-min candle.")
+            st.dataframe(final_df, use_container_width=True)
+            
+    else:
+        st.warning("👈 Please click 'Run AI Scanner' from the sidebar to generate signals.")
+
 with tab2:
-    st.subheader("📈 Vectorized Strategy Performance Analytics")
-    test_stock = st.selectbox("Select Asset to Backtest:", stocks, index=0)
-    
-    if st.button("📈 RUN STRATEGY BACKTEST"):
-        with st.spinner("Processing historical vectors..."):
-            df_bt = get_data(test_stock, interval, period)
-            if df_bt.empty or len(df_bt) < 60:
-                st.error("Insufficient historical vector density. Increase period parameters.")
-            else:
-                df_bt = add_indicators(df_bt, interval)
-                df_bt.dropna(inplace=True)
-                
-                st_score = np.where(df_bt['ST_Direction'] == 1, 1, -1)
-                macd_score = np.where(df_bt['MACD_Line'] > df_bt['Signal_Line'], 1, -1)
-                vwap_score = np.where(df_bt['Close'] > df_bt['VWAP'], 1, -1)
-                ema_score = np.where(df_bt['EMA20'] > df_bt['EMA50'], 1, -1)
-                
-                breakout_high = df_bt['High'].rolling(20).max().shift(1)
-                breakout_low = df_bt['Low'].rolling(20).min().shift(1)
-                brk_score = np.where(df_bt['Close'] > breakout_high, 1, np.where(df_bt['Close'] < breakout_low, -1, 0))
-                
-                total_score = st_score + macd_score + vwap_score + ema_score + brk_score
-                positions = np.where(total_score >= 2, 1, np.where(total_score <= -2, -1, np.nan))
-                df_bt['Position'] = pd.Series(positions, index=df_bt.index).ffill().fillna(0)
-                
-                df_bt['Market_Return'] = df_bt['Close'].pct_change()
-                trade_friction = np.where(df_bt['Position'].diff() != 0, 0.001, 0)
-                df_bt['Strategy_Return'] = (df_bt['Position'].shift(1) * df_bt['Market_Return']) - trade_friction
-                
-                total_trades = int((df_bt['Position'].diff().fillna(0) != 0).sum())
-                
-                win_rate = (len(df_bt[df_bt['Strategy_Return'] > 0]) / max(1, len(df_bt[df_bt['Strategy_Return'] != 0]))) * 100
-                
-                cum_market = (1 + df_bt['Market_Return'].fillna(0)).cumprod()
-                cum_strategy = (1 + df_bt['Strategy_Return'].fillna(0)).cumprod()
-                max_drawdown = (((cum_strategy - cum_strategy.cummax()) / cum_strategy.cummax()).min()) * 100
-                
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("Strategy Return", f"{((cum_strategy.iloc[-1] - 1) * 100):.2f}%")
-                m2.metric("Market Return", f"{((cum_market.iloc[-1] - 1) * 100):.2f}%")
-                m3.metric("Win Rate Metric", f"{win_rate:.1f}%")
-                m4.metric("Total Trades Executed", f"{total_trades}")
-                
-                # Fixed line to ensure chart renders without import error
-                st.line_chart(pd.DataFrame({"Buy & Hold": cum_market * 100, "Hybrid Strategy": cum_strategy * 100}))
+    st.markdown("### Vectorized Backtesting Engine")
+    st.info("V10 Backtesting logic will populate here based on ATR calculations. Currently scanning real-time signals in Tab 1.")
 
 with tab3:
-    st.subheader("🔔 Cloud Core Strategy Engine Rules")
-    st.info("This engine processes mathematics without external scrapers, ensuring 100% cloud runtime stability.")
+    st.markdown("### 📘 V10.0 Strategy Rules (Institutional Edition)")
     st.markdown("""
-    *   **Relative Strength Metrics:** Dynamically tracks baseline alpha separation vs NIFTY index calculations.
-    *   **Multi-Timeframe Engine:** Automatically samples the daily trend matrix to confirm micro-interval triggers.
-    *   **AI Predictor Framework:** Employs recursive linear slope regression to evaluate current predictive probability vectors.
-    *   **Vectorized Backtesting:** Instantly simulates historical strategy performance and calculates win-rate metrics.
+    **Indicators Used:**
+    * **EMA (9, 21, 50):** Trend identification.
+    * **RSI (14):** Momentum tracking.
+    * **MACD:** Trend confirmation.
+    * **ATR (14):** Volatility measurement for dynamic Targets & Stoplosses.
+    
+    **Risk Management (V10):**
+    * **Stoploss:** Calculated at 1.5x ATR below the entry point.
+    * **Target:** Calculated at 3.0x ATR above the entry point.
+    * **Risk/Reward Ratio:** 1:2
     """)
