@@ -6,3 +6,5 @@ pytz
 requests
 plotly
 xlsxwriter
+xgboost
+scikit-learn
