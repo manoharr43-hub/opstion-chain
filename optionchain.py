@@ -8,12 +8,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Machine Learning Modules
 from xgboost import XGBClassifier
-from sklearn.preprocessing import StandardScaler
 
 # ==========================================
 # 1. PAGE SETUP & CONFIGURATION
 # ==========================================
-st.set_page_config(page_title="HYBRID NSE PRO SCANNER V11.0", layout="wide", page_icon="⚡")
+st.set_page_config(page_title="HYBRID NSE PRO SCANNER V11.1", layout="wide", page_icon="⚡")
 
 st.markdown("""
     <style>
@@ -23,7 +22,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("⚡ HYBRID NSE PRO SCANNER - V11.0 PRO")
+st.title("⚡ HYBRID NSE PRO SCANNER - V11.1 PRO")
 st.markdown("**Institutional Edition | Smart Money Concepts (BOS/CHOCH) | XGBoost Machine Learning Predictive Engine**")
 
 if 'v11_data' not in st.session_state:
@@ -77,42 +76,51 @@ def get_data(symbol, interval, period):
     except:
         return pd.DataFrame()
 
+def predict_trend_ai(prices):
+    """Linear Regression Based AI Trend"""
+    if len(prices) < 20: return "Neutral", 0
+    y = prices[-20:].values
+    x = np.arange(len(y))
+    slope, intercept = np.polyfit(x, y, 1)
+    correlation = np.corrcoef(x, y)[0,1]
+    confidence = min(round(abs(correlation) * 100, 2), 99)
+    if slope > 0 and confidence > 50: return "UP 🚀", confidence
+    elif slope < 0 and confidence > 50: return "DOWN 🔻", confidence
+    else: return "SIDEWAYS ➖", confidence
+
 def calculate_smc_structures(df):
     """Smart Money Concepts: BOS & CHOCH Engine"""
     if len(df) < 30:
         return "Normal", "Normal"
         
-    # Swing Highs / Lows detection using rolling thresholds
     df['Local_High'] = df['High'].rolling(window=10, center=True).max()
     df['Local_Low'] = df['Low'].rolling(window=10, center=True).min()
     
     last_high = df['Local_High'].ffill().iloc[-2]
     last_low = df['Local_Low'].ffill().iloc[-2]
     current_close = df['Close'].iloc[-1]
-    current_open = df['Open'].iloc[-1]
     
     smc_structure = "Range"
     smc_alert = "Normal"
     
-    # Trend alignment logic for BOS vs CHOCH
     ema20 = df['Close'].ewm(span=20).mean().iloc[-1]
     ema50 = df['Close'].ewm(span=50).mean().iloc[-1]
     bullish_trend = ema20 > ema50
     
     if current_close > last_high:
         if bullish_trend:
-            smc_structure = "BOS 📈"  # Break of Structure (Continuation)
+            smc_structure = "BOS 📈"
             smc_alert = "Structure Broken Upward"
         else:
-            smc_structure = "CHOCH 🔄" # Change of Character (Reversal)
+            smc_structure = "CHOCH 🔄"
             smc_alert = "Trend Reversal Bullish"
             
     elif current_close < last_low:
         if not bullish_trend:
-            smc_structure = "BOS 📉"  # Break of Structure Downward
+            smc_structure = "BOS 📉"
             smc_alert = "Structure Broken Downward"
         else:
-            smc_structure = "CHOCH 🔄" # Change of Character Bearish
+            smc_structure = "CHOCH 🔄"
             smc_alert = "Trend Reversal Bearish"
             
     return smc_structure, smc_alert
@@ -123,14 +131,12 @@ def train_xgboost_predictor(df):
         return "Neutral", 0.0
         
     try:
-        # Features building matrix
         df_ml = df.copy()
         df_ml['Return'] = df_ml['Close'].pct_change()
         df_ml['RSI_Norm'] = df_ml['RSI'] / 100.0
         df_ml['Vol_Ratio'] = df_ml['Volume'] / df_ml['AVG_VOL']
         df_ml['EMA_Gap'] = (df_ml['EMA20'] - df_ml['EMA50']) / df_ml['EMA50']
         
-        # Target Binary Classification (1 if next close is higher, 0 if lower)
         df_ml['Target_Direction'] = np.where(df_ml['Close'].shift(-1) > df_ml['Close'], 1, 0)
         df_ml.dropna(inplace=True)
         
@@ -141,11 +147,9 @@ def train_xgboost_predictor(df):
         X = df_ml[feature_cols].values
         y = df_ml['Target_Direction'].values
         
-        # Super fast optimized training execution sequence for cloud metrics
         model = XGBClassifier(n_estimators=15, max_depth=3, learning_rate=0.1, eval_metric='logloss', random_state=42)
         model.fit(X[:-1], y[:-1])
         
-        # Predict latest row vector
         latest_vector = X[-1].reshape(1, -1)
         prediction = model.predict(latest_vector)[0]
         probabilities = model.predict_proba(latest_vector)[0]
@@ -154,7 +158,7 @@ def train_xgboost_predictor(df):
         ai_signal = "BULLISH 🚀" if prediction == 1 else "BEARISH 🔻"
         return ai_signal, confidence
     except:
-        return "Neural", 0.0
+        return "Neutral", 0.0
 
 def calculate_supertrend(df, period=10, multiplier=3):
     high, low, close = df['High'], df['Low'], df['Close']
@@ -233,6 +237,9 @@ def process_stock_thread(symbol, interval, period, h52w, l52w, nifty_return, dai
     stock_return = ((close - df['Close'].iloc[0]) / df['Close'].iloc[0]) * 100
     rs_score = round(stock_return - nifty_return, 2) if nifty_return is not None else 0
     rs_status = "💪 Outperform" if rs_score > 0 else "📉 Underperform"
+
+    # [FIXED LINE] - Restored the original AI Trend predictor
+    ai_trend, ai_conf = predict_trend_ai(df["Close"])
 
     # [V11 PRO FEATURE] - Smart Money Concepts (BOS/CHOCH)
     smc_structure, smc_alert = calculate_smc_structures(df)
