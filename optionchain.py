@@ -13,9 +13,9 @@ warnings.filterwarnings('ignore')
 # ---------------------------------------------------------
 # 1. PAGE CONFIGURATION
 # ---------------------------------------------------------
-st.set_page_config(page_title="NSE AI PRO V11.1", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="NSE AI PRO V11.2", layout="wide", page_icon="🚀")
 
-st.title("🚀 NSE AI PRO V11.1 - Institutional Edition")
+st.title("🚀 NSE AI PRO V11.2 - Institutional Edition")
 st.markdown("### Powered by XGBoost, SMC & Advanced ATR Risk Management")
 st.markdown("---")
 
@@ -25,7 +25,7 @@ st.markdown("---")
 nifty_stocks = [
     "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", 
     "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "KOTAKBANK.NS", "LT.NS",
-    "TRAVELFOOD.NS", "SYRMA.NS", "AEGISCHEM.NS", "SBICARD.NS" # Added your list
+    "TRAVELFOOD.NS", "SYRMA.NS", "AEGISCHEM.NS", "SBICARD.NS"
 ]
 
 # ---------------------------------------------------------
@@ -36,6 +36,11 @@ def fetch_data(ticker, period="1y"):
         df = yf.download(ticker, period=period, progress=False)
         if df.empty:
             return None
+            
+        # [BUG FIX]: MultiIndex columns flattening for new yfinance versions
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+            
         return df
     except:
         return None
@@ -60,16 +65,19 @@ def calculate_indicators(df):
     return df.dropna()
 
 def get_smc_structure(df):
-    # Basic SMC Logic
-    recent_high = df['High'].tail(20).max()
-    recent_low = df['Low'].tail(20).min()
-    current_close = df['Close'].iloc[-1]
-    
-    if current_close > recent_high:
-        return "BOS 📈"
-    elif current_close < recent_low:
-        return "CHOCH 🔄"
-    else:
+    # [BUG FIX]: Forcing strict float values to avoid Series ambiguity Error
+    try:
+        recent_high = float(df['High'].tail(20).max())
+        recent_low = float(df['Low'].tail(20).min())
+        current_close = float(df['Close'].iloc[-1])
+        
+        if current_close > recent_high:
+            return "BOS 📈"
+        elif current_close < recent_low:
+            return "CHOCH 🔄"
+        else:
+            return "Range ➖"
+    except:
         return "Range ➖"
 
 def train_xgboost(df):
@@ -107,9 +115,9 @@ def process_stock(ticker):
         
     df = calculate_indicators(df)
     
-    ltp = df['Close'].iloc[-1]
-    atr = df['ATR'].iloc[-1]
-    rsi = df['RSI'].iloc[-1]
+    ltp = float(df['Close'].iloc[-1])
+    atr = float(df['ATR'].iloc[-1])
+    rsi = float(df['RSI'].iloc[-1])
     
     # Dynamic Risk Management (1:2 Risk Reward)
     target = ltp + (atr * 2)
@@ -139,7 +147,7 @@ def process_stock(ticker):
 # ---------------------------------------------------------
 # 5. UI & EXECUTION
 # ---------------------------------------------------------
-if st.button("🔄 Scan Market Now (V11.1 PRO)"):
+if st.button("🔄 Scan Market Now (V11.2 PRO)"):
     with st.spinner("AI is analyzing Institutional Footprints... Please wait."):
         results = []
         
@@ -166,8 +174,7 @@ if st.button("🔄 Scan Market Now (V11.1 PRO)"):
                 stock = df_results.iloc[i]
                 with cols[i]:
                     st.info(f"""
-                    **{stock['Stock']} ({stock['SMC Structure'].replace(' ➖', '')})**  
-                    ## ₹{stock['LTP']:.2f}  
+                    **{stock['Stock']} ({stock['SMC Structure'].replace(' ➖', '')})** ## ₹{stock['LTP']:.2f}  
                     🟢 TGT: ₹{stock['Target']:.2f}  
                     ---
                     SL: ₹{stock['Stoploss']:.2f} | XGB: {stock['XGB Trend'].split(' ')[0]} ({stock['XGB Conf']:.2f}%)
