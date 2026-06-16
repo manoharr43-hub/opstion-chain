@@ -156,7 +156,8 @@ with tab1:
         selected_stocks = stocks if sector=="All NSE500" else sector_stocks[sector]
         results = []
         with ThreadPoolExecutor(max_workers=10) as executor:
+            progress = st.progress(0)  # ✅ FIXED progress initialization
             future_to_stock = {
                 executor.submit(process_stock_thread, sym, interval, period, 0): sym for sym in selected_stocks
             }
-            progress
+            for i,
