@@ -124,40 +124,4 @@ def add_indicators(df, interval):
     if len(df) < 60: return df
     df["EMA20"] = df["Close"].ewm(span=20).mean()
     df["EMA50"] = df["Close"].ewm(span=50).mean()
-    delta = df["Close"].diff()
-    df["RSI"] = 100 - (100 / (1 + (delta.clip(lower=0).ewm(com=13).mean() / -delta.clip(upper=0).ewm(com=13).mean())))
-    df["MACD_Line"] = df["Close"].ewm(span=12).mean() - df["Close"].ewm(span=26).mean()
-    df["Signal_Line"] = df["MACD_Line"].ewm(span=9).mean()
-    df["AVG_VOL"] = df["Volume"].rolling(20).mean()
-    df['TR'] = df[['High','Low','Close']].max(axis=1) - df[['High','Low','Close']].min(axis=1)
-    df['ATR'] = df['TR'].rolling(window=14).mean()
-    return df
-
-# ==========================================
-# 5. MASTER THREAD
-# ==========================================
-def process_stock_thread(symbol, interval, period, nifty_return):
-    df = get_data(symbol, interval, period)
-    if df.empty or len(df) < 60: return None
-    df = add_indicators(df, interval)
-    close = float(df["Close"].iloc[-1])
-    ai_trend, ai_conf = predict_trend_ai(df["Close"])
-    smc_structure, smc_alert = calculate_smc_structures(df)
-    xgb_prediction, xgb_confidence = run_xgb_inference(df, xgb_model)
-    return [symbol, close, smc_structure, xgb_prediction, f"{xgb_confidence}%", ai_trend, f"{ai_conf}%"]
-
-# ==========================================
-# 6. UI EXECUTION
-# ==========================================
-tab1, tab2 = st.tabs(["🚀 V11.2 Dashboard", "🔍 Custom Stock Search"])
-
-with tab1:
-    if run_button or auto_refresh:
-        selected_stocks = stocks if sector=="All NSE500" else sector_stocks[sector]
-        results = []
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            progress = st.progress(0)  # ✅ FIXED progress initialization
-            future_to_stock = {
-                executor.submit(process_stock_thread, sym, interval, period, 0): sym for sym in selected_stocks
-            }
-            for i, future in enumerate(as_completed(f
+    delta = df["
