@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import io
 import time
+import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from xgboost import XGBClassifier
 import warnings
@@ -14,7 +15,7 @@ warnings.filterwarnings('ignore')
 # ==========================================
 # 1. PAGE SETUP & CONFIGURATION
 # ==========================================
-st.set_page_config(page_title="NSE AI PRO V11.6", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="NSE AI PRO V11.7", layout="wide", page_icon="🚀")
 
 st.markdown("""
     <style>
@@ -24,11 +25,11 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🚀 NSE AI PRO V11.6 - Institutional Ultimate")
-st.markdown("**All-In-One Hybrid Edition | True Colored Excel Download | Advanced SMC & CISD | XGBoost AI Engine**")
+st.title("🚀 NSE AI PRO V11.7 - Institutional Ultimate")
+st.markdown("**Anti-Crash Direct Download | True Colored Excel | Advanced SMC & CISD | XGBoost AI Engine**")
 st.markdown("---")
 
-# Session State Memory for fixing the disappearing screen bug
+# Session State Memory
 if 'v11_master_data' not in st.session_state:
     st.session_state.v11_master_data = pd.DataFrame()
 
@@ -92,9 +93,7 @@ def predict_trend_ai(prices):
     else: return "SIDEWAYS ➖", confidence
 
 def calculate_smc_and_cisd(df):
-    if len(df) < 30:
-        return "Range ➖", "None", "Normal"
-        
+    if len(df) < 30: return "Range ➖", "None", "Normal"
     try:
         df['Local_High'] = df['High'].rolling(window=10, center=False).max()
         df['Local_Low'] = df['Low'].rolling(window=10, center=False).min()
@@ -123,10 +122,8 @@ def calculate_smc_and_cisd(df):
         curr_low = float(df['Low'].iloc[-1])
         
         cisd_signal = "None"
-        if curr_low < prev_low and current_close > prev_high:
-            cisd_signal = "Bullish CISD 🚀"
-        elif curr_high > prev_high and current_close < prev_low:
-            cisd_signal = "Bearish CISD 🩸"
+        if curr_low < prev_low and current_close > prev_high: cisd_signal = "Bullish CISD 🚀"
+        elif curr_high > prev_high and current_close < prev_low: cisd_signal = "Bearish CISD 🩸"
             
         return smc_structure, cisd_signal, smc_alert
     except:
@@ -324,7 +321,7 @@ def color_code(val):
 # ==========================================
 # 5. UI TABS & RUN EXECUTION
 # ==========================================
-tab1, tab2 = st.tabs(["🚀 V11.6 PRO Master Dashboard", "🔍 Custom Stock Search"])
+tab1, tab2 = st.tabs(["🚀 V11.7 PRO Master Dashboard", "🔍 Custom Stock Search"])
 
 with tab1:
     if run_button or auto_refresh:
@@ -367,13 +364,13 @@ with tab1:
             st.session_state.v11_master_data = df_res
             
             buy_count = sum(1 for r in results if r[-1] == 'STRONG BUY')
-            if buy_count > 0: st.toast(f"🔥 V11.6 ACTION ALERT: {buy_count} STRONG BUY Signals Generated!", icon='⚡')
+            if buy_count > 0: st.toast(f"🔥 V11.7 ACTION ALERT: {buy_count} STRONG BUY Signals Generated!", icon='⚡')
 
     # DISPLAY BLOCK
     if not st.session_state.v11_master_data.empty:
         final_df = st.session_state.v11_master_data
         
-        st.markdown("### 🏆 Top Institutional Breakouts (V11.6 Master Picks)")
+        st.markdown("### 🏆 Top Institutional Breakouts (V11.7 Master Picks)")
         top_stocks = final_df[final_df['Signal'] == 'STRONG BUY'].sort_values(by='Score', ascending=False)
         
         if not top_stocks.empty:
@@ -396,23 +393,32 @@ with tab1:
         styled_df = ui_df.style.map(color_code, subset=['Signal', 'SMC Structure', 'CISD (Early Signal)', 'XGB Trend', '⚡ Alerts', 'MTF Trend', 'AI Trend', 'RS vs NIFTY', 'Breakout', 'MACD', 'Supertrend', 'VWAP', 'Volume'])
         st.dataframe(styled_df, use_container_width=True)
         
-        # 🟢 TRUE EXCEL DOWNLOAD FIX (.xlsx instead of .csv)
+        # 🟢 ANTI-CRASH HTML BASE64 EXCEL DOWNLOAD FIX (No st.download_button)
         st.markdown("---")
-        excel_buffer = io.BytesIO()
-        
-        # Using openpyxl engine to write exact colors to Excel
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            styled_df.to_excel(writer, index=False, sheet_name='Master_Report')
+        try:
+            excel_buffer = io.BytesIO()
+            # xlsxwriter is highly stable for emojis and colors
+            with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                styled_df.to_excel(writer, index=False, sheet_name='Master_Report')
+                
+            excel_data = excel_buffer.getvalue()
+            b64 = base64.b64encode(excel_data).decode()
             
-        excel_data = excel_buffer.getvalue()
-        
-        st.download_button(
-            label="📥 Download V11.6 Colored Excel Report (.xlsx)", 
-            data=excel_data, 
-            file_name="NSE_AI_PRO_V11.6_Master_Report.xlsx", 
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
+            # Direct HTML Link - Bypasses Streamlit's refresh mechanism completely!
+            href = f'''
+            <div style="text-align: center; margin-top: 15px;">
+                <a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" 
+                   download="NSE_AI_PRO_V11.7_Master_Report.xlsx" 
+                   style="display: inline-block; padding: 12px 24px; background-color: #28a745; color: white; text-align: center; text-decoration: none; font-size: 18px; border-radius: 8px; font-weight: bold; border: 2px solid #1e7e34; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);">
+                   📥 Download Colored Excel Report (.xlsx)
+                </a>
+                <p style="color: gray; font-size: 14px; margin-top: 8px;">✅ Clicking this link will <b>NOT</b> crash or refresh your screen!</p>
+            </div>
+            '''
+            st.markdown(href, unsafe_allow_html=True)
+            
+        except Exception as e:
+            st.error(f"⚠️ Excel ఫైల్‌ను క్రియేట్ చేయడంలో లోపం వచ్చింది. దయచేసి requirements.txt లో `xlsxwriter` యాడ్ చేయండి. (Error: {e})")
 
     if auto_refresh:
         time.sleep(180)
@@ -420,7 +426,7 @@ with tab1:
 
 # ---- TAB 2: CUSTOM STOCK SEARCH ----
 with tab2:
-    st.markdown("### 🔍 Search Any Stock (V11.6 Hybrid Vectors)")
+    st.markdown("### 🔍 Search Any Stock (V11.7 Hybrid Vectors)")
     search_query = st.text_input("Enter Stock Symbol (e.g., ITC, RELIANCE, SBIN):").upper()
     
     if st.button("🔍 Run Custom Deep Analytics"):
@@ -428,7 +434,7 @@ with tab2:
             with st.spinner(f"Analyzing {search_query} vectors..."):
                 res = process_stock_thread(search_query, interval, period, None, None, 0, None)
                 if res:
-                    st.success(f"V11.6 Analysis Complete for {search_query}")
+                    st.success(f"V11.7 Analysis Complete for {search_query}")
                     c1, c2, c3, c4 = st.columns(4)
                     c1.metric("LTP", f"₹{res[1]}")
                     c2.metric("SMC / CISD", f"{res[4]} | {res[5]}")
