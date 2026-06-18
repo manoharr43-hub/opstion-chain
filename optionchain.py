@@ -14,7 +14,7 @@ warnings.filterwarnings('ignore')
 # ==========================================
 # 1. PAGE SETUP & CONFIGURATION
 # ==========================================
-st.set_page_config(page_title="NSE AI PRO V11.5", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="NSE AI PRO V11.6", layout="wide", page_icon="🚀")
 
 st.markdown("""
     <style>
@@ -24,8 +24,8 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🚀 NSE AI PRO V11.5 - Institutional Ultimate")
-st.markdown("**All-In-One Hybrid Edition | Old Pillars Restored | Advanced SMC (BOS/CHOCH) & CISD Early Signals | XGBoost AI Engine**")
+st.title("🚀 NSE AI PRO V11.6 - Institutional Ultimate")
+st.markdown("**All-In-One Hybrid Edition | True Colored Excel Download | Advanced SMC & CISD | XGBoost AI Engine**")
 st.markdown("---")
 
 # Session State Memory for fixing the disappearing screen bug
@@ -96,7 +96,6 @@ def calculate_smc_and_cisd(df):
         return "Range ➖", "None", "Normal"
         
     try:
-        # SMC Structure (BOS/CHOCH)
         df['Local_High'] = df['High'].rolling(window=10, center=False).max()
         df['Local_Low'] = df['Low'].rolling(window=10, center=False).min()
         
@@ -118,7 +117,6 @@ def calculate_smc_and_cisd(df):
             if not bullish_trend: smc_structure, smc_alert = "BOS 📉", "Structure Broken Downward"
             else: smc_structure, smc_alert = "CHOCH 🐻", "Trend Reversal Bearish"
             
-        # CISD Logic (Change In State of Delivery)
         prev_high = float(df['High'].iloc[-2])
         prev_low = float(df['Low'].iloc[-2])
         curr_high = float(df['High'].iloc[-1])
@@ -277,7 +275,6 @@ def process_stock_thread(symbol, interval, period, h52w, l52w, nifty_return, dai
     st_dir = "UP" if df["ST_Direction"].iloc[-1] == 1 else "DOWN"
     vwap_sig = "ABOVE" if close > float(df["VWAP"].iloc[-1]) else "BELOW"
     
-    # Restored Old Pillars Scoring Matrix
     if df["EMA20"].iloc[-1] > df["EMA50"].iloc[-1]: score += 1
     else: score -= 1
     if rsi_val > 55: score += 1
@@ -294,7 +291,6 @@ def process_stock_thread(symbol, interval, period, h52w, l52w, nifty_return, dai
 
     signal = "STRONG BUY" if score >= 4 else "BUY" if score >= 2 else "STRONG SELL" if score <= -4 else "SELL" if score <= -2 else "WAIT"
 
-    # AI ATR Dynamic Target Engine
     target, stoploss = "-", "-"
     try:
         atr_val = float(df["ATR"].iloc[-1])
@@ -328,7 +324,7 @@ def color_code(val):
 # ==========================================
 # 5. UI TABS & RUN EXECUTION
 # ==========================================
-tab1, tab2 = st.tabs(["🚀 V11.5 PRO Master Dashboard", "🔍 Custom Stock Search"])
+tab1, tab2 = st.tabs(["🚀 V11.6 PRO Master Dashboard", "🔍 Custom Stock Search"])
 
 with tab1:
     if run_button or auto_refresh:
@@ -368,18 +364,16 @@ with tab1:
                 columns=["Stock", "LTP", "Target", "Stoploss", "SMC Structure", "CISD (Early Signal)", "XGB Trend", "XGB Conf", "⚡ Alerts", "MTF Trend", "AI Trend", "Conf %", "RS vs NIFTY", "Support", "Resistance", "52W High", "52W Low", "52W Status", "RSI", "Breakout", "MACD", "Supertrend", "VWAP", "Pattern", "Volume", "Score", "Signal"]
             )
             df_res = df_res.sort_values(by="Score", ascending=False)
-            
-            # Storing data into cloud session memory to avoid the disappearing screen bug
             st.session_state.v11_master_data = df_res
             
             buy_count = sum(1 for r in results if r[-1] == 'STRONG BUY')
-            if buy_count > 0: st.toast(f"🔥 V11.5 ACTION ALERT: {buy_count} STRONG BUY Signals Generated!", icon='⚡')
+            if buy_count > 0: st.toast(f"🔥 V11.6 ACTION ALERT: {buy_count} STRONG BUY Signals Generated!", icon='⚡')
 
-    # DISPLAY BLOCK - Executed outside the button loop to stay permanent on download click!
+    # DISPLAY BLOCK
     if not st.session_state.v11_master_data.empty:
         final_df = st.session_state.v11_master_data
         
-        st.markdown("### 🏆 Top Institutional Breakouts (V11.5 Master Picks)")
+        st.markdown("### 🏆 Top Institutional Breakouts (V11.6 Master Picks)")
         top_stocks = final_df[final_df['Signal'] == 'STRONG BUY'].sort_values(by='Score', ascending=False)
         
         if not top_stocks.empty:
@@ -394,7 +388,6 @@ with tab1:
             
         st.markdown("---")
         
-        # Safe String Formatter for UI table
         ui_df = final_df.copy()
         ui_df['LTP'] = ui_df['LTP'].apply(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
         ui_df['Target'] = ui_df['Target'].apply(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
@@ -403,17 +396,21 @@ with tab1:
         styled_df = ui_df.style.map(color_code, subset=['Signal', 'SMC Structure', 'CISD (Early Signal)', 'XGB Trend', '⚡ Alerts', 'MTF Trend', 'AI Trend', 'RS vs NIFTY', 'Breakout', 'MACD', 'Supertrend', 'VWAP', 'Volume'])
         st.dataframe(styled_df, use_container_width=True)
         
-        # Permanent Cloud Download System Fix
+        # 🟢 TRUE EXCEL DOWNLOAD FIX (.xlsx instead of .csv)
         st.markdown("---")
-        csv_buffer = io.StringIO()
-        final_df.to_csv(csv_buffer, index=False)
-        csv_data = csv_buffer.getvalue().encode('utf-8')
+        excel_buffer = io.BytesIO()
+        
+        # Using openpyxl engine to write exact colors to Excel
+        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+            styled_df.to_excel(writer, index=False, sheet_name='Master_Report')
+            
+        excel_data = excel_buffer.getvalue()
         
         st.download_button(
-            label="📥 Download V11.5 Stable Excel/CSV Report", 
-            data=csv_data, 
-            file_name="NSE_AI_PRO_V11.5_Master_Report.csv", 
-            mime="text/csv",
+            label="📥 Download V11.6 Colored Excel Report (.xlsx)", 
+            data=excel_data, 
+            file_name="NSE_AI_PRO_V11.6_Master_Report.xlsx", 
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
 
@@ -423,7 +420,7 @@ with tab1:
 
 # ---- TAB 2: CUSTOM STOCK SEARCH ----
 with tab2:
-    st.markdown("### 🔍 Search Any Stock (V11.5 Hybrid Vectors)")
+    st.markdown("### 🔍 Search Any Stock (V11.6 Hybrid Vectors)")
     search_query = st.text_input("Enter Stock Symbol (e.g., ITC, RELIANCE, SBIN):").upper()
     
     if st.button("🔍 Run Custom Deep Analytics"):
@@ -431,7 +428,7 @@ with tab2:
             with st.spinner(f"Analyzing {search_query} vectors..."):
                 res = process_stock_thread(search_query, interval, period, None, None, 0, None)
                 if res:
-                    st.success(f"V11.5 Analysis Complete for {search_query}")
+                    st.success(f"V11.6 Analysis Complete for {search_query}")
                     c1, c2, c3, c4 = st.columns(4)
                     c1.metric("LTP", f"₹{res[1]}")
                     c2.metric("SMC / CISD", f"{res[4]} | {res[5]}")
