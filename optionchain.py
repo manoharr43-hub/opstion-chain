@@ -16,7 +16,7 @@ warnings.filterwarnings('ignore')
 # ==========================================
 # 1. PAGE SETUP & CONFIGURATION
 # ==========================================
-st.set_page_config(page_title="NSE AI PRO V11.13", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="NSE AI PRO V11.14", layout="wide", page_icon="🚀")
 
 st.markdown("""
     <style>
@@ -26,15 +26,14 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🚀 NSE AI PRO V11.13 - Institutional Ultimate")
-st.markdown("**Anti-Block Scanner | Regex Deep Clean Excel | Signal Time Tracker | Advanced SMC | XGBoost AI**")
+st.title("🚀 NSE AI PRO V11.14 - Institutional Ultimate")
+st.markdown("**Live Scan Tracker | Anti-Block Engine | Clean Excel | Advanced SMC & CISD | XGBoost AI**")
 st.markdown("---")
 
 # Session State Memory
 if 'v11_master_data' not in st.session_state:
     st.session_state.v11_master_data = pd.DataFrame()
 else:
-    # ఆటో-మెమరీ క్లీనర్ 
     if not st.session_state.v11_master_data.empty and "Signal Time" not in st.session_state.v11_master_data.columns:
         st.session_state.v11_master_data = pd.DataFrame()
 
@@ -42,23 +41,19 @@ else:
 # 2. SIDEBAR CONFIGURATION
 # ==========================================
 with st.sidebar:
-    st.header("⚙️ Settings & Controls")
-    auto_refresh = st.checkbox("🔄 Auto Refresh (Every 3 Mins)")
+    st.header("⚙️ Settings")
     interval = st.selectbox("Interval", ["5m","15m","30m","1h","1d"], index=1)
     period = st.selectbox("Period", ["5d","1mo","3mo","6mo", "1y"], index=1)
     
     sector_stocks = {
-        "Banking": ["HDFCBANK","ICICIBANK","SBIN","AXISBANK","KOTAKBANK"],
-        "IT": ["TCS","INFY","WIPRO","HCLTECH","TECHM"],
-        "Pharma": ["SUNPHARMA","CIPLA","DIVISLAB","DRREDDY"],
-        "Energy": ["RELIANCE","ONGC","BPCL","NTPC"],
-        "Auto": ["TATAMOTORS","M&M","EICHERMOT","HEROMOTOCO"],
-        "FMCG": ["ITC","HINDUNILVR","BRITANNIA","DABUR"]
+        "Top 20 Nifty": ["RELIANCE","TCS","HDFCBANK","INFY","ICICIBANK","SBIN","BHARTIARTL","ITC","KOTAKBANK","LT","AXISBANK","HINDUNILVR","BAJFINANCE","MARUTI","SUNPHARMA","TATAMOTORS","M&M","ASIANPAINT","TITAN","ULTRACEMCO"],
+        "Banking": ["HDFCBANK","ICICIBANK","SBIN","AXISBANK","KOTAKBANK","INDUSINDBK","PNB","BOB"],
+        "IT": ["TCS","INFY","WIPRO","HCLTECH","TECHM","LTIM","PERSISTENT"],
+        "Auto": ["TATAMOTORS","M&M","EICHERMOT","HEROMOTOCO","BAJAJ-AUTO","TVSMOTOR"],
+        "All NSE500": "NSE500" # Special flag
     }
-    sector = st.selectbox("Sector", ["All NSE500"] + list(sector_stocks.keys()))
-    
-    st.markdown("---")
-    run_button = st.button("🚀 RUN ULTIMATE SCANNER", type="primary", use_container_width=True)
+    sector = st.selectbox("Sector", list(sector_stocks.keys()))
+    st.info("💡 'All NSE500' స్కాన్ చేయడానికి కొంచెం ఎక్కువ సమయం (3-5 నిమిషాలు) పడుతుంది.")
 
 # ==========================================
 # 3. CORE MATHEMATICS & AI ENGINE
@@ -73,9 +68,7 @@ def load_nse500():
         df = pd.read_csv(io.StringIO(response.text))
         return sorted(df["Symbol"].dropna().unique().tolist())
     except:
-        return ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","ITC","LT","AXISBANK","TRAVELFOOD","SYRMA","SBICARD"]
-
-stocks = load_nse500()
+        return sector_stocks["Top 20 Nifty"]
 
 @st.cache_data(ttl=120)
 def get_data(symbol, interval, period):
@@ -246,16 +239,14 @@ def add_indicators(df, interval):
     df['ATR'] = df['TR'].rolling(window=14).mean()
     return df
 
-# డీప్ క్లీన్ Regex ఫంక్షన్ (ఎక్సెల్ కోసం)
 def deep_clean_text(text):
     if not isinstance(text, str): return text
-    # కేవలం ఇంగ్లీష్ అక్షరాలు, నంబర్స్, మరియు స్పేస్ లను మాత్రమే ఉంచుతుంది
     return re.sub(r'[^\x00-\x7F]+', '', text).strip()
 
 # ==========================================
 # 4. MASTER PROCESSOR THREAD
 # ==========================================
-def process_stock_thread(symbol, interval, period, h52w, l52w, nifty_return, daily_close_series):
+def process_stock_thread(symbol, interval, period, nifty_return):
     df = get_data(symbol, interval, period)
     if df.empty or len(df) < 60: return None
     df = add_indicators(df, interval)
@@ -266,4 +257,88 @@ def process_stock_thread(symbol, interval, period, h52w, l52w, nifty_return, dai
     rs_score = round(stock_return - nifty_return, 2) if nifty_return is not None else 0
     rs_status = "💪 Outperform" if rs_score > 0 else "📉 Underperform"
 
-    ai_trend
+    ai_trend, ai_conf = predict_trend_ai(df["Close"])
+    xgb_prediction, xgb_confidence = train_xgboost_predictor(df)
+    smc_structure, cisd_signal, smc_alert, exact_signal_time = calculate_smc_and_cisd(df)
+    
+    mtf_status = "N/A"
+    alerts = []
+    
+    rvol_val = 0.0
+    avg_vol = float(df["AVG_VOL"].iloc[-1])
+    current_vol = float(df["Volume"].iloc[-1])
+    
+    if pd.notna(avg_vol) and avg_vol > 0:
+        rvol_val = current_vol / avg_vol
+        
+    rvol_str = f"{rvol_val:.2f}x"
+    if rvol_val >= 2.0:
+        rvol_str += " 🔥"
+        alerts.append("🔥 High RVOL")
+    elif rvol_val >= 1.5:
+        rvol_str += " 🟢"
+        
+    rsi_val = float(df["RSI"].iloc[-1])
+    if rsi_val > 70: alerts.append("🚨 RSI Overbought")
+    elif rsi_val < 30: alerts.append("⚠️ RSI Oversold")
+    if smc_alert != "Normal": alerts.append(f"🏛️ {smc_structure}")
+    if cisd_signal != "None": alerts.append(f"⚡ {cisd_signal}")
+    
+    breakout_high = df["High"].rolling(20).max().shift(1).iloc[-1]
+    breakout_low = df["Low"].rolling(20).min().shift(1).iloc[-1]
+    brk_sig = "NO"
+    if close > breakout_high: brk_sig, _ = "BULLISH", alerts.append("📈 Breakout High")
+    elif close < breakout_low: brk_sig, _ = "BEARISH", alerts.append("📉 Breakout Low")
+        
+    pattern = get_candlestick_pattern(df)
+    if pattern in ["Bullish Engulfing", "Hammer"]: alerts.append(f"✨ {pattern}")
+    alert_str = ", ".join(alerts) if alerts else "No Alerts"
+
+    macd_val = "BULLISH" if df["MACD_Line"].iloc[-1] > df["Signal_Line"].iloc[-1] else "BEARISH"
+    st_dir = "UP" if df["ST_Direction"].iloc[-1] == 1 else "DOWN"
+    vwap_sig = "ABOVE" if close > float(df["VWAP"].iloc[-1]) else "BELOW"
+    
+    if df["EMA20"].iloc[-1] > df["EMA50"].iloc[-1]: score += 1
+    else: score -= 1
+    if rsi_val > 55: score += 1
+    elif rsi_val < 45: score -= 1
+    if macd_val == "BULLISH": score += 1
+    else: score -= 1
+    if st_dir == "UP": score += 1
+    else: score -= 1
+    if vwap_sig == "ABOVE": score += 1
+    else: score -= 1
+    if brk_sig == "BULLISH": score += 1
+    elif brk_sig == "BEARISH": score -= 1
+    if smc_structure in ["BOS 📈", "CHOCH 🐂"] or cisd_signal == "Bullish CISD 🚀": score += 1
+
+    signal = "STRONG BUY" if score >= 4 else "BUY" if score >= 2 else "STRONG SELL" if score <= -4 else "SELL" if score <= -2 else "WAIT"
+
+    target, stoploss = "-", "-"
+    try:
+        atr_val = float(df["ATR"].iloc[-1])
+        if pd.notna(atr_val) and atr_val > 0:
+            if signal in ["STRONG BUY", "BUY"]:
+                stoploss = round(close - (1.5 * atr_val), 2)
+                target = round(close + (3.0 * atr_val), 2)
+            elif signal in ["STRONG SELL", "SELL"]:
+                stoploss = round(close + (1.5 * atr_val), 2)
+                target = round(close - (3.0 * atr_val), 2)
+    except: pass
+
+    h52w = float(df['High'].max())
+    l52w = float(df['Low'].min())
+    status_52w = "Mid Range"
+    if close >= h52w * 0.97: status_52w = "🟢 Near High"
+    elif close <= l52w * 1.03: status_52w = "🔴 Near Low"
+
+    return [
+        exact_signal_time, symbol.replace('.NS', ''), round(close, 2), target, stoploss, smc_structure, cisd_signal, xgb_prediction, f"{xgb_confidence}%", alert_str, mtf_status, ai_trend, f"{ai_conf}%", f"{rs_score}% ({rs_status})",
+        round(float(df["Support_1"].iloc[-1]), 2), round(float(df["Resistance_1"].iloc[-1]), 2),
+        round(h52w, 2), round(l52w, 2), status_52w,
+        round(rsi_val, 2), brk_sig, macd_val, st_dir, vwap_sig, pattern, rvol_str, score, signal
+    ]
+
+def color_code(val):
+    if isinstance(val, str):
+        if any(x in val for x in ["STRONG BUY", "BULLISH", "UP", "ABOVE", "Outperform", "🟢", "BOS 📈", "CHOCH
