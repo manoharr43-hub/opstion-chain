@@ -26,7 +26,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 st.title("🚀 NSE AI PRO V11.7 - Institutional Ultimate")
-st.markdown("*Anti-Crash Direct Download | True Colored Excel | Advanced SMC & CISD | XGBoost AI Engine*")
+st.markdown("**Anti-Crash Direct Download | True Colored Excel | Advanced SMC & CISD | XGBoost AI Engine**")
 st.markdown("---")
 
 # Session State Memory
@@ -379,7 +379,7 @@ with tab1:
                 card_tag = row['CISD (Early Signal)'] if row['CISD (Early Signal)'] != "None" else row['SMC Structure']
                 with cols[i]:
                     st.metric(label=f"🟢 {row['Stock']} ({card_tag})", value=f"₹{row['LTP']}", delta=f"TGT: ₹{row['Target']}")
-                    st.caption(f"*SL:* ₹{row['Stoploss']} | *Signal:* {row['Signal']} (Score: {row['Score']})")
+                    st.caption(f"**SL:** ₹{row['Stoploss']} | **Signal:** {row['Signal']} (Score: {row['Score']})")
         else:
             st.info("ప్రస్తుతం ఎటువంటి Institutional STRONG BUY సిగ్నల్స్ లేవు.")
             
@@ -418,7 +418,7 @@ with tab1:
             st.markdown(href, unsafe_allow_html=True)
             
         except Exception as e:
-            st.error(f"⚠️ Excel ఫైల్‌ను క్రియేట్ చేయడంలో లోపం వచ్చింది. దయచేసి requirements.txt లో xlsxwriter యాడ్ చేయండి. (Error: {e})")
+            st.error(f"⚠️ Excel ఫైల్‌ను క్రియేట్ చేయడంలో లోపం వచ్చింది. దయచేసి requirements.txt లో `xlsxwriter` యాడ్ చేయండి. (Error: {e})")
 
     if auto_refresh:
         time.sleep(180)
@@ -442,8 +442,8 @@ with tab2:
                     c4.metric("Dynamic Target", f"₹{res[2]}")
                     
                     st.markdown("##### ⚙️ Technical Pillars & Blueprint Details:")
-                    st.write(f"- *Stoploss:* ₹{res[3]} | *Support (S1):* ₹{res[12]} | *Resistance (R1):* ₹{res[13]}")
-                    st.write(f"- *VWAP:* {res[21]} | *Supertrend:* {res[20]} | *MACD:* {res[19]} | *RSI:* {res[18]}")
-                    st.write(f"- *Score:* {res[24]} | *Signal:* {res[25]} | *Alerts:* {res[8]}")
+                    st.write(f"- **Stoploss:** ₹{res[3]} | **Support (S1):** ₹{res[12]} | **Resistance (R1):** ₹{res[13]}")
+                    st.write(f"- **VWAP:** {res[21]} | **Supertrend:** {res[20]} | **MACD:** {res[19]} | **RSI:** {res[18]}")
+                    st.write(f"- **Score:** {res[24]} | **Signal:** {res[25]} | **Alerts:** {res[8]}")
                 else:
-                    st.error("Stock not found. Please verify spelling.")
+                    st.error("Stock not found. Please verify spelling.") singnal time add
