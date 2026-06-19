@@ -16,7 +16,7 @@ warnings.filterwarnings('ignore')
 # ==========================================
 # 1. PAGE SETUP & CONFIGURATION
 # ==========================================
-st.set_page_config(page_title="NSE AI PRO V11.14", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="NSE AI PRO V11.15", layout="wide", page_icon="🚀")
 
 st.markdown("""
     <style>
@@ -26,8 +26,8 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🚀 NSE AI PRO V11.14 - Institutional Ultimate")
-st.markdown("**Live Scan Tracker | Anti-Block Engine | Clean Excel | Advanced SMC & CISD | XGBoost AI**")
+st.title("🚀 NSE AI PRO V11.15 - Institutional Ultimate")
+st.markdown("**Live Scan Tracker | Syntax Safe Code | Clean Excel | Advanced SMC | XGBoost AI**")
 st.markdown("---")
 
 # Session State Memory
@@ -50,10 +50,10 @@ with st.sidebar:
         "Banking": ["HDFCBANK","ICICIBANK","SBIN","AXISBANK","KOTAKBANK","INDUSINDBK","PNB","BOB"],
         "IT": ["TCS","INFY","WIPRO","HCLTECH","TECHM","LTIM","PERSISTENT"],
         "Auto": ["TATAMOTORS","M&M","EICHERMOT","HEROMOTOCO","BAJAJ-AUTO","TVSMOTOR"],
-        "All NSE500": "NSE500" # Special flag
+        "All NSE500": "NSE500" 
     }
     sector = st.selectbox("Sector", list(sector_stocks.keys()))
-    st.info("💡 'All NSE500' స్కాన్ చేయడానికి కొంచెం ఎక్కువ సమయం (3-5 నిమిషాలు) పడుతుంది.")
+    st.info("💡 'All NSE500' స్కాన్ చేయడానికి కొంచెం ఎక్కువ సమయం పడుతుంది.")
 
 # ==========================================
 # 3. CORE MATHEMATICS & AI ENGINE
@@ -339,6 +339,143 @@ def process_stock_thread(symbol, interval, period, nifty_return):
         round(rsi_val, 2), brk_sig, macd_val, st_dir, vwap_sig, pattern, rvol_str, score, signal
     ]
 
+# 🟢 SYNTAX SAFE COLOR FUNCTION 
 def color_code(val):
     if isinstance(val, str):
-        if any(x in val for x in ["STRONG BUY", "BULLISH", "UP", "ABOVE", "Outperform", "🟢", "BOS 📈", "CHOCH
+        if "STRONG BUY" in val or "BULLISH" in val or "UP" in val or "ABOVE" in val or "Outperform" in val or "🟢" in val or "BOS" in val or "CHOCH" in val or "Bullish" in val or "🔥" in val:
+            if "BEARISH" not in val and "📉" not in val and "🐻" not in val and "🩸" not in val:
+                return 'color: green; font-weight: bold;'
+        if "STRONG SELL" in val or "BEARISH" in val or "DOWN" in val or "BELOW" in val or "Underperform" in val or "🔻" in val or "🚨" in val or "📉" in val or "🐻" in val or "🩸" in val:
+            return 'color: red; font-weight: bold;'
+    return ''
+
+# ==========================================
+# 5. UI TABS & RUN EXECUTION
+# ==========================================
+tab1, tab2 = st.tabs(["🚀 V11.15 PRO Master Dashboard", "🔍 Custom Stock Search"])
+
+with tab1:
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        run_main_button = st.button("🚀 START SCANNER", type="primary", use_container_width=True)
+    with col2:
+        st.info("💡 డేటా బ్లాక్ అవ్వకుండా ఉండటానికి ఇక్కడి నుండే స్కాన్ స్టార్ట్ చేయండి.")
+        
+    if run_main_button:
+        selected_stocks = load_nse500() if sector == "NSE500" else sector_stocks[sector]
+        nifty_df = get_data("^NSEI", interval, period)
+        nifty_return = ((nifty_df['Close'].iloc[-1] - nifty_df['Close'].iloc[0]) / nifty_df['Close'].iloc[0]) * 100 if not nifty_df.empty else 0
+
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        results = []
+        total_stocks = len(selected_stocks)
+
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            future_to_stock = {
+                executor.submit(process_stock_thread, sym, interval, period, nifty_return): sym for sym in selected_stocks
+            }
+            for i, future in enumerate(as_completed(future_to_stock)):
+                sym = future_to_stock[future]
+                status_text.markdown(f"**🔍 Scanning in progress:** `{sym}` ({i+1}/{total_stocks})")
+                res = future.result()
+                if res: results.append(res)
+                progress_bar.progress((i + 1) / total_stocks)
+                
+        status_text.success("✅ Scanning Complete!")
+
+        if results:
+            df_res = pd.DataFrame(
+                results, 
+                columns=["Signal Time", "Stock", "LTP", "Target", "Stoploss", "SMC Structure", "CISD (Early Signal)", "XGB Trend", "XGB Conf", "⚡ Alerts", "MTF Trend", "AI Trend", "Conf %", "RS vs NIFTY", "Support", "Resistance", "52W High", "52W Low", "52W Status", "RSI", "Breakout", "MACD", "Supertrend", "VWAP", "Pattern", "RVOL", "Score", "Signal"]
+            )
+            df_res = df_res.sort_values(by="Score", ascending=False)
+            st.session_state.v11_master_data = df_res
+            
+            buy_count = sum(1 for r in results if r[-1] == 'STRONG BUY')
+            if buy_count > 0: st.toast(f"🔥 V11.15 ACTION ALERT: {buy_count} STRONG BUY Signals Generated!", icon='⚡')
+        else:
+            st.error("⚠️ ఎర్రర్: Yahoo Finance సర్వర్లు బ్లాక్ చేశాయి లేదా ఇంటర్నెట్ ప్రాబ్లం. దయచేసి 'Top 20 Nifty' సెలెక్ట్ చేసి స్కాన్ చేయండి.")
+
+    # DISPLAY BLOCK
+    if not st.session_state.v11_master_data.empty:
+        final_df = st.session_state.v11_master_data
+        
+        st.markdown("### 🏆 Top Institutional Breakouts (V11.15 Master Picks)")
+        top_stocks = final_df[final_df['Signal'] == 'STRONG BUY'].sort_values(by='Score', ascending=False)
+        
+        if not top_stocks.empty:
+            cols = st.columns(4)
+            for i, (index, row) in enumerate(top_stocks.head(4).iterrows()):
+                s_time = row.get('Signal Time', 'N/A')
+                card_tag = row['CISD (Early Signal)'] if row['CISD (Early Signal)'] != "None" else row['SMC Structure']
+                with cols[i]:
+                    st.metric(label=f"🟢 {row['Stock']} ({card_tag})", value=f"₹{row['LTP']}", delta=f"TGT: ₹{row['Target']}")
+                    st.caption(f"**⏱️ {s_time}** | **RVOL:** {row['RVOL']}")
+        else:
+            st.info("ప్రస్తుతం ఎటువంటి Institutional STRONG BUY సిగ్నల్స్ లేవు.")
+            
+        st.markdown("---")
+        
+        ui_df = final_df.copy()
+        ui_df['LTP'] = ui_df['LTP'].apply(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
+        ui_df['Target'] = ui_df['Target'].apply(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
+        ui_df['Stoploss'] = ui_df['Stoploss'].apply(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
+        
+        styled_df = ui_df.style.map(color_code, subset=['Signal', 'SMC Structure', 'CISD (Early Signal)', 'XGB Trend', '⚡ Alerts', 'MTF Trend', 'AI Trend', 'RS vs NIFTY', 'Breakout', 'MACD', 'Supertrend', 'VWAP', 'RVOL'])
+        st.dataframe(styled_df, use_container_width=True)
+        
+        # 🟢 REGEX CLEAN EXCEL DOWNLOAD
+        st.markdown("---")
+        try:
+            excel_df = ui_df.copy()
+            for col in excel_df.columns:
+                excel_df[col] = excel_df[col].apply(deep_clean_text)
+
+            excel_buffer = io.BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                excel_df.to_excel(writer, index=False, sheet_name='Master_Report')
+                
+            excel_data = excel_buffer.getvalue()
+            b64 = base64.b64encode(excel_data).decode()
+            
+            href = f'''
+            <div style="text-align: center; margin-top: 15px;">
+                <a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" 
+                   download="NSE_AI_PRO_V11.15_Master_Report.xlsx" 
+                   style="display: inline-block; padding: 12px 24px; background-color: #28a745; color: white; text-align: center; text-decoration: none; font-size: 18px; border-radius: 8px; font-weight: bold; border: 2px solid #1e7e34; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);">
+                   📥 Download Clean Excel Report (.xlsx)
+                </a>
+            </div>
+            '''
+            st.markdown(href, unsafe_allow_html=True)
+            
+        except Exception as e:
+            st.error(f"⚠️ Excel ఫైల్‌ను క్రియేట్ చేయడంలో లోపం వచ్చింది. (Error: {e})")
+
+# ---- TAB 2: CUSTOM STOCK SEARCH ----
+with tab2:
+    st.markdown("### 🔍 Search Any Stock (V11.15 Hybrid Vectors)")
+    search_query = st.text_input("Enter Stock Symbol (e.g., ITC, RELIANCE, SBIN):").upper()
+    
+    if st.button("🔍 Run Custom Deep Analytics"):
+        if search_query:
+            with st.spinner(f"Analyzing {search_query} vectors..."):
+                nifty_df = get_data("^NSEI", interval, period)
+                nifty_return = ((nifty_df['Close'].iloc[-1] - nifty_df['Close'].iloc[0]) / nifty_df['Close'].iloc[0]) * 100 if not nifty_df.empty else 0
+                res = process_stock_thread(search_query, interval, period, nifty_return)
+                if res:
+                    st.success(f"V11.15 Analysis Complete for {search_query}")
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("LTP", f"₹{res[2]}")
+                    c2.metric("SMC / CISD", f"{res[5]} | {res[6]}")
+                    c3.metric("XGB AI Forecast", res[7], delta=res[8])
+                    c4.metric("Dynamic Target", f"₹{res[3]}")
+                    
+                    st.markdown("##### ⚙️ Technical Pillars & Blueprint Details:")
+                    st.write(f"- **⏱️ Signal Time:** {res[0]} | **Stoploss:** ₹{res[4]} | **Support (S1):** ₹{res[14]} | **Resistance (R1):** ₹{res[15]}")
+                    st.write(f"- **VWAP:** {res[23]} | **Supertrend:** {res[22]} | **MACD:** {res[21]} | **RSI:** {res[19]}")
+                    st.write(f"- **Score:** {res[26]} | **Signal:** {res[27]} | **Alerts:** {res[9]}")
+                else:
+                    st.error("Stock not found. Please verify spelling.")
